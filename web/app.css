@@ -1,0 +1,136 @@
+/* Settings from the snapshot (text size, spacing, theme) will override these custom
+   properties later (blueprint §10.6), so components use the variables, not raw values. */
+:root {
+  --text-size: 1.125rem;
+  --line-height: 1.6;
+  --paragraph-gap: 1em;
+  --measure: 36rem;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #4a4a4a;
+  --accent: #1d4f7a;
+  --accent-fg: #ffffff;
+  --focus: #b35900;
+  --tap: 3rem;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --fg: #f2f2f2;
+    --muted: #c8c8c8;
+    --accent: #8cc4f0;
+    --accent-fg: #0b1b29;
+    --focus: #ffb366;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: var(--text-size);
+  line-height: var(--line-height);
+  overflow-wrap: anywhere;
+}
+
+main {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+h1 {
+  font-size: 1.75em;
+  line-height: 1.25;
+  margin: 0 0 var(--paragraph-gap);
+}
+
+p {
+  margin: 0 0 var(--paragraph-gap);
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.95em;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--tap);
+  margin-bottom: 0.25rem;
+}
+
+.check input {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.check label {
+  padding: 0.5rem 0;
+  cursor: pointer;
+}
+
+button.primary {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0.75rem 1.25rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primary[disabled] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.status:empty {
+  display: none;
+}
+
+.status {
+  margin-top: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1d4f7a">
+    <meta name="robots" content="noindex">
+    <title>Sign in</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
+    <link rel="stylesheet" href="app.css">
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <main id="main">
+      <section id="sign-in-screen" aria-labelledby="sign-in-heading">
+        <h1 id="sign-in-heading">Sign in</h1>
+        <p>Sign in with your GitHub account to carry on.</p>
+
+        <form id="sign-in-form" novalidate>
+          <div class="check">
+            <input type="checkbox" id="shared-computer" name="shared">
+            <label for="shared-computer">This is a shared computer</label>
+          </div>
+          <p class="hint" id="shared-hint">
+            Tick this on a school or library computer. Nothing is saved on the computer,
+            and you're signed out after 4 hours.
+          </p>
+          <button type="submit" class="primary" aria-describedby="shared-hint">
+            Sign in with GitHub
+          </button>
+        </form>
+
+        <p id="sign-in-status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <noscript>
+        <p class="status">This app needs JavaScript. Please turn it on and reload the page.</p>
+      </noscript>
+    </main>
+  </body>
+</html>
