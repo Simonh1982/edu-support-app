@@ -2,6 +2,7 @@
 import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { loadConfig, isAllowedOrigin } from './config.js';
+import { startAi } from './ai/index.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -119,20 +120,25 @@ export function createServer(config, state = createState(config), log = console)
 
 async function main() {
   const config = loadConfig();
+  let aiHandle = null;
   // a closing terminal sends SIGHUP; the server must survive it (blueprint §3.2)
   process.on('SIGHUP', () => console.log(`${new Date().toISOString()} SIGHUP received: ignored`));
   for (const signal of ['SIGTERM', 'SIGINT']) {
     process.on(signal, () => {
       console.log(`${new Date().toISOString()} ${signal} received: stopping`);
-      process.exit(0);
+      // stop the Copilot runtime cleanly, but never let shutdown hang
+      const stopping = aiHandle ? aiHandle.ai.stop() : Promise.resolve();
+      Promise.race([stopping, new Promise((r) => setTimeout(r, 3000))]).finally(() => process.exit(0));
     });
   }
-  const { server } = createServer(config);
+  const { server, state } = createServer(config);
   server.listen(config.port, config.host, () => {
     const { port } = server.address();
     console.log(`${new Date().toISOString()} listening on ${port}`);
     console.log(`Codespace: ${config.codespaceName || '(not in a Codespace)'}`);
     if (config.publicUrl) console.log(`Public address: ${config.publicUrl}`);
+    // AI starts after listening, so /api/health answers (ai.mode "starting") during the test
+    startAi({ state }).then((handle) => { aiHandle = handle; });
   });
 }
 
