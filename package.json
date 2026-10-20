@@ -2,12 +2,14 @@
   "name": "edu-support-app",
   "version": "0.1.0",
   "private": true,
+  "description": "Mobile-first learning-support web app",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "test": "node --test",
-    "icons": "node scripts/make-icons.js"
+    "icons": "node scripts/make-icons.js",
+    "server": "bash scripts/start-server.sh"
   }
 }
