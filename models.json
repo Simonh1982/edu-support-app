@@ -1,0 +1,8 @@
+{
+  "conversation": "claude-sonnet-5.5",
+  "review": "claude-opus-5.5",
+  "light": "claude-haiku-5.5",
+  "spelling": "claude-haiku-5.5",
+  "checker": "claude-haiku-5.5",
+  "judge": "claude-opus-5.5"
+}

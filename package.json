@@ -10,6 +10,10 @@
   "scripts": {
     "test": "node --test",
     "icons": "node scripts/make-icons.js",
-    "server": "bash scripts/start-server.sh"
+    "server": "bash scripts/start-server.sh",
+    "models": "node scripts/list-copilot-models.js"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "1.0.22"
   }
 }
