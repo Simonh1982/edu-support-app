@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Server logs (blueprint §3.2)
+.server/
+
+# Eval results may echo model output: never commit them (blueprint §11)
+evals/results/
+
+# Local environment files: secrets live in Codespaces secrets, never in files
+.env
+.env.*
+
+# OS and editor clutter
+.DS_Store
+Thumbs.db
+*.log
