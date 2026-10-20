@@ -39,7 +39,7 @@ Work packages start with `# WP-<nnn>` and have these sections: header lines, Goa
    - **Same version:** carry on.
    - **Main is newer:** check whether any file the package touches has changed since version `<n>`. If one has, **stop** and report: *"Package based on STATE v<n>; main is at v<m>; changed files: <list>."* If none has, carry on and note it in the report.
 2. **Check the destination.** Make sure the target repository in the package header is the one you're working in. Never put private-repo files in this repository.
-3. **Create the branch** named in the package, from `main`.
+3. **Use the branch your session is assigned.** Cloud sessions can push only to their own branch, so don't create another one. Packages don't name a branch, and using the assigned branch is not a deviation.
 4. **Apply the files exactly:**
    - NEW and REPLACE: write the full content given.
    - EDIT: apply each search-and-replace block. If any search text isn't found exactly once, stop and report it.
@@ -71,7 +71,7 @@ Work packages start with `# WP-<nnn>` and have these sections: header lines, Goa
 ```
 ## Implementation report: WP-<nnn>
 Status: applied | applied with deviations | blocked
-PR: <link>   STATE: v<n> (in this PR)
+PR: <link>   Branch: <assigned branch>   STATE: v<n> (in this PR)
 Base check: same | main newer, no overlap | blocked (details)
 Deviations: <file — change — reason> (or none)
 Tests: <passed>/<total>; failures: <test name — one-line error>

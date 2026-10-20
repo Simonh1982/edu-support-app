@@ -1,0 +1,18 @@
+{
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": { "ghcr.io/devcontainers/features/github-cli:1": {} },
+  "postCreateCommand": "npm install",
+  "postStartCommand": "bash scripts/start-server.sh --foreground",
+  "postAttachCommand": "bash scripts/start-server.sh --watch",
+  "forwardPorts": [3000],
+  "portsAttributes": { "3000": { "label": "App", "onAutoForward": "notify" } },
+  "secrets": {
+    "COPILOT_GITHUB_TOKEN": { "description": "Fine-grained token: Copilot Requests" },
+    "GH_PORTS_TOKEN": { "description": "Classic token: codespace scope only" },
+    "STORAGE_TOKEN": { "description": "Fine-grained token: Contents read/write on the storage repo" },
+    "STORAGE_REPO": { "description": "owner/name of the private storage repo" },
+    "PASS_SIGNING_KEY": { "description": "Shared with the Worker" },
+    "PASS_VERSION": { "description": "Shared with the Worker" },
+    "ALLOWED_ACCOUNTS": { "description": "JSON: GitHub login → role. Shared with the Worker" }
+  }
+}
