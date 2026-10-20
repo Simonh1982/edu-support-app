@@ -9,12 +9,12 @@
 export function createMockAi({ replies = {}, failures = {}, models = [] } = {}) {
   const calls = [];
 
-  async function ask({ model, system, prompt }) {
-    calls.push({ model, system, prompt });
+  async function ask({ model, system, prompt, attachments }) {
+    calls.push({ model, system, prompt, attachments });
     if (failures[model]) throw new Error(failures[model]);
     const reply = replies[model];
     const text = typeof reply === 'function'
-      ? reply({ model, system, prompt })
+      ? reply({ model, system, prompt, attachments })
       : reply ?? JSON.stringify({ reply: 'ready', mock: true });
     return { text, model, ms: 0 };
   }

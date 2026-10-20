@@ -11,7 +11,8 @@
     "test": "node --test",
     "icons": "node scripts/make-icons.js",
     "server": "bash scripts/start-server.sh",
-    "models": "node scripts/list-copilot-models.js"
+    "models": "node scripts/list-copilot-models.js",
+    "spike:image": "node scripts/spike-image-input.js"
   },
   "dependencies": {
     "@github/copilot-sdk": "1.0.22"
