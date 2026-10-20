@@ -93,9 +93,10 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
 
   /**
    * Send one prompt in a fresh session and return the reply text.
-   * @param {{ model: string, system: string, prompt: string, timeoutMs?: number }} request
+   * @param {{ model: string, system: string, prompt: string, attachments?: object[], timeoutMs?: number }} request
+   *   attachments: image attachments built by server/ai/image-input.js
    */
-  async function ask({ model, system, prompt, timeoutMs = 60_000 }) {
+  async function ask({ model, system, prompt, attachments, timeoutMs = 60_000 }) {
     const c = await ensureClient();
     // VERIFY: createSession config names: systemMessage { mode: 'replace' }, availableTools
     // (an empty list should mean no built-in tools), infiniteSessions, onPermissionRequest.
@@ -109,7 +110,10 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
     const started = Date.now();
     try {
       // VERIFY: sendAndWait(options, timeout) resolves to an event with data.content, or undefined.
-      const event = await session.sendAndWait({ prompt }, timeoutMs);
+      // VERIFY: the message options accept attachments: [{ type: 'file' | 'blob', ... }].
+      // Only include the key when there are attachments, so text-only calls are unchanged.
+      const options = attachments?.length ? { prompt, attachments } : { prompt };
+      const event = await session.sendAndWait(options, timeoutMs);
       const text = event?.data?.content;
       if (typeof text !== 'string' || !text.trim()) throw new Error('Empty reply from model');
       return { text, model, ms: Date.now() - started };
