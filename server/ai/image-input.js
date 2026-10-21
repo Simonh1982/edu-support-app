@@ -15,6 +15,25 @@ export const IMAGE_TYPES = Object.freeze({
   '.gif': 'image/gif',
 });
 
+// Phones save JPEGs as .jpg or .jpeg, in either case.
+const JPEG_SPELLINGS = ['.jpg', '.jpeg', '.JPG', '.JPEG'];
+
+/** " (did you mean x.jpeg?)" if the same photo exists with the other JPEG spelling. */
+async function jpegSuggestion(filePath) {
+  const ext = path.extname(filePath);
+  if (!JPEG_SPELLINGS.includes(ext)) return '';
+  const base = filePath.slice(0, -ext.length);
+  for (const other of JPEG_SPELLINGS) {
+    if (other === ext) continue;
+    try {
+      if ((await stat(base + other)).isFile()) return ` (did you mean ${path.basename(base + other)}?)`;
+    } catch {
+      // not there: try the next spelling
+    }
+  }
+  return '';
+}
+
 /**
  * Check an image file before sending it. Error messages never include the folder path.
  * @param {string} filePath absolute path
@@ -29,7 +48,7 @@ export async function checkImageFile(filePath, { maxBytes = MAX_IMAGE_BYTES } = 
   try {
     info = await stat(filePath);
   } catch {
-    throw new Error(`Image file not found: ${path.basename(filePath)}`);
+    throw new Error(`Image file not found: ${path.basename(filePath)}${await jpegSuggestion(filePath)}`);
   }
   if (!info.isFile()) throw new Error('Image path is not a file');
   if (info.size === 0) throw new Error('Image file is empty');

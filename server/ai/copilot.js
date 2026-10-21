@@ -3,6 +3,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
+import { NEVER_ALLOWED_KINDS } from './tools.js';
 
 export const SDK_PACKAGE = '@github/copilot-sdk';
 
@@ -52,10 +53,22 @@ export async function loadSdk(importer = (name) => import(name)) {
   }
 }
 
-// No tools at all until WP-007 adds the allowed list (blueprint §7.5).
-function rejectAll() {
+/** Tool names in the SDK's BuiltInTools export, whatever its shape (array, enum or map). */
+export function builtInToolNames(value) {
+  let names = [];
+  if (Array.isArray(value)) names = value;
+  else if (value && (typeof value === 'object' || typeof value === 'function')) {
+    const values = Object.values(value);
+    names = values.length && values.every((v) => typeof v === 'string') ? values : Object.keys(value);
+  }
+  return [...new Set(names.filter((n) => typeof n === 'string' && n))].sort();
+}
+
+function rejectResult() {
   return { kind: 'reject', feedback: 'Not available.' };
 }
+
+const refuseAll = () => false;
 
 /**
  * The real AI client. One CopilotClient for the server's lifetime; one session per request.
@@ -91,22 +104,59 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
     return starting;
   }
 
+  /** Approve or refuse one permission request. Shell, write, read and MCP are always refused. */
+  function decide(request, invocation, allowPermission, onPermission) {
+    let allowed = false;
+    try {
+      allowed = allowPermission(request) === true && !NEVER_ALLOWED_KINDS.includes(request?.kind);
+    } catch {
+      allowed = false;
+    }
+    if (onPermission) {
+      try { onPermission(request, allowed); } catch { /* a reporting error must not change the decision */ }
+    }
+    if (!allowed) return rejectResult();
+    // VERIFY: approveAll is the SDK's approving handler, so its result has the right shape.
+    return typeof sdk.approveAll === 'function' ? sdk.approveAll(request, invocation) : { kind: 'approve' };
+  }
+
   /**
    * Send one prompt in a fresh session and return the reply text.
-   * @param {{ model: string, system: string, prompt: string, attachments?: object[], timeoutMs?: number }} request
+   * @param {{ model: string, system: string, prompt: string, attachments?: object[],
+   *           tools?: string[], allowPermission?: (request: object) => boolean,
+   *           onPermission?: (request: object, allowed: boolean) => void,
+   *           onEvent?: (event: object) => void, unsafeAllToolsForTest?: boolean,
+   *           timeoutMs?: number }} request
    *   attachments: image attachments built by server/ai/image-input.js
+   *   tools: the allowed list of built-in tool names (default: none)
+   *   allowPermission: which permission requests to approve (default: none)
+   *   unsafeAllToolsForTest: phase 0 refusal test only; leaves every tool available so the
+   *     permission check is the only guard
    */
-  async function ask({ model, system, prompt, attachments, timeoutMs = 60_000 }) {
+  async function ask({
+    model, system, prompt, attachments, tools = [], allowPermission = refuseAll,
+    onPermission, onEvent, unsafeAllToolsForTest = false, timeoutMs = 60_000,
+  }) {
     const c = await ensureClient();
     // VERIFY: createSession config names: systemMessage { mode: 'replace' }, availableTools
-    // (an empty list should mean no built-in tools), infiniteSessions, onPermissionRequest.
-    const session = await c.createSession({
+    // (a list means only those tools), infiniteSessions, onPermissionRequest(request, invocation).
+    const config = {
       model,
       systemMessage: { mode: 'replace', content: system },
-      availableTools: [],
       infiniteSessions: { enabled: false },
-      onPermissionRequest: rejectAll,
-    });
+      onPermissionRequest: (request, invocation) => decide(request, invocation, allowPermission, onPermission),
+    };
+    // Leaving availableTools out means every tool, so it is always set outside the refusal test.
+    if (!unsafeAllToolsForTest) config.availableTools = [...tools];
+    const session = await c.createSession(config);
+    let unsubscribe = null;
+    if (onEvent && typeof session.on === 'function') {
+      // VERIFY: session.on(listener) with one function subscribes to every event and returns
+      // a function that unsubscribes.
+      unsubscribe = session.on((event) => {
+        try { onEvent(event); } catch { /* a reporting error must not break the request */ }
+      });
+    }
     const started = Date.now();
     try {
       // VERIFY: sendAndWait(options, timeout) resolves to an event with data.content, or undefined.
@@ -118,6 +168,9 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
       if (typeof text !== 'string' || !text.trim()) throw new Error('Empty reply from model');
       return { text, model, ms: Date.now() - started };
     } finally {
+      if (typeof unsubscribe === 'function') {
+        try { unsubscribe(); } catch { /* ignore */ }
+      }
       try {
         await session.disconnect();
       } catch (err) {
@@ -134,6 +187,12 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
     return c.listModels();
   }
 
+  /** Built-in tool names the SDK declares (empty if it doesn't say). */
+  function listBuiltInTools() {
+    // VERIFY: BuiltInTools is exported by SDK 1.0.22 (seen in the WP-005 export list).
+    return builtInToolNames(sdk.BuiltInTools);
+  }
+
   async function stop() {
     const c = client;
     client = null;
@@ -147,5 +206,5 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
     }
   }
 
-  return { mode: 'copilot', ask, listModels, stop };
+  return { mode: 'copilot', ask, listModels, listBuiltInTools, stop };
 }
