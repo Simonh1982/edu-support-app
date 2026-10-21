@@ -1,8 +1,11 @@
 // HTTP server: routing, CORS, body limits and /api/health. No framework.
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { loadConfig, isAllowedOrigin } from './config.js';
 import { startAi } from './ai/index.js';
+import { redact } from './ai/copilot.js';
+import { managePort } from './port.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -118,25 +121,63 @@ export function createServer(config, state = createState(config), log = console)
   return { server, state };
 }
 
+/**
+ * Which processes started this one, e.g. "tail -n 40 -f … (812) ← sh -c bash scripts/start-server.sh (811)".
+ * Logged at start-up so a duplicate start (EADDRINUSE) can be traced. Linux /proc only.
+ */
+export function processChain(pid, { depth = 4, read = (p) => readFileSync(p, 'utf8') } = {}) {
+  const parts = [];
+  let current = pid;
+  for (let i = 0; i < depth && current > 1; i += 1) {
+    let cmd;
+    let stat;
+    try {
+      cmd = read(`/proc/${current}/cmdline`).split('\0').filter(Boolean).join(' ').replace(/\s+/g, ' ');
+      stat = read(`/proc/${current}/stat`);
+    } catch {
+      break;
+    }
+    parts.push(`${redact(cmd).slice(0, 80) || '?'} (${current})`);
+    // stat is "pid (comm) state ppid …"; comm may contain spaces, so read after the last ")"
+    current = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+  }
+  return parts.length ? parts.join(' ← ') : 'unknown';
+}
+
 async function main() {
   const config = loadConfig();
   let aiHandle = null;
+  let portHandle = null;
+  const { server, state } = createServer(config);
+  console.log(`${new Date().toISOString()} starting: pid ${process.pid}; started by: ${processChain(process.ppid)}`);
   // a closing terminal sends SIGHUP; the server must survive it (blueprint §3.2)
   process.on('SIGHUP', () => console.log(`${new Date().toISOString()} SIGHUP received: ignored`));
   for (const signal of ['SIGTERM', 'SIGINT']) {
     process.on(signal, () => {
       console.log(`${new Date().toISOString()} ${signal} received: stopping`);
+      // free the port at once, so a replacement server can listen while Copilot shuts down
+      server.close();
+      portHandle?.stop();
       // stop the Copilot runtime cleanly, but never let shutdown hang
       const stopping = aiHandle ? aiHandle.ai.stop() : Promise.resolve();
       Promise.race([stopping, new Promise((r) => setTimeout(r, 3000))]).finally(() => process.exit(0));
     });
   }
-  const { server, state } = createServer(config);
+  // a second copy finding the port taken says so in one line instead of a stack trace
+  server.on('error', (err) => {
+    const why = err.code === 'EADDRINUSE'
+      ? `port ${config.port} is already in use by another server, so this one (pid ${process.pid}) is exiting`
+      : `server error: ${redact(err.message)}`;
+    console.log(`${new Date().toISOString()} ${why}`);
+    process.exit(1);
+  });
   server.listen(config.port, config.host, () => {
     const { port } = server.address();
     console.log(`${new Date().toISOString()} listening on ${port}`);
     console.log(`Codespace: ${config.codespaceName || '(not in a Codespace)'}`);
     if (config.publicUrl) console.log(`Public address: ${config.publicUrl}`);
+    // make the port Public now: Codespace restarts reset it to Private (blueprint §3.3)
+    portHandle = managePort({ state, config, port });
     // AI starts after listening, so /api/health answers (ai.mode "starting") during the test
     startAi({ state }).then((handle) => { aiHandle = handle; });
   });
