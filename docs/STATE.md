@@ -1,6 +1,6 @@
-STATE version: 7
-Updated: 2026-10-21 22:13 (UK time)
-Last work package applied: WP-009
+STATE version: 8
+Updated: 2026-10-21 23:43 (UK time)
+Last work package applied: WP-010
 
 ## File tree
 ```
@@ -30,6 +30,7 @@ server/ai/json.js
 server/ai/mock.js
 server/ai/models.js
 server/ai/tools.js
+server/auth.js
 server/config.js
 server/index.js
 server/port.js
@@ -38,6 +39,7 @@ server/storage/index.js
 server/storage/records.js
 server/storage/store.js
 test/ai.test.js
+test/auth.test.js
 test/codespace.test.js
 test/image-input.test.js
 test/port.test.js
@@ -77,6 +79,9 @@ web/manifest.webmanifest
 - `server/storage/store.js`: `BATCH_MS` (5000), `RETRY_DELAYS_MS`, `checkPath(relPath, { allowInbox? })`, `createStore({ dir, remoteUrl, env, runGit?, batchMs?, retryDelays?, log?, now?, sleep?, onStatus? })` → `{ dir, status(), init(), flush(), commitLocal(), put(path, record), append(path, entry), logEvent(type, options?), read(path), list(dir) }`
 - `server/storage/index.js`: `DEFAULT_STORAGE_DIR` (`/workspaces/storage`), `APP_ROOT`, `storageSettings(env?, { appRoot? })`, `startStorage({ state, config, env?, log?, makeStore? })` → store or null (never throws)
 - `scripts/storage-check.js`: `INBOX_TEST_FILE`, `USAGE`, `parseArgs(argv)`, `runCheck({ settings, wait?, waitForOwner, makeStore?, tmpRoot?, out? })`
+- `server/auth.js` (pass block): constants `PASS_ROLES`, `PASS_TTL_OWN_S`, `PASS_TTL_SHARED_S`, `PASS_MAX_LENGTH`, `PASS_MIN_KEY_LENGTH`, `PASS_CLOCK_SKEW_S`, `PARENT_READABLE_TYPES` (`notebook`, `plan`, `draft`); functions `passB64urlEncode`, `passB64urlDecode`, `parseAllowedAccounts(raw)` → `{ accounts, error }`, `passSettings(env)` → `{ settings, errors }`, `roleFor(accounts, login)`, `mintPass({ login, shared?, settings, now? })`, `verifyPass(token, settings, { now? })` → `{ ok, pass } | { ok: false, reason }` (reasons: `not-configured`, `missing`, `malformed`, `signature`, `expired`, `version`, `account`), `passFromHeader(value)`, `canReadItem(role, type, record)`
+- `server/auth.js` (Node only): `PASS_BLOCK_START`, `PASS_BLOCK_END`, `extractPassBlock(source)`, `AUTH_MESSAGES`, `createAuth({ env?, log?, now? })` → `{ ready, errors, authenticate(headers), authorise(pass, roles), canRead(pass, type, record) }`
+- **Shared code rule:** the block between the `PASS BLOCK` markers in `server/auth.js` is copied verbatim into `wake/worker.js` (WP-011). Change both together.
 
 ## Scripts
 - `scripts/stamp-versions.sh <web-dir> <version>`: deploy-time `?v=` stamping (exit 2 bad args, exit 1 unstamped reference).
@@ -95,14 +100,16 @@ web/manifest.webmanifest
 - `COPILOT_GITHUB_TOKEN`: read by `server/ai/index.js` only (passed to the Copilot adapter); never logged.
 - `GH_PORTS_TOKEN`: read by `server/port.js` only (passed to `gh` as `GH_TOKEN`); never logged.
 - `STORAGE_REPO`, `STORAGE_TOKEN`: read by `server/storage/index.js` only. The token is passed to git as an auth header in the environment and is never logged. Optional, non-secret: `STORAGE_DIR` (default `/workspaces/storage`; must be outside the app repository).
-- Codespace secrets declared in `devcontainer.json` (not yet read by code): `PASS_SIGNING_KEY`, `PASS_VERSION`, `ALLOWED_ACCOUNTS`.
+- `PASS_SIGNING_KEY` (32 characters or more), `PASS_VERSION` (whole number ≥ 1) and `ALLOWED_ACCOUNTS` (JSON login → `learner`/`parent`): read by `server/auth.js` (`createAuth`) only; never logged. `createAuth` isn't called by the server yet (routes arrive in later packages). The secrets themselves are created in WP-011.
 - Front end: `web/config.js` `workerUrl` is empty by design until WP-011.
+
+## Verify steps passed
+1–7 passed (step 6 on 21 Oct 2026 after WP-008; step 7 on 21 Oct 2026 after WP-009: `storage:check` PASS, pulled the inbox commit before pushing).
 
 ## Deviations in effect
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
 
 ## Known issues
-- Storage not yet run against the real storage repository (verify step 7).
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
 - `spike:web` built-in tool line is misleading with SDK 1.0.22: `BuiltInTools` is `{ Isolated: [...] }` (a curated subset with no web tools), so the report shows `Isolated` as the only tool and flags `web_fetch, web_search` as "not in the SDK list". Reporting only; not changed.
 - `EADDRINUSE` on restart: most likely the `--watch` attach command, queued behind the boot-time foreground start, firing during `npm run server`'s 1-second pause. After WP-008 (server frees the port at once on `SIGTERM`), one restart showed a single start launched by `npm run server` and no `EADDRINUSE`. Treat as likely fixed; if it returns, check `grep -E "starting:|already in use" .server/server.log`. `start-server.sh` is proven and unchanged.
