@@ -6,6 +6,7 @@ import { loadConfig, isAllowedOrigin } from './config.js';
 import { startAi } from './ai/index.js';
 import { redact } from './ai/copilot.js';
 import { managePort } from './port.js';
+import { startStorage } from './storage/index.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -148,6 +149,7 @@ async function main() {
   const config = loadConfig();
   let aiHandle = null;
   let portHandle = null;
+  let storeHandle = null;
   const { server, state } = createServer(config);
   console.log(`${new Date().toISOString()} starting: pid ${process.pid}; started by: ${processChain(process.ppid)}`);
   // a closing terminal sends SIGHUP; the server must survive it (blueprint §3.2)
@@ -158,9 +160,12 @@ async function main() {
       // free the port at once, so a replacement server can listen while Copilot shuts down
       server.close();
       portHandle?.stop();
-      // stop the Copilot runtime cleanly, but never let shutdown hang
+      // stop the Copilot runtime and commit unsaved records locally (the next start pushes them),
+      // but never let shutdown hang
       const stopping = aiHandle ? aiHandle.ai.stop() : Promise.resolve();
-      Promise.race([stopping, new Promise((r) => setTimeout(r, 3000))]).finally(() => process.exit(0));
+      const saving = storeHandle ? storeHandle.commitLocal() : Promise.resolve();
+      Promise.race([Promise.all([stopping, saving]), new Promise((r) => setTimeout(r, 3000))])
+        .finally(() => process.exit(0));
     });
   }
   // a second copy finding the port taken says so in one line instead of a stack trace
@@ -178,6 +183,8 @@ async function main() {
     if (config.publicUrl) console.log(`Public address: ${config.publicUrl}`);
     // make the port Public now: Codespace restarts reset it to Private (blueprint §3.3)
     portHandle = managePort({ state, config, port });
+    // storage also starts after listening, so /api/health can show its progress (storage.detail)
+    startStorage({ state, config }).then((store) => { storeHandle = store; });
     // AI starts after listening, so /api/health answers (ai.mode "starting") during the test
     startAi({ state }).then((handle) => { aiHandle = handle; });
   });
