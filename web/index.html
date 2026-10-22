@@ -14,7 +14,7 @@
   <body>
     <main id="main">
       <section id="sign-in-screen" aria-labelledby="sign-in-heading">
-        <h1 id="sign-in-heading">Sign in</h1>
+        <h1 id="sign-in-heading" tabindex="-1">Sign in</h1>
         <p>Sign in with your GitHub account to carry on.</p>
 
         <form id="sign-in-form" novalidate>
@@ -32,6 +32,23 @@
         </form>
 
         <p id="sign-in-status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="home-screen" aria-labelledby="home-heading" hidden>
+        <h1 id="home-heading" tabindex="-1">You're signed in</h1>
+        <p id="shared-note" class="hint" hidden>
+          You're on a shared computer. Nothing is saved here, and you'll be signed out
+          after 4 hours or when you close this tab.
+        </p>
+
+        <p id="wake-status" class="status" role="status" aria-live="polite"></p>
+
+        <div class="actions">
+          <button type="button" id="wake-retry" class="primary" hidden>Try again</button>
+          <button type="button" id="sign-out" class="secondary">Sign out</button>
+        </div>
+
+        <p class="hint">More of the app is on its way.</p>
       </section>
 
       <noscript>

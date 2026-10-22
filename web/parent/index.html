@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1d4f7a">
+    <meta name="robots" content="noindex">
+    <title>Parent page</title>
+    <link rel="icon" href="../icons/icon-192.png" type="image/png">
+    <link rel="stylesheet" href="../app.css">
+    <script type="module" src="parent.js"></script>
+  </head>
+  <body>
+    <main id="main">
+      <section id="sign-in-screen" aria-labelledby="sign-in-heading">
+        <h1 id="sign-in-heading" tabindex="-1">Parent page</h1>
+        <p>Sign in with your GitHub account to see how things are going.</p>
+
+        <form id="sign-in-form" novalidate>
+          <div class="check">
+            <input type="checkbox" id="shared-computer" name="shared">
+            <label for="shared-computer">This is a shared computer</label>
+          </div>
+          <p class="hint" id="shared-hint">
+            Tick this on a computer other people use. Nothing is saved on the computer,
+            and you're signed out after 4 hours.
+          </p>
+          <button type="submit" class="primary" aria-describedby="shared-hint">
+            Sign in with GitHub
+          </button>
+        </form>
+
+        <p id="sign-in-status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="home-screen" aria-labelledby="home-heading" hidden>
+        <h1 id="home-heading" tabindex="-1">Parent page</h1>
+        <p id="shared-note" class="hint" hidden>
+          You're on a shared computer. Nothing is saved here, and you'll be signed out
+          after 4 hours or when you close this tab.
+        </p>
+        <p>You're signed in. The summary is coming later.</p>
+
+        <p id="pass-status" class="status" role="status" aria-live="polite"></p>
+
+        <div class="actions">
+          <button type="button" id="sign-out" class="secondary">Sign out</button>
+        </div>
+      </section>
+
+      <noscript>
+        <p class="status">This page needs JavaScript. Please turn it on and reload the page.</p>
+      </noscript>
+    </main>
+  </body>
+</html>

@@ -1,6 +1,6 @@
-STATE version: 9
-Updated: 2026-10-22 10:27 (UK time)
-Last work package applied: WP-011
+STATE version: 10
+Updated: 2026-10-22 23:51 (UK time)
+Last work package applied: WP-012
 
 ## File tree
 ```
@@ -42,6 +42,7 @@ server/storage/store.js
 test/ai.test.js
 test/auth.test.js
 test/codespace.test.js
+test/front-end.test.js
 test/image-input.test.js
 test/port.test.js
 test/server.test.js
@@ -58,10 +59,16 @@ web/icons/icon-192.png
 web/icons/icon-512.png
 web/index.html
 web/manifest.webmanifest
+web/parent/index.html
+web/parent/parent.js
+web/shared/auth.js
+web/shared/wake.js
 ```
 
 ## Exports
-- `web/app.js`: `loginUrl(workerUrl: string, shared: boolean): string | null`
+- `web/app.js`: `loginUrl` (re-exported from `web/shared/auth.js`); runs the page when a DOM exists
+- `web/shared/auth.js`: `PASS_ROLES`, `PASS_KEY_PREFIX`, `REQUEST_TIMEOUT_MS`, `SIGN_IN_MESSAGES`, `signInMessage`, `workerEndpoint`, `loginUrl`, `readFragment`, `decodePass`, `passIsCurrent`, `checkNewPass`, `memoryStorage`, `usableStorage`, `storageKey`, `savePass`, `loadPass`, `clearPass`, `readJsonBody`, `timeoutSignal`, `workerRequest`
+- `web/shared/wake.js`: `WAKE_SETTINGS`, `WAKE_MESSAGES`, `probeHealth`, `createWaker`
 - `web/config.js`: `config` (frozen object: `{ workerUrl: string }`)
 - `scripts/make-icons.js`: `renderIcon(size: number): Buffer`, `encodePng(size: number, raw?: Buffer): Buffer`
 - `server/config.js`: `PAGES_ORIGIN` (string), `loadConfig(env = process.env)` → frozen `{ port, host, idleTimeoutMin, devOrigins, jsonBodyLimit, uploadBodyLimit, codespaceName, publicUrl }`, `isAllowedOrigin(origin: string | undefined, config: { devOrigins: boolean }): boolean`
@@ -100,6 +107,10 @@ web/manifest.webmanifest
 - `/api/health` `port` = `{ visibility, detail, attempts, updatedAt }`; `visibility` is `unknown` | `n/a` | `pending` | `public` | `private`. The port manager starts after listening.
 - `/api/health` `storage` = `{ ok, ready, lastPull, lastPush, pending, detail }`. Storage starts after listening.
 
+## Pages
+- Learner `/`: sign-in, signed-in screen, waking (polls `/api/health` every 5 s for up to 5 min; `/status` every third poll; rings again if still `Shutdown`; port hint after 90 s `Available`). Pass in `localStorage` on own devices, `sessionStorage` only on a shared computer.
+- Parent `/parent/`: sign-in, pass check through the Worker's `/status`, no waking.
+
 ## Worker routes (`wake/worker.js`)
 - `GET /`: no pass; `{ ok, service, missing, settingsErrors }`, names only.
 - `GET /auth/login?shared=0|1`: redirects to GitHub OAuth (no scopes, signed state, valid for 10 minutes).
@@ -115,7 +126,7 @@ web/manifest.webmanifest
 - `GH_PORTS_TOKEN`: read by `server/port.js` only (passed to `gh` as `GH_TOKEN`); never logged.
 - `STORAGE_REPO`, `STORAGE_TOKEN`: read by `server/storage/index.js` only. The token is passed to git as an auth header in the environment and is never logged. Optional, non-secret: `STORAGE_DIR` (default `/workspaces/storage`; must be outside the app repository).
 - `PASS_SIGNING_KEY` (32 characters or more), `PASS_VERSION` (whole number ≥ 1) and `ALLOWED_ACCOUNTS` (JSON login → `learner`/`parent`): read by `server/auth.js` (`createAuth`) only; never logged. `createAuth` isn't called by the server yet (routes arrive in later packages). The Codespace pass secrets are created by Simon in WP-011.
-- Front end: `web/config.js` `workerUrl` stays empty until WP-012.
+- Front end: `web/config.js` `workerUrl` is set to the Worker address.
 - **Worker (Cloudflare) settings:** text `CODESPACE_NAME`, `ALLOWED_ORIGIN`, `APP_URL`, `OAUTH_CLIENT_ID`, `PASS_VERSION`; secret `GITHUB_TOKEN` (Codespaces lifecycle), `OAUTH_CLIENT_SECRET`, `PASS_SIGNING_KEY`, `ALLOWED_ACCOUNTS`. `STORAGE_TOKEN` and `STORAGE_REPO` aren't used by the Worker yet (WP-013 onwards).
 
 ## Verify steps passed
@@ -126,6 +137,8 @@ web/manifest.webmanifest
 
 ## Known issues
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
+- `/api/health` `startedAt`, `restsAt` and `port.updatedAt` are UTC (`Z`); storage times are UK time. To be switched to UK time in the next package that edits `server/index.js` (owner preference).
+- Verify step 8 is run by Simon after WP-012; the parent-role item check is in WP-013.
 - Worker live checks (sign-in, `/status`, `/wake` on an awake Codespace) are done by Simon after merge. Remote wake from Shutdown is first tested in WP-012 (verify step 8).
 - `spike:web` built-in tool line is misleading with SDK 1.0.22: `BuiltInTools` is `{ Isolated: [...] }` (a curated subset with no web tools), so the report shows `Isolated` as the only tool and flags `web_fetch, web_search` as "not in the SDK list". Reporting only; not changed.
 - `EADDRINUSE` on restart: most likely the `--watch` attach command, queued behind the boot-time foreground start, firing during `npm run server`'s 1-second pause. After WP-008 (server frees the port at once on `SIGTERM`), one restart showed a single start launched by `npm run server` and no `EADDRINUSE`. Treat as likely fixed; if it returns, check `grep -E "starting:|already in use" .server/server.log`. `start-server.sh` is proven and unchanged.
