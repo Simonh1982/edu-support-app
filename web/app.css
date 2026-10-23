@@ -33,6 +33,11 @@
   box-sizing: border-box;
 }
 
+/* Sections set display elsewhere, so make sure "hidden" always wins. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -58,6 +63,11 @@ h1 {
   font-size: 1.75em;
   line-height: 1.25;
   margin: 0 0 var(--paragraph-gap);
+}
+
+/* Headings get focus when the screen changes; no outline needed for a non-control. */
+h1[tabindex="-1"]:focus {
+  outline: none;
 }
 
 p {
@@ -90,23 +100,45 @@ p {
   cursor: pointer;
 }
 
-button.primary {
+button.primary,
+button.secondary {
   display: block;
   width: 100%;
   min-height: var(--tap);
   padding: 0.75rem 1.25rem;
-  border: 0;
   border-radius: 0.5rem;
-  background: var(--accent);
-  color: var(--accent-fg);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
 
+button.primary {
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+button.secondary {
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--fg);
+}
+
 button.primary[disabled] {
   opacity: 0.6;
   cursor: progress;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.25rem 0 var(--paragraph-gap);
+}
+
+.actions button {
+  flex: 1 1 12rem;
+  width: auto;
 }
 
 :focus-visible {
