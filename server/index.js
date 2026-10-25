@@ -1,4 +1,4 @@
-// HTTP server: routing, CORS, body limits and /api/health. No framework.
+// HTTP server: routing, CORS, body limits, /api/health and /api/item. No framework.
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -7,6 +7,9 @@ import { startAi } from './ai/index.js';
 import { redact } from './ai/copilot.js';
 import { managePort } from './port.js';
 import { startStorage } from './storage/index.js';
+import { ukIso } from './storage/records.js';
+import { passSettings, passFromHeader, verifyPass } from './auth.js';
+import { itemResponse } from './storage/items.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -17,8 +20,9 @@ export class HttpError extends Error {
 
 /** Shared, mutable server state. Later modules (AI, storage, port) update their own section. */
 export function createState(config, now = new Date()) {
-  const startedAt = now.toISOString();
-  const restsAt = new Date(now.getTime() + config.idleTimeoutMin * 60_000).toISOString();
+  // UK time (Europe/London), like every other date the app shows or stores
+  const startedAt = ukIso(now);
+  const restsAt = ukIso(new Date(now.getTime() + config.idleTimeoutMin * 60_000));
   return {
     startedAt,
     restsAt,
@@ -28,14 +32,22 @@ export function createState(config, now = new Date()) {
   };
 }
 
+// server/port.js (proven, unchanged) records UTC; /api/health shows it in UK time
+function ukTime(value) {
+  if (typeof value !== 'string' || value === '') return value;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : ukIso(date);
+}
+
 export function healthBody(state) {
+  const port = state.port && 'updatedAt' in state.port ? { ...state.port, updatedAt: ukTime(state.port.updatedAt) } : state.port;
   return {
     ok: true,
     ai: state.ai,
     storage: state.storage,
     startedAt: state.startedAt,
     restsAt: state.restsAt,
-    port: state.port,
+    port,
   };
 }
 
@@ -86,9 +98,25 @@ function sendJson(res, status, body) {
 }
 
 /**
- * Build the request handler. Every route other than /api/health will require a pass (WP-010).
+ * Check the pass on a request (blueprint §5.3, §6). Returns { pass } or { status, body }.
+ * The reason is safe to log and to return; the pass itself never is.
  */
-export function createHandler({ config, state, log = console }) {
+export async function checkPass(req, authSettings, log = console) {
+  if (!authSettings) return { status: 503, body: { error: "Sign-in isn't set up on the server." } };
+  const result = await verifyPass(passFromHeader(req.headers.authorization), authSettings);
+  if (!result.ok) {
+    log.log(`[auth] pass rejected: ${result.reason}`);
+    return { status: 401, body: { error: 'Please sign in again.', reason: result.reason } };
+  }
+  return { pass: result.pass };
+}
+
+/**
+ * Build the request handler. Every route other than /api/health requires a pass.
+ * authSettings: from passSettings(env), or null if sign-in isn't configured.
+ * getStore: returns the storage store once it's ready, otherwise null.
+ */
+export function createHandler({ config, state, log = console, authSettings = null, getStore = () => null }) {
   return async function handle(req, res) {
     try {
       const allowed = applyCors(req, res, config);
@@ -105,6 +133,17 @@ export function createHandler({ config, state, log = console }) {
         return sendJson(res, 200, healthBody(state));
       }
 
+      if (url.pathname === '/api/item') {
+        if (req.method !== 'GET') return sendJson(res, 405, { error: 'Method not allowed' });
+        // the pass is checked first, so nothing about storage is revealed without one
+        const auth = await checkPass(req, authSettings, log);
+        if (!auth.pass) return sendJson(res, auth.status, auth.body);
+        const store = getStore();
+        if (!store || !store.status().ready) return sendJson(res, 503, { error: "Saved items aren't available yet." });
+        const result = await itemResponse({ store, pass: auth.pass, query: url.searchParams });
+        return sendJson(res, result.status, result.body);
+      }
+
       return sendJson(res, 404, { error: 'Not found' });
     } catch (err) {
       const status = err instanceof HttpError ? err.status : 500;
@@ -116,8 +155,8 @@ export function createHandler({ config, state, log = console }) {
   };
 }
 
-export function createServer(config, state = createState(config), log = console) {
-  const server = http.createServer(createHandler({ config, state, log }));
+export function createServer(config, state = createState(config), log = console, options = {}) {
+  const server = http.createServer(createHandler({ config, state, log, ...options }));
   server.requestTimeout = 120_000;
   return { server, state };
 }
@@ -150,8 +189,14 @@ async function main() {
   let aiHandle = null;
   let portHandle = null;
   let storeHandle = null;
-  const { server, state } = createServer(config);
+  // setting names and problems only, never values (blueprint §12)
+  const auth = passSettings(process.env);
+  const { server, state } = createServer(config, undefined, console, {
+    authSettings: auth.settings,
+    getStore: () => storeHandle,
+  });
   console.log(`${new Date().toISOString()} starting: pid ${process.pid}; started by: ${processChain(process.ppid)}`);
+  if (!auth.settings) console.log(`[auth] off: ${auth.errors.join('; ')}`);
   // a closing terminal sends SIGHUP; the server must survive it (blueprint §3.2)
   process.on('SIGHUP', () => console.log(`${new Date().toISOString()} SIGHUP received: ignored`));
   for (const signal of ['SIGTERM', 'SIGINT']) {

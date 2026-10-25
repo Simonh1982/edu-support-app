@@ -19,6 +19,8 @@ const ENV = Object.freeze({
   PASS_SIGNING_KEY: KEY,
   PASS_VERSION: '1',
   ALLOWED_ACCOUNTS: JSON.stringify({ 'Example-Parent': 'parent', 'example-learner': 'learner' }),
+  STORAGE_TOKEN: 'test-storage-token-value',
+  STORAGE_REPO: 'example-owner/example-data',
 });
 const GITHUB_USER_TOKEN = 'test-oauth-user-token-value';
 const SECRETS = [KEY, ENV.GITHUB_TOKEN, ENV.OAUTH_CLIENT_SECRET, GITHUB_USER_TOKEN];

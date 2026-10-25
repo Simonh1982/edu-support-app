@@ -35,7 +35,7 @@ function sleepDefault(ms) {
  */
 export function createStore({
   dir, remoteUrl, env, runGit = defaultRunGit, batchMs = BATCH_MS, retryDelays = RETRY_DELAYS_MS,
-  log = console, now = () => new Date(), sleep = sleepDefault, onStatus = () => {},
+  log = console, now = () => new Date(), sleep = sleepDefault, onStatus = () => {}, beforeCommit = null,
 } = {}) {
   if (!dir || !path.isAbsolute(dir)) throw new Error('storage dir must be an absolute path');
   const lock = createLock();
@@ -59,6 +59,23 @@ export function createStore({
     log.error(`[storage] ${detail}`);
     return detail;
   };
+
+  // Runs once per batch, inside the git lock and before the commit, so the snapshot is rewritten at
+  // most once per batch (blueprint §4.2). A failure here is logged and never blocks saving.
+  async function runBeforeCommit() {
+    if (!beforeCommit || dirty.size === 0) return;
+    try {
+      await beforeCommit({
+        write: async (relPath, data) => {
+          checkPath(relPath);
+          await writeAtomic(path.join(dir, relPath), `${JSON.stringify(data, null, 2)}\n`);
+          dirty.add(relPath);
+        },
+      });
+    } catch (err) {
+      log.error(`[storage] before-commit step failed: ${err.message}`);
+    }
+  }
 
   function schedule(ms = batchMs) {
     if (stopped || timer) return;
@@ -156,6 +173,7 @@ export function createStore({
     if (timer) { clearTimeout(timer); timer = null; }
     return lock.run(async () => {
       let committed = 0;
+      await runBeforeCommit();
       try {
         committed = await commitLocked();
       } catch (err) {
@@ -228,6 +246,18 @@ export function createStore({
       update({});
       schedule();
       return entry;
+    },
+
+    /** Delete one file. A file that is already gone is fine. The commit follows in the next batch. */
+    async remove(relPath) {
+      if (!status.ready) throw new Error('storage is not ready');
+      checkPath(relPath);
+      await unlink(path.join(dir, relPath)).catch((err) => {
+        if (err.code !== 'ENOENT') throw err;
+      });
+      dirty.add(relPath);
+      update({});
+      schedule();
     },
 
     /** Append a system event to this UK month's log. */

@@ -1,9 +1,11 @@
 // Starts storage for the server: reads the settings, clones or pulls the storage repository,
-// and keeps /api/health's `storage` up to date. Never throws.
+// keeps /api/health's `storage` up to date, and rewrites the snapshot once per batch. Never throws.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './store.js';
 import { gitEnv } from './git.js';
+import { buildSnapshot } from './snapshot.js';
+import { SNAPSHOT_PATH } from './items.js';
 
 export const DEFAULT_STORAGE_DIR = '/workspaces/storage';
 export const APP_ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -22,6 +24,16 @@ export function storageSettings(env = process.env, { appRoot = APP_ROOT } = {}) 
   const rel = path.relative(appRoot, dir);
   if (!rel.startsWith('..') && !path.isAbsolute(rel)) return { skip: 'STORAGE_DIR must be outside the app repository' };
   return { repo, token, dir, remoteUrl: `https://github.com/${repo}.git` };
+}
+
+/**
+ * The store's before-commit step: rebuild index/snapshot.json from the clone (blueprint §4.2 step 4).
+ * The first batch after start-up (the system.start event) writes it, so it is fresh after every start.
+ */
+export function snapshotStep(dir, { build = buildSnapshot } = {}) {
+  return async ({ write }) => {
+    await write(SNAPSHOT_PATH, await build({ dir }));
+  };
 }
 
 /**
@@ -47,7 +59,7 @@ export async function startStorage({ state, config, env = process.env, log = con
     }
     const store = makeStore({
       dir: settings.dir, remoteUrl: settings.remoteUrl, env: gitEnv({ token: settings.token, env }),
-      log, onStatus: show,
+      log, onStatus: show, beforeCommit: snapshotStep(settings.dir),
     });
     show(store.status());
     if (!(await store.init())) return null;

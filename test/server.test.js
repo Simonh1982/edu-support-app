@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, isAllowedOrigin, PAGES_ORIGIN } from '../server/config.js';
-import { createServer, createState, readJson, HttpError } from '../server/index.js';
+import { createServer, createState, healthBody, readJson, HttpError } from '../server/index.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const silent = { error() {}, log() {} };
@@ -54,11 +54,22 @@ test('isAllowedOrigin: Pages always; localhost only with DEV_ORIGINS=1', () => {
   assert.equal(isAllowedOrigin(undefined, dev), false);
 });
 
-test('createState: restsAt is startedAt plus the idle timeout', () => {
-  const now = new Date('2026-10-20T09:00:00.000Z');
-  const s = createState(loadConfig({}), now);
-  assert.equal(s.startedAt, '2026-10-20T09:00:00.000Z');
-  assert.equal(s.restsAt, '2026-10-20T09:30:00.000Z');
+test('createState: UK times; restsAt is startedAt plus the idle timeout', () => {
+  const summer = createState(loadConfig({}), new Date('2026-10-20T09:00:00.000Z'));
+  assert.equal(summer.startedAt, '2026-10-20T10:00:00+01:00');
+  assert.equal(summer.restsAt, '2026-10-20T10:30:00+01:00');
+  const winter = createState(loadConfig({}), new Date('2026-11-20T09:00:00.000Z'));
+  assert.equal(winter.startedAt, '2026-11-20T09:00:00+00:00');
+  assert.equal(Date.parse(winter.restsAt) - Date.parse(winter.startedAt), 30 * 60_000);
+});
+
+test('healthBody shows the port update time in UK time and leaves other values alone', () => {
+  const state = createState(loadConfig({}), new Date('2026-10-20T09:00:00.000Z'));
+  state.port = { visibility: 'public', detail: 'Public', attempts: 1, updatedAt: '2026-10-20T09:00:05.000Z' };
+  assert.equal(healthBody(state).port.updatedAt, '2026-10-20T10:00:05+01:00');
+  assert.equal(state.port.updatedAt, '2026-10-20T09:00:05.000Z', 'state itself is not changed');
+  state.port = { visibility: 'unknown', detail: 'not managed yet' };
+  assert.deepEqual(healthBody(state).port, { visibility: 'unknown', detail: 'not managed yet' });
 });
 
 test('GET /api/health answers with the blueprint shape', async () => {
