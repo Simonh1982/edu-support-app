@@ -1,7 +1,8 @@
 // Cloudflare Worker for edu-support-app (blueprint §5 and §6): GitHub sign-in, passes, and the
-// Codespace's status and wake. This whole file is pasted into the Cloudflare dashboard, so it
-// imports nothing. Later packages add /snapshot and /item (WP-013), /inbox (WP-014) and the weekly
-// wake (WP-016). Never log a pass, a token or an account name.
+// Codespace's status and wake, and the snapshot and items from the storage repository (WP-013).
+// This whole file is pasted into the Cloudflare dashboard, so it imports nothing. Later packages add
+// /inbox (WP-014) and the weekly wake (WP-016). Never log a pass, a token, an account name or the
+// storage repository's name.
 
 // ===== PASS BLOCK START (Web Crypto only; copied verbatim into wake/worker.js) =====
 const PASS_ROLES = Object.freeze(['learner', 'parent']);
@@ -168,6 +169,56 @@ function canReadItem(role, type, record) {
 }
 // ===== PASS BLOCK END =====
 
+// ===== ITEM BLOCK START (no imports; copied verbatim into wake/worker.js) =====
+const SNAPSHOT_PATH = 'index/snapshot.json';
+// Item and task IDs become file and folder names, so they are kept to safe characters.
+const ITEM_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
+// Item types and whether they sit inside a task folder (blueprint §2.2). Types inside a task need ?task=.
+const ITEM_TYPES = Object.freeze({
+  notebook: Object.freeze({ inTask: false }),
+  source: Object.freeze({ inTask: false }),
+  task: Object.freeze({ inTask: false }),
+  plan: Object.freeze({ inTask: true }),
+  draft: Object.freeze({ inTask: true }),
+  feedback: Object.freeze({ inTask: true }),
+});
+
+// Returns { path, error }. A plan has one file per task, so its id is checked but not used in the path.
+function itemPath(type, id, task) {
+  const fail = (error) => ({ path: null, error });
+  if (typeof type !== 'string' || !Object.hasOwn(ITEM_TYPES, type)) return fail('unknown type');
+  if (typeof id !== 'string' || !ITEM_ID_PATTERN.test(id)) return fail('invalid id');
+  const inTask = ITEM_TYPES[type].inTask;
+  const hasTask = task !== undefined && task !== null && task !== '';
+  if (inTask && (typeof task !== 'string' || !ITEM_ID_PATTERN.test(task))) return fail('invalid task');
+  if (!inTask && hasTask) return fail('task is not used for this type');
+  const paths = {
+    notebook: () => `notebook/${id}.json`,
+    source: () => `sources/${id}.json`,
+    task: () => `tasks/${id}/task.json`,
+    plan: () => `tasks/${task}/plan.json`,
+    draft: () => `tasks/${task}/drafts/${id}.json`,
+    feedback: () => `tasks/${task}/feedback/${id}.json`,
+  };
+  return { path: paths[type](), error: null };
+}
+
+// Checked before any file is read, so the parent never causes a read of a type it can't open.
+function itemTypeAllowed(role, type) {
+  if (role === 'learner') return true;
+  return role === 'parent' && PARENT_READABLE_TYPES.includes(type);
+}
+
+// The caller's own section of the snapshot only (blueprint §4.3), or null if it is missing.
+function snapshotSection(snapshot, role) {
+  if (!snapshot || typeof snapshot !== 'object' || !PASS_ROLES.includes(role)) return null;
+  const section = snapshot[role];
+  if (!section || typeof section !== 'object' || Array.isArray(section)) return null;
+  const generatedAt = typeof snapshot.generatedAt === 'string' ? snapshot.generatedAt : null;
+  return { generatedAt, ...section };
+}
+// ===== ITEM BLOCK END =====
+
 const WORKER_NAME = 'edu-support-wake';
 const GITHUB_API = 'https://api.github.com';
 const GITHUB_OAUTH = 'https://github.com/login/oauth';
@@ -176,10 +227,11 @@ const BACKEND_PORT = 3000;
 const OAUTH_STATE_TTL_S = 10 * 60;
 const MAX_SMALL_BODY = 1024;
 const CODESPACE_NAME_PATTERN = /^[A-Za-z0-9-]{1,100}$/;
-// Settings this package needs. Later packages add STORAGE_TOKEN and STORAGE_REPO.
+// Every setting the Worker uses (blueprint §5.1).
 const REQUIRED_SETTINGS = Object.freeze([
   'GITHUB_TOKEN', 'CODESPACE_NAME', 'ALLOWED_ORIGIN', 'APP_URL', 'OAUTH_CLIENT_ID',
   'OAUTH_CLIENT_SECRET', 'PASS_SIGNING_KEY', 'PASS_VERSION', 'ALLOWED_ACCOUNTS',
+  'STORAGE_TOKEN', 'STORAGE_REPO',
 ]);
 const MESSAGES = Object.freeze({
   signIn: 'Please sign in again.',
@@ -191,6 +243,10 @@ const MESSAGES = Object.freeze({
   tooLarge: 'The request is too large.',
   noGitHub: "Couldn't reach GitHub. Please try again.",
   unexpected: 'Something went wrong. Please try again.',
+  storageNotSetUp: "Saved items aren't set up yet.",
+  noSnapshot: "There's no snapshot yet. It appears after the tutor has run once.",
+  badStoredFile: "A saved file couldn't be read.",
+  itemNotFound: 'That item was not found.',
 });
 
 function setting(env, name) {
@@ -477,6 +533,71 @@ async function handleWake(env) {
   return json(200, { state, started: true, backendUrl: backendUrl(env) });
 }
 
+// ---- Snapshot and items from the storage repository (blueprint §4.3, §5.2) ----
+// The storage token is separate from the lifecycle token, and the repository's name is never logged.
+const STORAGE_REPO_PATTERN = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
+
+function storageReady(env) {
+  return setting(env, 'STORAGE_TOKEN') !== '' && STORAGE_REPO_PATTERN.test(setting(env, 'STORAGE_REPO'));
+}
+
+function storageFailure(response, what) {
+  console.warn(`[storage] ${what} read failed: ${response.status}`);
+  const body = { error: `GitHub refused the ${what} request (${response.status}).`, githubStatus: response.status };
+  if (response.status >= 500) body.error = `GitHub isn't answering the ${what} request (${response.status}).`;
+  if ([401, 403].includes(response.status)) {
+    const accepted = response.headers.get('x-accepted-github-permissions');
+    if (accepted) body.acceptedPermissions = accepted.slice(0, 200);
+  }
+  return json(502, body);
+}
+
+// Returns { data } for a JSON file, { missing: true } for 404, or { response } for any other problem.
+async function storageRead(env, relPath, what) {
+  const encoded = relPath.split('/').map(encodeURIComponent).join('/');
+  const url = `${GITHUB_API}/repos/${setting(env, 'STORAGE_REPO')}/contents/${encoded}`;
+  let response;
+  try {
+    // VERIFY: the contents API returns the file itself (not base64 JSON) with Accept: application/vnd.github.raw,
+    // for files of any size up to 100 MB, using a fine-grained token with Contents: read on the storage repository.
+    response = await fetch(url, {
+      headers: { ...githubHeaders(setting(env, 'STORAGE_TOKEN')), Accept: 'application/vnd.github.raw' },
+    });
+  } catch (err) {
+    console.warn(`[storage] GitHub unreachable: ${err?.name ?? 'error'}`);
+    return { response: json(502, { error: MESSAGES.noGitHub }) };
+  }
+  if (response.status === 404) return { missing: true };
+  if (!response.ok) return { response: storageFailure(response, what) };
+  try {
+    return { data: JSON.parse(await response.text()) };
+  } catch {
+    console.warn(`[storage] ${what} file is not valid JSON`);
+    return { response: json(502, { error: MESSAGES.badStoredFile }) };
+  }
+}
+
+async function handleSnapshot(env, pass) {
+  const result = await storageRead(env, SNAPSHOT_PATH, 'snapshot');
+  if (result.response) return result.response;
+  if (result.missing) return json(404, { error: MESSAGES.noSnapshot });
+  const section = snapshotSection(result.data, pass.role);
+  if (!section) return json(502, { error: MESSAGES.badStoredFile });
+  return json(200, section);
+}
+
+// Unshared and missing items get the same 404, so the parent can't tell whether an item exists.
+async function handleItem(env, pass, url) {
+  const type = url.searchParams.get('type');
+  const { path, error } = itemPath(type, url.searchParams.get('id'), url.searchParams.get('task'));
+  if (!path) return json(400, { error: `Bad item request: ${error}.` });
+  if (!itemTypeAllowed(pass.role, type)) return json(404, { error: MESSAGES.itemNotFound });
+  const result = await storageRead(env, path, 'item');
+  if (result.response) return result.response;
+  if (result.missing || !canReadItem(pass.role, type, result.data)) return json(404, { error: MESSAGES.itemNotFound });
+  return json(200, { type, item: result.data });
+}
+
 // ---- Routing ----
 async function handle(request, env) {
   const url = new URL(request.url);
@@ -506,6 +627,14 @@ async function handle(request, env) {
     if (auth.response) return auth.response;
     if (!codespaceReady(env)) return json(503, { error: MESSAGES.wakeNotSetUp });
     return path === '/status' ? handleStatus(env) : handleWake(env);
+  }
+
+  if (path === '/snapshot' || path === '/item') {
+    if (method !== 'GET') return json(405, { error: MESSAGES.method });
+    const auth = await requirePass(request, env);
+    if (auth.response) return auth.response;
+    if (!storageReady(env)) return json(503, { error: MESSAGES.storageNotSetUp });
+    return path === '/snapshot' ? handleSnapshot(env, auth.pass) : handleItem(env, auth.pass, url);
   }
 
   return json(404, { error: MESSAGES.notFound });
