@@ -1,8 +1,8 @@
 // Cloudflare Worker for edu-support-app (blueprint §5 and §6): GitHub sign-in, passes, and the
-// Codespace's status and wake, and the snapshot and items from the storage repository (WP-013).
-// This whole file is pasted into the Cloudflare dashboard, so it imports nothing. Later packages add
-// /inbox (WP-014) and the weekly wake (WP-016). Never log a pass, a token, an account name or the
-// storage repository's name.
+// Codespace's status and wake, the snapshot and items from the storage repository (WP-013), and the
+// capture inbox (WP-014). This whole file is pasted into the Cloudflare dashboard, so it imports
+// nothing. A later package adds the weekly wake (WP-016). Never log a pass, a token, an account name,
+// the storage repository's name or anything from a capture.
 
 // ===== PASS BLOCK START (Web Crypto only; copied verbatim into wake/worker.js) =====
 const PASS_ROLES = Object.freeze(['learner', 'parent']);
@@ -219,6 +219,63 @@ function snapshotSection(snapshot, role) {
 }
 // ===== ITEM BLOCK END =====
 
+// ===== INBOX BLOCK START (no imports; copied verbatim into wake/worker.js) =====
+// The device sends each file as base64 text, so the Worker passes it on without encoding 8 MB itself
+// (the free plan's CPU limit, blueprint §5.3).
+const INBOX_MAX_BYTES = 8 * 1024 * 1024;
+const INBOX_MAX_BASE64 = Math.ceil(INBOX_MAX_BYTES / 3) * 4;
+// Made on the device, so a retry overwrites the same files instead of adding a duplicate.
+const CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$/;
+const INBOX_TYPES = Object.freeze({
+  'image/jpeg': Object.freeze({ ext: 'jpg', image: true }),
+  'image/png': Object.freeze({ ext: 'png', image: true }),
+  'image/webp': Object.freeze({ ext: 'webp', image: true }),
+  'image/gif': Object.freeze({ ext: 'gif', image: true }),
+  'application/pdf': Object.freeze({ ext: 'pdf', image: false }),
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': Object.freeze({ ext: 'docx', image: false }),
+});
+const INBOX_SOURCES = Object.freeze(['camera', 'gallery', 'file']);
+// A-001: the route decides. Anything unclear counts as the learner's own writing, so nothing is changed.
+const INBOX_KINDS = Object.freeze(['brief', 'own']);
+const INBOX_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+
+// The two inbox files for a capture, or null if the ID or type isn't allowed. The phone's own file
+// name is never used.
+function inboxPaths(clientId, mimeType) {
+  if (typeof clientId !== 'string' || !CLIENT_ID_PATTERN.test(clientId)) return null;
+  const type = typeof mimeType === 'string' && Object.hasOwn(INBOX_TYPES, mimeType) ? INBOX_TYPES[mimeType] : null;
+  if (!type) return null;
+  return { file: `inbox/${clientId}.${type.ext}`, meta: `inbox/${clientId}.json` };
+}
+
+// The Upload's ID comes from the device's ID, so the same capture can never become two uploads.
+function uploadIdFor(clientId) {
+  return `up_${clientId}`;
+}
+
+// How many bytes base64 text decodes to, or null if it can't be base64.
+function base64Bytes(text) {
+  if (typeof text !== 'string' || text.length === 0 || text.length % 4 !== 0) return null;
+  const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0;
+  return (text.length / 4) * 3 - padding;
+}
+
+// The metadata file's contents: facts about the capture only, never its content.
+function inboxMetadata({ clientId, mimeType, bytes, source, kind, capturedAt, receivedAt, role }) {
+  return {
+    clientId,
+    mimeType,
+    bytes,
+    source: INBOX_SOURCES.includes(source) ? source : 'file',
+    kind: INBOX_KINDS.includes(kind) ? kind : 'own',
+    capturedAt: typeof capturedAt === 'string' && INBOX_TIME_PATTERN.test(capturedAt) ? capturedAt : null,
+    receivedAt: typeof receivedAt === 'string' && INBOX_TIME_PATTERN.test(receivedAt) ? receivedAt : null,
+    uploaderRole: role,
+    schemaVersion: 1,
+  };
+}
+// ===== INBOX BLOCK END =====
+
 const WORKER_NAME = 'edu-support-wake';
 const GITHUB_API = 'https://api.github.com';
 const GITHUB_OAUTH = 'https://github.com/login/oauth';
@@ -247,6 +304,8 @@ const MESSAGES = Object.freeze({
   noSnapshot: "There's no snapshot yet. It appears after the tutor has run once.",
   badStoredFile: "A saved file couldn't be read.",
   itemNotFound: 'That item was not found.',
+  learnerOnly: 'Only the learner can add photos and files.',
+  badCapture: "That photo or file couldn't be accepted.",
 });
 
 function setting(env, name) {
@@ -598,6 +657,129 @@ async function handleItem(env, pass, url) {
   return json(200, { type, item: result.data });
 }
 
+// ---- Inbox (blueprint §4.4, §5.2): the Worker writes only inbox/ and never reads a capture back ----
+const BASE64_SAMPLE = /^[A-Za-z0-9+/]*={0,2}$/;
+const INBOX_LIST_LIMIT = 100;
+
+function contentsUrl(env, relPath) {
+  const encoded = relPath.split('/').map(encodeURIComponent).join('/');
+  return `${GITHUB_API}/repos/${setting(env, 'STORAGE_REPO')}/contents/${encoded}`;
+}
+
+// UK time (Europe/London), in the same format as the server's ukIso: 2026-10-26T10:34:11+00:00.
+function ukNow(now = Date.now()) {
+  const date = new Date(now);
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(date).map((p) => [p.type, p.value]));
+  const local = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  const offset = Math.round((local - Math.floor(date.getTime() / 1000) * 1000) / 60000);
+  const abs = Math.abs(offset);
+  const zone = `${offset >= 0 ? '+' : '-'}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${zone}`;
+}
+
+function textToBase64(text) {
+  let binary = '';
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function existingSha(env, url) {
+  // VERIFY: for files over 1 MB the contents API still returns the JSON object with `sha` (content empty).
+  const response = await fetch(url, { headers: githubHeaders(setting(env, 'STORAGE_TOKEN')) });
+  if (!response.ok) return null;
+  const data = await response.json().catch(() => null);
+  return typeof data?.sha === 'string' ? data.sha : null;
+}
+
+// Creates or overwrites one inbox file. contentJson is the base64 content as a JSON string: building
+// the body by joining strings keeps the Worker's CPU time low for an 8 MB file.
+async function inboxWrite(env, relPath, contentJson) {
+  const url = contentsUrl(env, relPath);
+  const headers = { ...githubHeaders(setting(env, 'STORAGE_TOKEN')), 'Content-Type': 'application/json' };
+  const put = (sha) => fetch(url, {
+    method: 'PUT',
+    headers,
+    // VERIFY: PUT /repos/{owner}/{repo}/contents/{path} accepts files up to 8 MB (about 11 MB of base64).
+    body: `{"message":"inbox: add capture","content":${contentJson}${sha ? `,"sha":${JSON.stringify(sha)}` : ''}}`,
+  });
+  try {
+    let response = await put(null);
+    // 409: the branch moved (the server pushed at the same moment), so try once more
+    if (response.status === 409) response = await put(null);
+    // 422 without a sha: the file is already there (a retry from the device), so overwrite it
+    if (response.status === 422) {
+      const sha = await existingSha(env, url);
+      if (sha) response = await put(sha);
+    }
+    if (response.ok) return {};
+    return { response: storageFailure(response, 'inbox') };
+  } catch (err) {
+    console.warn(`[inbox] GitHub unreachable: ${err?.name ?? 'error'}`);
+    return { response: json(502, { error: MESSAGES.noGitHub }) };
+  }
+}
+
+async function handleInboxPost(request, env, pass, url) {
+  if (pass.role !== 'learner') return json(403, { error: MESSAGES.learnerOnly });
+  const params = url.searchParams;
+  const clientId = params.get('clientId') ?? '';
+  const mimeType = params.get('type') ?? '';
+  const source = params.get('source') ?? 'file';
+  const kind = params.get('kind') ?? 'own';
+  const paths = inboxPaths(clientId, mimeType);
+  if (!paths || !INBOX_SOURCES.includes(source) || !INBOX_KINDS.includes(kind)) {
+    return json(400, { error: MESSAGES.badCapture, reason: 'clientId, type, source or kind is not allowed' });
+  }
+  if (Number(request.headers.get('Content-Length') ?? 0) > INBOX_MAX_BASE64) return json(413, { error: MESSAGES.tooLarge });
+  const text = await request.text();
+  if (text.length > INBOX_MAX_BASE64) return json(413, { error: MESSAGES.tooLarge });
+  const bytes = base64Bytes(text);
+  // A sample check gives a clear error for the usual mistakes; JSON.stringify keeps the body safe anyway.
+  if (bytes === null || !BASE64_SAMPLE.test(text.slice(0, 1024)) || !BASE64_SAMPLE.test(text.slice(-1024))) {
+    return json(400, { error: MESSAGES.badCapture, reason: 'the body must be base64 text' });
+  }
+  if (bytes > INBOX_MAX_BYTES) return json(413, { error: MESSAGES.tooLarge });
+  // The file goes first and the metadata last, so the server never sees metadata without its file.
+  const saved = await inboxWrite(env, paths.file, JSON.stringify(text));
+  if (saved.response) return saved.response;
+  const meta = inboxMetadata({
+    clientId, mimeType, bytes, source, kind, capturedAt: params.get('capturedAt'), receivedAt: ukNow(), role: pass.role,
+  });
+  const savedMeta = await inboxWrite(env, paths.meta, JSON.stringify(textToBase64(`${JSON.stringify(meta, null, 2)}\n`)));
+  if (savedMeta.response) return savedMeta.response;
+  console.log(`[inbox] capture saved (${bytes} bytes)`);
+  return json(201, { clientId, uploadId: uploadIdFor(clientId), bytes, status: 'received' });
+}
+
+// Pending captures from the folder listing: names and sizes only, so nothing is read.
+async function handleInboxList(env) {
+  let response;
+  try {
+    // VERIFY: GET contents/<folder> returns a JSON array of { name, size, type } with the default Accept header.
+    response = await fetch(contentsUrl(env, 'inbox'), { headers: githubHeaders(setting(env, 'STORAGE_TOKEN')) });
+  } catch (err) {
+    console.warn(`[inbox] GitHub unreachable: ${err?.name ?? 'error'}`);
+    return json(502, { error: MESSAGES.noGitHub });
+  }
+  if (response.status === 404) return json(200, { items: [], count: 0 });
+  if (!response.ok) return storageFailure(response, 'inbox list');
+  const entries = await response.json().catch(() => null);
+  if (!Array.isArray(entries)) return json(502, { error: MESSAGES.badStoredFile });
+  const files = new Map(entries.filter((e) => e?.type === 'file' && typeof e.name === 'string').map((e) => [e.name, e]));
+  const items = [];
+  for (const name of [...files.keys()].sort()) {
+    if (!name.endsWith('.json')) continue;
+    const clientId = name.slice(0, -'.json'.length);
+    if (!CLIENT_ID_PATTERN.test(clientId)) continue;
+    const data = [...files.values()].find((e) => e.name.startsWith(`${clientId}.`) && !e.name.endsWith('.json'));
+    if (data) items.push({ clientId, uploadId: uploadIdFor(clientId), bytes: Number(data.size) || 0 });
+  }
+  return json(200, { items: items.slice(0, INBOX_LIST_LIMIT), count: items.length });
+}
+
 // ---- Routing ----
 async function handle(request, env) {
   const url = new URL(request.url);
@@ -635,6 +817,14 @@ async function handle(request, env) {
     if (auth.response) return auth.response;
     if (!storageReady(env)) return json(503, { error: MESSAGES.storageNotSetUp });
     return path === '/snapshot' ? handleSnapshot(env, auth.pass) : handleItem(env, auth.pass, url);
+  }
+
+  if (path === '/inbox') {
+    if (method !== 'GET' && method !== 'POST') return json(405, { error: MESSAGES.method });
+    const auth = await requirePass(request, env);
+    if (auth.response) return auth.response;
+    if (!storageReady(env)) return json(503, { error: MESSAGES.storageNotSetUp });
+    return method === 'POST' ? handleInboxPost(request, env, auth.pass, url) : handleInboxList(env);
   }
 
   return json(404, { error: MESSAGES.notFound });

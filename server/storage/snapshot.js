@@ -16,6 +16,7 @@ const APP_NAME_MAX = 60;
 const SETTING_MAX = 40;
 const DONE_STAGES = new Set(['submitted', 'done']);
 const LABELS = Object.freeze({ notebook: 'Note', plan: 'Plan', draft: 'Draft', feedback: 'Feedback' });
+const UPLOAD_STATUSES = new Set(['inbox', 'processing', 'done', 'failed']);
 const RECORD_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'createdBy', 'schemaVersion']);
 
 function cleanText(value, max) {
@@ -84,6 +85,11 @@ async function collect(dir) {
     const record = await readJson(dir, `notebook/${id}.json`);
     if (record) items.push({ type: 'notebook', id, record, title: itemTitle('notebook', record, null) });
   }
+  // Uploads get a plain label only: their extracted text never reaches the snapshot.
+  for (const id of await jsonIds(dir, 'uploads')) {
+    const record = await readJson(dir, `uploads/${id}.json`);
+    if (record) items.push({ type: 'upload', id, record, title: record.origin === 'photo' ? 'Photo' : 'File' });
+  }
   const taskIds = (await names(dir, 'tasks', { folders: true })).filter((id) => ITEM_ID_PATTERN.test(id));
   for (const taskId of taskIds) {
     const task = await readJson(dir, `tasks/${taskId}/task.json`);
@@ -133,8 +139,11 @@ export async function buildSnapshot({ dir, now = new Date() }) {
     .slice(0, UPCOMING_LIMIT);
 
   const recent = items
-    .filter((item) => item.type === 'notebook' || item.type === 'feedback')
-    .map((item) => itemRef(item, { updatedAt: cleanDate(item.record.updatedAt) }))
+    .filter((item) => ['notebook', 'feedback', 'upload'].includes(item.type))
+    .map((item) => itemRef(item, {
+      updatedAt: cleanDate(item.record.updatedAt),
+      ...(item.type === 'upload' ? { status: UPLOAD_STATUSES.has(item.record.status) ? item.record.status : null } : {}),
+    }))
     .sort(byNewest('updatedAt'))
     .slice(0, RECENT_LIMIT);
 

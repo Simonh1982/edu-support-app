@@ -1,6 +1,6 @@
-STATE version: 11
-Updated: 2026-10-25 22:11 (UK time)
-Last work package applied: WP-013
+STATE version: 12
+Updated: 2026-10-26 11:22 (UK time)
+Last work package applied: WP-014a
 
 ## File tree
 ```
@@ -16,6 +16,7 @@ docs/build-spec.md
 models.json
 package-lock.json
 package.json
+scripts/inbox-check.js
 scripts/item-check.js
 scripts/list-copilot-models.js
 scripts/make-icons.js
@@ -29,6 +30,7 @@ server/ai/copilot.js
 server/ai/image-input.js
 server/ai/index.js
 server/ai/json.js
+server/ai/limits.js
 server/ai/mock.js
 server/ai/models.js
 server/ai/tools.js
@@ -37,6 +39,7 @@ server/config.js
 server/index.js
 server/port.js
 server/storage/git.js
+server/storage/inbox.js
 server/storage/index.js
 server/storage/items.js
 server/storage/records.js
@@ -47,6 +50,8 @@ test/auth.test.js
 test/codespace.test.js
 test/front-end.test.js
 test/image-input.test.js
+test/inbox-check.test.js
+test/inbox.test.js
 test/items.test.js
 test/port.test.js
 test/server.test.js
@@ -55,6 +60,7 @@ test/stamp-versions.test.js
 test/storage.test.js
 test/web-shell.test.js
 test/web-tools.test.js
+test/worker-inbox.test.js
 test/worker.test.js
 wake/worker.js
 web/app.css
@@ -91,9 +97,12 @@ web/shared/wake.js
 - `server/port.js`: `PORT_LOG`, `ATTEMPTS` (18), `DELAY_MS` (10000), `visibilityArgs(port, codespaceName)`, `ghEnv(token, env?)`, `runGh(args, { env, timeoutMs? })`, `shortError(result)`, `appendPortLog(line, file?)`, `managePort({ state, config, port, env?, run?, sleep?, writeLog?, log?, attempts?, delayMs?, now? })` → `{ done, stop() }`
 - `server/storage/records.js`: `SCHEMA_VERSION` (1), `CREATED_BY`, `MAX_EVENT_PAYLOAD_BYTES` (1024), `MAX_EVENT_STRING` (200), `ukIso(date?)`, `ukMonth(date?)`, `newId(prefix, date?)`, `newRecord(prefix, fields, { createdBy, now? })`, `updateRecord(record, changes?, { now? })`, `makeEvent(type, { links?, payload?, createdBy?, now? })`, `eventsPath(date?)`
 - `server/storage/git.js`: `IDENTITY`, `gitEnv({ token?, env?, host? })`, `cleanGitText(text, max?)`, `runGit(args, { cwd, env, timeoutMs? })`, `createLock()` → `{ run(fn) }`
-- `server/storage/store.js`: `BATCH_MS` (5000), `RETRY_DELAYS_MS`, `checkPath(relPath, { allowInbox? })`, `createStore({ dir, remoteUrl, env, runGit?, batchMs?, retryDelays?, log?, now?, sleep?, onStatus?, beforeCommit? })` → `{ dir, status(), init(), flush(), commitLocal(), put(path, record), append(path, entry), remove(path), logEvent(type, options?), read(path), list(dir) }`. `beforeCommit` runs inside the git lock, before `git add`, once per batch with changes; a failure is logged and never blocks saving.
-- `server/storage/index.js`: `DEFAULT_STORAGE_DIR` (`/workspaces/storage`), `APP_ROOT`, `storageSettings(env?, { appRoot? })`, `snapshotStep`, `startStorage({ state, config, env?, log?, makeStore? })` → store or null (never throws)
+- `server/storage/store.js`: `BATCH_MS` (5000), `RETRY_DELAYS_MS`, `checkPath(relPath, { allowInbox? })`, `createStore({ dir, remoteUrl, env, runGit?, batchMs?, retryDelays?, log?, now?, sleep?, onStatus?, beforeCommit? })` → `{ dir, status(), init(), flush(), commitLocal(), put(path, record), append(path, entry), remove(path, { allowInbox? }), move(from, to), sync(), logEvent(type, options?), read(path), list(dir) }`. `beforeCommit` runs inside the git lock, before `git add`, once per batch with changes; a failure is logged and never blocks saving.
+- `server/storage/index.js`: `DEFAULT_STORAGE_DIR` (`/workspaces/storage`), `APP_ROOT`, `storageSettings(env?, { appRoot? })`, `snapshotStep`, `startStorage({ state, config, env?, log?, makeStore?, getImageLimits?, inbox? })` (starts the inbox poller) → store or null (never throws)
 - `server/storage/items.js` (item block): `SNAPSHOT_PATH`, `ITEM_ID_PATTERN`, `ITEM_TYPES`, `itemPath`, `itemTypeAllowed`, `snapshotSection`; Node only: `ITEM_BLOCK_START`, `ITEM_BLOCK_END`, `extractItemBlock`, `itemResponse`
+- `server/storage/inbox.js` (inbox block): `INBOX_MAX_BYTES`, `INBOX_MAX_BASE64`, `CLIENT_ID_PATTERN`, `INBOX_TYPES`, `INBOX_SOURCES`, `INBOX_KINDS`, `inboxPaths`, `uploadIdFor`, `base64Bytes`, `inboxMetadata`; Node only: `INBOX_BLOCK_START`, `INBOX_BLOCK_END`, `extractInboxBlock`, `POLL_MS` (10000), `POLL_BACKOFF_MS` (60000), `LIMITS_WAIT_MS` (45000), `checkInboxMetadata(raw, clientId)`, `uploadRecord({ meta, sizeCheck, now? })`, `processInbox({ store, getImageLimits?, waitForLimits?, now?, log? })` → `{ processed, failed, duplicates, waiting, skipped }`, `startInboxPoller({ store, getImageLimits?, log?, pollMs?, backoffMs?, … })`
+- `server/ai/limits.js`: `IMAGE_TOO_LARGE_MESSAGE`, `imageLimits(list, modelId)`, `checkImage({ bytes, mimeType }, limits)`, `loadImageLimits(handle, role = 'light')` (reads `handle.models[role]` and `handle.ai.listModels()`; null on failure)
+- `scripts/inbox-check.js`: `USAGE`, `LARGE_BYTES`, `checkIds(now?)`, `captures(largeBytes?)`, `runCheck({ workerUrl, env?, fetchImpl?, makeStore?, tmpRoot?, … })`
 - `server/storage/snapshot.js`: `buildSnapshot`, `UPCOMING_LIMIT`, `RECENT_LIMIT`, `SHARED_LIMIT`
 - `scripts/item-check.js`: `USAGE`, `TEST_IDS`, `testNote`, `runCheck`
 - `scripts/storage-check.js`: `INBOX_TEST_FILE`, `USAGE`, `parseArgs(argv)`, `runCheck({ settings, wait?, waitForOwner, makeStore?, tmpRoot?, out? })`
@@ -101,14 +110,15 @@ web/shared/wake.js
 - `server/auth.js` (Node only): `PASS_BLOCK_START`, `PASS_BLOCK_END`, `extractPassBlock(source)`, `AUTH_MESSAGES`, `createAuth({ env?, log?, now? })` → `{ ready, errors, authenticate(headers), authorise(pass, roles), canRead(pass, type, record) }`
 - `wake/worker.js`: `default { fetch(request, env) }` only (Cloudflare module Worker; contains the pass block).
 - `scripts/worker-check.js`: `USAGE`, `normaliseWorkerUrl(text)`, `expectedBackendUrl(env?)`, `runCheck({ workerUrl, env?, fetchImpl?, out? }): Promise<boolean>`
-- **Shared code rule:** the block between the `PASS BLOCK` markers in `server/auth.js` (WP-011) and the block between the `ITEM BLOCK` markers in `server/storage/items.js` (WP-013) are each copied verbatim into `wake/worker.js`. Change both copies together; tests check they are identical.
+- **Shared code rule:** the block between the `PASS BLOCK` markers in `server/auth.js` (WP-011) and the block between the `ITEM BLOCK` markers in `server/storage/items.js` (WP-013) and the block between the `INBOX BLOCK` markers in `server/storage/inbox.js` (WP-014a) are each copied verbatim into `wake/worker.js`. Change both copies together; tests check they are identical.
 - **Item paths:** lookup is `type` + `id` (+ `task` for items in a task folder): `notebook/<id>.json`, `sources/<id>.json`, `tasks/<id>/task.json`, `tasks/<task>/plan.json` (id checked, not used), `tasks/<task>/drafts/<id>.json` (id `v<n>`), `tasks/<task>/feedback/<id>.json`. IDs match `^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$`.
-- **Snapshot (`index/snapshot.json`):** titles, dates and counts only (titles from a record's own `title` or its task's title, else a plain label); learner and parent sections; settings keep short strings, numbers and booleans; app name from `profile/app.json` (`displayName`, then `name`), null if absent; `planStatus` and `nextSession` null for now. Written by the store's `beforeCommit` step, so the first batch after start-up refreshes it.
+- **Snapshot (`index/snapshot.json`):** titles, dates and counts only (titles from a record's own `title` or its task's title, else a plain label); learner and parent sections; settings keep short strings, numbers and booleans; app name from `profile/app.json` (`displayName`, then `name`), null if absent; `planStatus` and `nextSession` null for now. Uploads appear in `learner.recent` as `type: 'upload'`, title Photo/File, with `status` only (never extracted text; never in the parent section). Written by the store's `beforeCommit` step, so the first batch after start-up refreshes it.
 
 ## Scripts
 - `scripts/stamp-versions.sh <web-dir> <version>`: deploy-time `?v=` stamping (exit 2 bad args, exit 1 unstamped reference).
 - `scripts/start-server.sh [--foreground|--watch]`: proven start script (blueprint §3.2); logs to `.server/`.
 - `npm test`: `node --test`. `npm run icons`: regenerate the PNG icons. `npm run server`: restart the server in the background and tail the log. `npm run models [-- --json]`: list the account's Copilot models and check `models.json`. `npm run spike:image -- <image> [--deadline YYYY-MM-DD] [--role <role>] [--mode both|file|blob]`: phase 0 test 1 (image input); refuses images inside the repo except `.server/`. `npm run spike:web [-- --role <role>] [--tools a,b] [--only fetch,search,refuse,cache]`: phase 0 test 2 (web tools, refusals, cache). `npm run storage:check [-- --no-wait]`: phase 0 verify step 7 (clone, write and push, then push again after an `inbox/` commit made on GitHub).
+- `node scripts/inbox-check.js [worker address]`: verify steps 9 (server half) and 10 (8 MB through the Worker); sends two invented files and tidies up.
 - `node scripts/item-check.js [worker address]`: live parent-role check (writes two invented notes, checks learner/parent access through the Worker, deletes them).
 - `node scripts/worker-check.js [worker address]` (asks for the address if not given): set-up check after WP-011 — Worker settings, matching pass secrets, `/status`, backend address and `/wake` on an awake Codespace.
 
@@ -131,6 +141,8 @@ web/shared/wake.js
 - `POST /wake` (pass): `{ state, started, backendUrl }`; 409 from GitHub is returned as 200 with `started: false`.
 - `GET /snapshot` (pass; storage settings needed): the role's section of `index/snapshot.json`; no snapshot → 404.
 - `GET /item?type=&id=&task=` (pass; storage settings needed): same rules as `/api/item`; unshared or missing → 404. Reads via the GitHub contents API (`Accept: application/vnd.github.raw`).
+- `POST /inbox?clientId=&type=&source=camera|gallery|file&kind=brief|own&capturedAt=` (learner pass; body = base64 text, up to 8 MB decoded): writes the file, then the metadata, to `inbox/`; 201 `{ clientId, uploadId, bytes, status: 'received' }`; 400/403/413/502.
+- `GET /inbox` (any pass): `{ items: [{ clientId, uploadId, bytes }], count }`, complete captures only.
 - Pass failures: 401 `{ error, reason }`. GitHub failures: 502 `{ error, githubStatus, acceptedPermissions? }`. Other origins: 403. Body over 1 KB: 413.
 
 ## Settings and secrets expected
@@ -144,15 +156,15 @@ web/shared/wake.js
 - **Worker (Cloudflare) settings:** text `CODESPACE_NAME`, `ALLOWED_ORIGIN`, `APP_URL`, `OAUTH_CLIENT_ID`, `PASS_VERSION`; secret `GITHUB_TOKEN` (Codespaces lifecycle), `OAUTH_CLIENT_SECRET`, `PASS_SIGNING_KEY`, `ALLOWED_ACCOUNTS`. Also `STORAGE_TOKEN` (secret; a separate token from the Codespace's) and `STORAGE_REPO` (text), used by `/snapshot` and `/item`.
 
 ## Verify steps passed
-1–7 passed (step 6 on 21 Oct 2026 after WP-008; step 7 on 21 Oct 2026 after WP-009: `storage:check` PASS, pulled the inbox commit before pushing).
+- Steps 1–7 passed (step 6 on 21 Oct 2026 after WP-008; step 7 on 21 Oct 2026 after WP-009: `storage:check` PASS, pulled the inbox commit before pushing).
+- Step 8 passed 26 Oct 2026: sign-in on phone, laptop and shared computer after WP-012; parent-role `item-check` PASS after WP-013.
 
 ## Deviations in effect
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
 
 ## Known issues
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
-- Verify step 8 parent-role check: run by Simon after WP-013 (`node scripts/item-check.js`).
-- Worker live checks (sign-in, `/status`, `/wake` on an awake Codespace) are done by Simon after merge. Remote wake from Shutdown is first tested in WP-012 (verify step 8).
+- Verify steps 9 and 10 run by Simon after WP-014a (`inbox-check`); the capture screen and device resizing are WP-014b.
 - `spike:web` built-in tool line is misleading with SDK 1.0.22: `BuiltInTools` is `{ Isolated: [...] }` (a curated subset with no web tools), so the report shows `Isolated` as the only tool and flags `web_fetch, web_search` as "not in the SDK list". Reporting only; not changed.
 - `EADDRINUSE` on restart: most likely the `--watch` attach command, queued behind the boot-time foreground start, firing during `npm run server`'s 1-second pause. After WP-008 (server frees the port at once on `SIGTERM`), one restart showed a single start launched by `npm run server` and no `EADDRINUSE`. Treat as likely fixed; if it returns, check `grep -E "starting:|already in use" .server/server.log`. `start-server.sh` is proven and unchanged.
 - `node -e "import('@github/copilot-sdk')…"` fails (SDK 1.0.22 calls `createRequire` on the importing filename, which is `[eval]` under `-e`). Importing from a module file, as the server does, works.

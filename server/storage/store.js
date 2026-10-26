@@ -248,16 +248,49 @@ export function createStore({
       return entry;
     },
 
-    /** Delete one file. A file that is already gone is fine. The commit follows in the next batch. */
-    async remove(relPath) {
+    /**
+     * Delete one file. A file that is already gone is fine. The commit follows in the next batch.
+     * allowInbox is only for clearing inbox files once they have been processed (blueprint §4.4).
+     */
+    async remove(relPath, { allowInbox = false } = {}) {
       if (!status.ready) throw new Error('storage is not ready');
-      checkPath(relPath);
+      checkPath(relPath, { allowInbox });
       await unlink(path.join(dir, relPath)).catch((err) => {
         if (err.code !== 'ENOENT') throw err;
       });
       dirty.add(relPath);
       update({});
       schedule();
+    },
+
+    /** Move one file within the clone. inbox/ may be the source (a processed capture), never the target. */
+    async move(fromPath, toPath) {
+      if (!status.ready) throw new Error('storage is not ready');
+      checkPath(fromPath, { allowInbox: true });
+      checkPath(toPath);
+      const target = path.join(dir, toPath);
+      await mkdir(path.dirname(target), { recursive: true });
+      await rename(path.join(dir, fromPath), target);
+      dirty.add(fromPath);
+      dirty.add(toPath);
+      update({});
+      schedule();
+    },
+
+    /** Pull now (and push anything already committed), without committing. Never rejects. */
+    async sync() {
+      if (!status.ready) return { pulled: 0, pushed: false, error: 'storage is not ready' };
+      return lock.run(async () => {
+        try {
+          const result = await syncLocked();
+          if (result.error) update({ ok: false, detail: result.error });
+          else update({ ok: true, detail: 'up to date' });
+          return result;
+        } catch (err) {
+          update({ ok: false, detail: `sync failed: ${err.message}` });
+          return { pulled: 0, pushed: false, error: err.message };
+        }
+      });
     },
 
     /** Append a system event to this UK month's log. */
