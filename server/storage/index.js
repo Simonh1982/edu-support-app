@@ -1,11 +1,13 @@
 // Starts storage for the server: reads the settings, clones or pulls the storage repository,
-// keeps /api/health's `storage` up to date, and rewrites the snapshot once per batch. Never throws.
+// keeps /api/health's `storage` up to date, rewrites the snapshot once per batch, and takes in
+// captures from the inbox. Never throws.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './store.js';
 import { gitEnv } from './git.js';
 import { buildSnapshot } from './snapshot.js';
 import { SNAPSHOT_PATH } from './items.js';
+import { startInboxPoller } from './inbox.js';
 
 export const DEFAULT_STORAGE_DIR = '/workspaces/storage';
 export const APP_ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -39,8 +41,11 @@ export function snapshotStep(dir, { build = buildSnapshot } = {}) {
 /**
  * Start storage. Returns the store, or null if storage is skipped or the clone failed.
  * state.storage = { ok, ready, lastPull, lastPush, pending, detail }.
+ * getImageLimits: returns the light model's image limits once the AI has read them (A-002), else null.
  */
-export async function startStorage({ state, config, env = process.env, log = console, makeStore = createStore } = {}) {
+export async function startStorage({
+  state, config, env = process.env, log = console, makeStore = createStore, getImageLimits = () => null, inbox = true,
+} = {}) {
   const show = (s) => {
     state.storage = { ok: s.ok, ready: s.ready, lastPull: s.lastPull, lastPush: s.lastPush, pending: s.pending, detail: s.detail };
   };
@@ -66,6 +71,14 @@ export async function startStorage({ state, config, env = process.env, log = con
     log.log(`[storage] ready: ${store.status().detail}`);
     // the first event of every run, and the server's own check that it can write and push
     await store.logEvent('system.start');
+    // take in captures the Worker saved while the Codespace slept, then keep checking (blueprint §4.4)
+    if (inbox && typeof store.sync === 'function' && typeof store.move === 'function') {
+      try {
+        startInboxPoller({ store, getImageLimits, log });
+      } catch (err) {
+        log.error(`[inbox] could not start: ${err.message}`);
+      }
+    }
     return store;
   } catch (err) {
     log.error(`[storage] could not start: ${err.message}`);

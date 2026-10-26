@@ -10,6 +10,7 @@ import { startStorage } from './storage/index.js';
 import { ukIso } from './storage/records.js';
 import { passSettings, passFromHeader, verifyPass } from './auth.js';
 import { itemResponse } from './storage/items.js';
+import { loadImageLimits } from './ai/limits.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -189,6 +190,8 @@ async function main() {
   let aiHandle = null;
   let portHandle = null;
   let storeHandle = null;
+  // the light model's image limits, read once the AI has started (A-002); null until then
+  let imageLimits = null;
   // setting names and problems only, never values (blueprint §12)
   const auth = passSettings(process.env);
   const { server, state } = createServer(config, undefined, console, {
@@ -229,9 +232,14 @@ async function main() {
     // make the port Public now: Codespace restarts reset it to Private (blueprint §3.3)
     portHandle = managePort({ state, config, port });
     // storage also starts after listening, so /api/health can show its progress (storage.detail)
-    startStorage({ state, config }).then((store) => { storeHandle = store; });
+    startStorage({ state, config, getImageLimits: () => imageLimits }).then((store) => { storeHandle = store; });
     // AI starts after listening, so /api/health answers (ai.mode "starting") during the test
-    startAi({ state }).then((handle) => { aiHandle = handle; });
+    startAi({ state }).then(async (handle) => {
+      aiHandle = handle;
+      imageLimits = await loadImageLimits(handle);
+      const kb = imageLimits?.maxBytes ? `, up to ${Math.round(imageLimits.maxBytes / 1024)} KB per image` : '';
+      console.log(`[inbox] image limits: ${imageLimits ? `${imageLimits.modelId}${kb}` : 'not available'}`);
+    });
   });
 }
 
