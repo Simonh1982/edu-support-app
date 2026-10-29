@@ -1,6 +1,6 @@
-STATE version: 15
-Updated: 2026-10-29 17:03 (UK time)
-Last work package applied: WP-014c
+STATE version: 16
+Updated: 2026-10-29 18:02 (UK time)
+Last work package applied: WP-015
 
 ## File tree
 ```
@@ -16,6 +16,7 @@ docs/build-spec.md
 models.json
 package-lock.json
 package.json
+scripts/alert-check.js
 scripts/inbox-check.js
 scripts/item-check.js
 scripts/list-copilot-models.js
@@ -34,6 +35,7 @@ server/ai/limits.js
 server/ai/mock.js
 server/ai/models.js
 server/ai/tools.js
+server/alerts.js
 server/auth.js
 server/config.js
 server/index.js
@@ -46,6 +48,7 @@ server/storage/records.js
 server/storage/snapshot.js
 server/storage/store.js
 test/ai.test.js
+test/alerts.test.js
 test/auth.test.js
 test/capture.test.js
 test/codespace.test.js
@@ -103,6 +106,8 @@ web/shared/wake.js
 - `scripts/spike-web-tools.js`: `CHECKS`, `USAGE`, `parseArgs(argv)`, `numericFields(data)`, `createCollector()`, `toolEvidence(collector)`, `judgeFetch(parsed, evidence)`, `judgeSearch(parsed, evidence)`, `judgeRefusal({ text, secret, markerExists, permissions })`, `judgeCache(usageByCall)`, `cacheSystemPrompt(lines = 200)`, `runFetch`, `runSearch`, `runRefusal({ ai, model, tools, variant, timeoutMs })`, `runCache({ ai, model, timeoutMs })`, `runSpike({ ai, models, role?, tools?, only?, timeoutMs? })`, `formatReport(report): string[]`
 - `server/port.js`: `PORT_LOG`, `ATTEMPTS` (18), `DELAY_MS` (10000), `visibilityArgs(port, codespaceName)`, `ghEnv(token, env?)`, `runGh(args, { env, timeoutMs? })`, `shortError(result)`, `appendPortLog(line, file?)`, `managePort({ state, config, port, env?, run?, sleep?, writeLog?, log?, attempts?, delayMs?, now? })` → `{ done, stop() }`
 - `server/storage/records.js`: `SCHEMA_VERSION` (1), `CREATED_BY`, `MAX_EVENT_PAYLOAD_BYTES` (1024), `MAX_EVENT_STRING` (200), `ukIso(date?)`, `ukMonth(date?)`, `newId(prefix, date?)`, `newRecord(prefix, fields, { createdBy, now? })`, `updateRecord(record, changes?, { now? })`, `makeEvent(type, { links?, payload?, createdBy?, now? })`, `eventsPath(date?)`
+- `server/alerts.js`: `ALERT_EVENT_TYPE` (`'app-alert'`), `ALERT_KINDS` (`['wellbeing', 'wake-failed']`), `ALERT_LEVELS` (`[2, 3]`), `ALERT_TIMEOUT_MS` (10000), `GITHUB_API`, `ukDate(now?)`, `alertSettings(env?)` → `{ repo, token } | { skip }`, `alertPayload({ kind, level?, now? })` → `{ payload } | { error }`, `sendAlert({ kind, level?, env?, settings?, fetchImpl?, now?, log?, timeoutMs? })` → `{ ok: true, status } | { ok: false, status, error, acceptedPermissions? }` (never throws)
+- `scripts/alert-check.js`: `USAGE`, `DEFAULT_GAP_S` (90), `parseArgs(argv)`, `runCheck({ settings, only?, gapS?, send?, sleep?, out?, now? })` → `{ verdict: 'SENT' | 'FAIL', lines, results }`
 - `server/storage/git.js`: `IDENTITY`, `gitEnv({ token?, env?, host? })`, `cleanGitText(text, max?)`, `runGit(args, { cwd, env, timeoutMs? })`, `createLock()` → `{ run(fn) }`
 - `server/storage/store.js`: `BATCH_MS` (5000), `RETRY_DELAYS_MS`, `checkPath(relPath, { allowInbox? })`, `createStore({ dir, remoteUrl, env, runGit?, batchMs?, retryDelays?, log?, now?, sleep?, onStatus?, beforeCommit? })` → `{ dir, status(), init(), flush(), commitLocal(), put(path, record), append(path, entry), remove(path, { allowInbox? }), move(from, to), sync(), logEvent(type, options?), read(path), list(dir) }`. `beforeCommit` runs inside the git lock, before `git add`, once per batch with changes; a failure is logged and never blocks saving. Also exports `conflictRule(relPath)`, `unionLines(remoteText, localText)`, `parseUnmerged(text)`; `syncLocked`/`flush`/`sync` results may include `recovered: string[]` or `attention: true`.
 - `server/storage/index.js`: `DEFAULT_STORAGE_DIR` (`/workspaces/storage`), `APP_ROOT`, `storageSettings(env?, { appRoot? })`, `snapshotStep`, `startStorage({ state, config, env?, log?, makeStore?, getImageLimits?, inbox? })` (starts the inbox poller) → store or null (never throws)
@@ -126,6 +131,7 @@ web/shared/wake.js
 - `scripts/stamp-versions.sh <web-dir> <version>`: deploy-time `?v=` stamping (exit 2 bad args, exit 1 unstamped reference).
 - `scripts/start-server.sh [--foreground|--watch]`: proven start script (blueprint §3.2); logs to `.server/`.
 - `npm test`: `node --test`. `npm run icons`: regenerate the PNG icons. `npm run server`: restart the server in the background and tail the log. `npm run models [-- --json]`: list the account's Copilot models and check `models.json`. `npm run spike:image -- <image> [--deadline YYYY-MM-DD] [--role <role>] [--mode both|file|blob]`: phase 0 test 1 (image input); refuses images inside the repo except `.server/`. `npm run spike:web [-- --role <role>] [--tools a,b] [--only fetch,search,refuse,cache]`: phase 0 test 2 (web tools, refusals, cache). `npm run storage:check [-- --no-wait]`: phase 0 verify step 7 (clone, write and push, then push again after an `inbox/` commit made on GitHub).
+- `npm run alert:check [-- --only 3|2] [--gap <seconds>]`: verify step 11 (sends real test alerts; Codespace terminal only).
 - `node scripts/inbox-check.js [worker address]`: verify steps 9 (server half) and 10 (8 MB through the Worker); sends two invented files and tidies up.
 - `node scripts/item-check.js [worker address]`: live parent-role check (writes two invented notes, checks learner/parent access through the Worker, deletes them).
 - `node scripts/worker-check.js [worker address]` (asks for the address if not given): set-up check after WP-011 — Worker settings, matching pass secrets, `/status`, backend address and `/wake` on an awake Codespace.
@@ -163,7 +169,7 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 - AI (optional, non-secret): `AI_MOCK=1` (use the mock AI), `COPILOT_WORK_DIR` (SDK work folder; default is under the OS temp folder).
 - `COPILOT_GITHUB_TOKEN`: read by `server/ai/index.js` only (passed to the Copilot adapter); never logged.
 - `GH_PORTS_TOKEN`: read by `server/port.js` only (passed to `gh` as `GH_TOKEN`); never logged.
-- `STORAGE_REPO`, `STORAGE_TOKEN`: read by `server/storage/index.js` only. The token is passed to git as an auth header in the environment and is never logged. Optional, non-secret: `STORAGE_DIR` (default `/workspaces/storage`; must be outside the app repository).
+- `STORAGE_REPO`, `STORAGE_TOKEN`: read by `server/storage/index.js` and `server/alerts.js` (for alerts the token is sent only to `api.github.com` and never logged). The token is passed to git as an auth header in the environment and is never logged. Optional, non-secret: `STORAGE_DIR` (default `/workspaces/storage`; must be outside the app repository).
 - `PASS_SIGNING_KEY` (32 characters or more), `PASS_VERSION` (whole number ≥ 1) and `ALLOWED_ACCOUNTS` (JSON login → `learner`/`parent`): read by `server/auth.js` (`createAuth`) only; never logged. The server calls `passSettings` at start-up and logs `[auth] off: …` (names only) if they're missing.
 - Front end: `web/config.js` `workerUrl` is set to the Worker address.
 - **Worker (Cloudflare) settings:** text `CODESPACE_NAME`, `ALLOWED_ORIGIN`, `APP_URL`, `OAUTH_CLIENT_ID`, `PASS_VERSION`; secret `GITHUB_TOKEN` (Codespaces lifecycle), `OAUTH_CLIENT_SECRET`, `PASS_SIGNING_KEY`, `ALLOWED_ACCOUNTS`. Also `STORAGE_TOKEN` (secret; a separate token from the Codespace's) and `STORAGE_REPO` (text), used by `/snapshot` and `/item`.
@@ -181,6 +187,7 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 
 ## Known issues
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
+- Verify step 11 waiting for Simon's live check (`npm run alert:check`). Nothing calls `sendAlert` yet (phase 1 `server/wellbeing.js`; Worker wake-failure alert in WP-016).
 - `spike:web` built-in tool line is misleading with SDK 1.0.22: `BuiltInTools` is `{ Isolated: [...] }` (a curated subset with no web tools), so the report shows `Isolated` as the only tool and flags `web_fetch, web_search` as "not in the SDK list". Reporting only; not changed.
 - The queued `postAttachCommand` (`--watch`) runs once per Codespace start, when the first foreground server exits (seen 26 Oct: new server 1.4 s after `pkill`). Harmless when only one server is running. `start-server.sh` and `devcontainer.json` are proven and unchanged.
 - `node -e "import('@github/copilot-sdk')…"` fails (SDK 1.0.22 calls `createRequire` on the importing filename, which is `[eval]` under `-e`). Importing from a module file, as the server does, works.
