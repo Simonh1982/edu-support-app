@@ -45,10 +45,34 @@
 
         <div class="actions">
           <button type="button" id="wake-retry" class="primary" hidden>Try again</button>
-          <button type="button" id="sign-out" class="secondary">Sign out</button>
         </div>
 
-        <p class="hint">More of the app is on its way.</p>
+        <section id="capture" class="capture" aria-labelledby="capture-heading">
+          <h2 id="capture-heading">What are you working on?</h2>
+          <p class="hint" id="capture-hint">
+            Take a photo of the task, or add a photo, PDF or Word file. You don't need to wait
+            for the tutor.
+          </p>
+          <div class="actions">
+            <button type="button" id="capture-camera" class="primary" aria-describedby="capture-hint">Take a photo</button>
+            <button type="button" id="capture-gallery" class="secondary">Choose a photo</button>
+            <button type="button" id="capture-file" class="secondary">Add a file</button>
+          </div>
+          <input type="file" id="capture-camera-input" accept="image/*" capture="environment" hidden>
+          <input type="file" id="capture-gallery-input" accept="image/*" multiple hidden>
+          <input type="file" id="capture-file-input" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+
+          <p id="capture-status" class="status" role="status" aria-live="polite"></p>
+
+          <h2 id="captures-heading">Your photos and files</h2>
+          <p id="captures-empty" class="hint">Nothing added yet.</p>
+          <ul id="captures-list" class="captures" aria-labelledby="captures-heading"></ul>
+          <button type="button" id="captures-refresh" class="secondary">Check again</button>
+        </section>
+
+        <div class="actions">
+          <button type="button" id="sign-out" class="secondary">Sign out</button>
+        </div>
       </section>
 
       <noscript>
