@@ -14,7 +14,8 @@
     "models": "node scripts/list-copilot-models.js",
     "spike:image": "node scripts/spike-image-input.js",
     "spike:web": "node scripts/spike-web-tools.js",
-    "storage:check": "node scripts/storage-check.js"
+    "storage:check": "node scripts/storage-check.js",
+    "alert:check": "node scripts/alert-check.js"
   },
   "dependencies": {
     "@github/copilot-sdk": "1.0.22"
