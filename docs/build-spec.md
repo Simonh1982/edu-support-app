@@ -1,8 +1,8 @@
 # Build specification: `edu-support-app`
 
-**What this is:** the requirements for building the app. It is generated from the private master specification with personal details removed. **If the two ever disagree, the master wins: ask the owner.**  
-**Companion document:** `edu-support-app_technical_blueprint.md` (how the app is built).  
-**Version:** generated from master specification v3.2 (October 2026).
+**What this is:** the requirements for building the app. It is generated from the private master specification with personal details removed. **If the two ever disagree, the master wins: ask the owner.**
+**Companion document:** `edu-support-app_technical_blueprint.md` (how the app is built).
+**Version:** generated from master specification v3.5 (29 October 2026).
 
 **How to read it**
 - Sections keep the master's numbering, so references such as §23.5 match the blueprint.
@@ -190,6 +190,8 @@ If the learner taps **Help me with some work** while the AI wakes, the first scr
 - The snapshot is a **small contents page**: what's coming up, the schedule, plan status, settings, and the **titles** of recent notes and feedback. When the learner opens a note or feedback while the AI wakes, the Worker fetches that item from its own file. The learner can open any of his own items; the owner can open only items the learner has shared.
 - On a shared computer, changes waiting to be saved are held **in memory only**, and are lost if the tab is closed before the AI wakes.
 
+The learner's recent list in the snapshot also shows his uploads, as "Photo" or "File" with their status only. Their text never appears in the snapshot, and uploads never appear on the parent side.
+
 ### 6.2 Learner and parent pages
 
 The learner and parent interfaces have **separate web addresses**. The learner interface has no link to the parent page. A separate address is not protection on its own: every request for parent data must come from the owner’s signed-in GitHub account (§40).
@@ -239,6 +241,20 @@ For example:
 - Each task records its **kind** (assignment, homework or assessment) separately from the **form** of the work (essay, worksheet, project, production, other).
 - Deadlines are stored as dates in UK time, so they don’t shift when the clocks change.
 - If a photo is hard to read, a more capable model re-reads it before the learner is asked to correct anything (§43).
+
+- **Spelling in briefs (A-001).**
+  - For a brief written by someone else, the confirmation step shows each proposed spelling correction as a change (e.g. *"strech → stretch"*), with one tap to undo. Nothing changes without being shown.
+  - Corrections are spelling only, word by word, in UK spelling.
+  - Names, places, case studies, set texts, subject terms and anything uncertain are highlighted, never corrected.
+  - The verbatim text is kept on the Upload record.
+  - **How a brief is recognised** (*confirmed 21 October 2026*): uploads through "What are you working on?" or adding a task count as briefs. Uploads through Review my work count as the learner's own writing. Unclear cases count as his own writing, so nothing is changed.
+- **Image size (A-002).**
+  - Every way of adding an image (camera, gallery, file picker) shrinks it on the device. The aim is about 300 KB, and never more than about 700 KB at 1,600 px.
+  - Before an image is sent to a model, the server checks it against that model's own limits. If it is still too large, the learner sees *"This photo is too large to read. Please take it again."*
+- **One route for captures.** Every photo and file goes through the Worker's inbox, even when the tutor is awake. The device makes a client ID, so a retry never creates a duplicate.
+  - While the tutor is awake, the server picks captures up within about 10–20 seconds. While it sleeps, they wait safely in the inbox until it wakes.
+  - Until reading is switched on in phase 1, each capture shows *"Received – it'll be read once reading is switched on."*
+  - A capture that fails the size check shows *"This photo is too large to read. Please take it again."*
 
 ## 9. Work-support routes
 
@@ -331,6 +347,8 @@ The app may directly suggest a simple spelling or grammatical correction. It sho
 - The spelling panel has **no cap**. Repeated mistakes are grouped (e.g. *"'their' instead of 'there' (4 times)"*). Suggestions are word- or phrase-level only, checked by code so that sentence rewrites are dropped, and use UK spellings.
 - Each suggestion shows the surrounding words and a *Copy* button. The learner makes the fix in his own document.
 - A **"Check my spelling"** button runs the same check on his notes, plan sections and attempt boxes. Results are not stored.
+
+The learner's own writing (drafts, notes, plans, attempts) is always transcribed **exactly as written**, including misspellings, whether photographed or uploaded. Spelling help for it comes only from this panel and Check my spelling (A-001).
 - **Disagreeing with feedback (phase 2):** *"I don’t agree"* asks *"What makes you think so?"* The AI checks his reason against the criteria, then either accepts it or explains its reasoning once and leaves it with him (*"Your call. It’s worth asking your teacher too."*). It never adds help or rewrites anything as a result. The outcome (upheld or withdrawn) is recorded, and the owner sees counts only.
 
 ## 10. Intelligent routing
@@ -1073,6 +1091,7 @@ The final access and privacy model should be agreed during technical planning.
 - The parent page has its own address, with no link from the learner side (§6.2).
 - The parent view is built in phase 5 (§47.1). Disclosure alerts (§32.1) work from phase 1.
 - "View more detail" is defined in §39. The Worker issues a 30-day pass, which the Worker and the Codespace both check against the allowed list on every request, so removing an account takes effect immediately (Appendix B).
+- **The parent page never wakes the tutor.** It checks the pass through the Worker, and shows the snapshot and shared items without starting the Codespace.
 
 ---
 
@@ -1167,6 +1186,12 @@ Voice input may be assessed during planning, but should not complicate the initi
 - Uploads made while the backend sleeps go to the Worker inbox (§8.1).
 - Uncertain extracted text is highlighted so the learner can correct it.
 
+- **Briefs and the learner's own writing are treated differently** (A-001, §8.1). Briefs get shown, undoable spelling corrections; his own writing is transcribed exactly.
+- **Image safeguards** (A-002, §8.1). There is a server check against the model's own limits, read from the model list. The Upload is marked failed if an image can't be sent, and the event is logged without content.
+- **Photos are sent to the model as blob attachments,** never as server file paths.
+
+**Scanned PDFs (A-003).** If the server can't extract any text from a PDF (a scan), it checks the PDF against the model's own limits from the model list. If it is within them, the PDF is sent as a blob attachment, like a photo. If not, it isn't sent: the Upload is marked failed, the event is logged without content, and the learner sees *"This PDF can't be read as it is. Please take photos of the pages instead."*
+
 ---
 
 # Part Eleven: MVP planning with Claude Code
@@ -1217,9 +1242,9 @@ Each phase ends when its exit check passes, not on a date.
 
 | Phase | Contents | Exit check |
 |---|---|---|
-| **0. Foundations** | Both repositories (`edu-support-app`, `edu-support-data`), Pages, Codespace and Copilot connection. The Worker: waking, inbox and inbox listing, snapshot, GitHub sign-in with a 30-day pass checked on every request. Storage module (pull before push, batched commits), event log, credential register, `models.json`, mock AI, outline test set, `CLAUDE.md`. The alert workflow. Installable app icon, accessibility basics, separate learner and parent pages. Curriculum outlines and stable topic IDs for all qualifications. The **first capability test is image input** through the Copilot SDK. The weekly wake and its failure alert are included | Sign-in works on his phone, the laptop and a shared computer. A photo taken while the backend is asleep appears on the laptop once it is awake. A test level-3 alert reaches the owner. School network access checked |
+| **0. Foundations** | Both repositories (`edu-support-app`, `edu-support-data`), Pages, Codespace and Copilot connection. The Worker: waking, inbox and inbox listing, snapshot, GitHub sign-in with a 30-day pass checked on every request. Storage module (pull before push, batched commits), event log, credential register, `models.json`, mock AI, outline test set, `CLAUDE.md`. The alert workflow. Installable app icon, accessibility basics, separate learner and parent pages. Curriculum outlines and stable topic IDs for all qualifications. The **first capability test is image input** through the Copilot SDK. The weekly wake and its failure alert are included. Image size safeguards (A-002) in the inbox and capture package. An erasure dry run in the final check | Sign-in works on his phone, the laptop and a shared computer. A photo taken while the backend is asleep appears on the laptop once it is awake. A test level-3 alert reaches the owner. School network access checked |
 | **Co-design session** | Before phase 1, run by the owner (Appendix D) | The learner has chosen the name and look, reacted to the tone examples, and his current units are known |
-| **1. MVP: Work and Learn** | Capture to Task with anchors and confirmation; the Upcoming list. The three work routes with attempt before help. Live search, source cards, notebook with authorship, paste check. Learn something with knowledge checks (answers and confidence saved). Spelling check and **"Check my spelling"**. Full detail for current units. Boundary rules, test set and live check. Disclosure handling and alerts. First-run welcome, end-of-session "next step", "What the app knows about you" screen with a "What `{parent}` sees" preview, deletion | Passes §57, including **zero leaks on the test set**. The learner uses it for real homework. **Follow-up with the learner after his first fortnight** |
+| **1. MVP: Work and Learn** | Capture to Task with anchors and confirmation; the Upcoming list. The three work routes with attempt before help. Live search, source cards, notebook with authorship, paste check. Learn something with knowledge checks (answers and confidence saved). Spelling check and **"Check my spelling"**. Full detail for current units. Boundary rules, test set and live check. Disclosure handling and alerts. First-run welcome, end-of-session "next step", "What the app knows about you" screen with a "What `{parent}` sees" preview, deletion. Spelling corrections for briefs (A-001); photos sent as blob attachments. Scanned PDFs (A-003) | Passes §57, including **zero leaks on the test set**. The learner uses it for real homework. **Follow-up with the learner after his first fortnight** |
 | **2. EPQ and deeper review** | AQA EPQ with project topics the learner creates and a project-log style notebook. Draft-to-draft comparison, feedback anchored to his text, "I don’t agree", a first independence signal | Ready before the EPQ starts (expected November). If phase 2 isn't ready in time, phase 1's research and notebook cover the early stages (topic choice, research) |
 | **3. Revise** | **Check-in with the learner first.** Question banks, quizzes, flashcards, exam-style practice with model answers after his attempt. Confidence ratings, misconceptions, scheduler (plain code), Surprise me, mastery labels, focus timer. Inferences switched on (20-week review) | In place well before his first mocks or tests |
 | **4. Planning** | Availability, planned sessions, realism checks, a "welcome back" screen after a gap, and an improved Recommended next | A missed week can be recovered with one action |
@@ -1401,7 +1426,7 @@ The MVP will be defined through structured planning with Claude Code. The planni
 |---|---|
 | Task | Title, subject, **kind (assignment / homework / assessment)**, **workType (essay / worksheet / project / production / other)** , question text, topics, assessment objectives, marks, word count, deadline (UK time), extraction uncertainty per field, confirmed by the learner?, stage (not started / researching / planning / drafting / reviewing / submitted / done), completed date, source uploads, estimated effort, **anchors**  |
 | Task anchor  | Task, type (question / location / text / track / thesis), text, author, confirmed by the learner? |
-| Upload | File path, type, origin (photo / file / paste / typed), processing status (in inbox / processing / done / failed), extracted text, uncertain passages, the learner’s corrections, linked task or topic |
+| Upload | File path, type, origin (photo / file / paste / typed), processing status (in inbox / processing / done / failed; **processing** means received and waiting to be read, so uploads made before reading is switched on are read later ), extracted text (**verbatim**), uncertain passages, the learner’s corrections, linked task or topic, **`contentKind` (brief / own work)**, **`spellingCorrections`: `{ original, corrected, position, undone }` for briefs only**. The Task's question text and `question` anchor use the corrected text  |
 | Attempt | Route, task or topic, his text, escape used?, time |
 | Research question | Task, topic, question text, status (open / answered) |
 | Source | URL, title, publisher or author, published date, category, why it is useful (describes coverage, not argument), selected?, evaluation answers |
@@ -1482,13 +1507,14 @@ flowchart LR
 - The Codespace clones the storage repository once, outside the app's own working folder. It **pulls at start-up and before every push**, because the Worker also commits inbox files.
 - Commits are batched over 5–10 seconds.
 - Retention clean-ups run at start-up.
+- **Sync clashes** are settled automatically for server-made files. Event logs are merged line by line, the snapshot is rebuilt, inbox files keep the Worker's copy and uploads keep the server's. Anything else stops syncing, shows "needs attention" in `/api/health`, and keeps local work.
 
 **Snapshot and items**
 - The snapshot is a **small contents page**: what's coming up, the schedule, plan status, settings and the titles of recent items. It holds no note, feedback or draft text.
 - The Worker returns only the section for the caller's role. It fetches individual items on request, applying the same permission rules as the server: the parent can open only shared items.
 
 **Inbox and queue**
-- The Worker writes captures to `inbox/` while the Codespace sleeps, and lists pending items. Captures carry IDs generated on the device.
+- **All captures go through the Worker inbox, whether or not the Codespace is awake** (one route). The device makes the base64, and the Worker writes it to `inbox/` and lists pending items. Captures carry IDs generated on the device. The server checks the inbox at start-up and every 10 seconds while awake, and saves new uploads as *processing*.
 - Non-AI edits made while the AI wakes are queued: on own devices in browser storage, and on shared computers in memory only.
 
 **Waking and keeping alive**
@@ -1501,6 +1527,7 @@ flowchart LR
 - GitHub OAuth through the Worker, requesting no repository permissions.
 - The pass lasts 30 days on own devices and 4 hours on shared computers, and is checked against the allowed list on every request.
 - The allowed accounts, pass version and signing key live in **both** the Worker and the Codespace, and must be changed together.
+- **The parent page never wakes the Codespace.**
 
 **Alerts.** The server, or the Worker for wake failures, sends a repository signal. A GitHub Actions workflow opens the issue as `github-actions[bot]`, so the owner is notified.
 
@@ -1514,14 +1541,15 @@ flowchart LR
 7. signing secret, with the pass version and allowed accounts.
 
 **To test early (phase 0)**
-- **Image input through the Copilot SDK (first).**
-- The names and configuration of the SDK's web tools.
-- The Worker's CPU limit with uploads.
-- Android install requirements.
+- **Image input through the Copilot SDK: passed** (21 October 2026), as file and blob attachments, for printed and handwritten briefs. Blob attachments are used from phase 1.
+- **Web tools: passed** (WP-007). `web_search` and `web_fetch` are controlled by the allowed list.
+- **The Worker's CPU limit with uploads: passed.** 8 MB in 4.2–5.4 seconds.
+- **Android install: passed.** It installs as a full app without a service worker.
 - School network access.
 - Two-step verification on the learner's GitHub account.
 - That alerts reach the owner.
-- Whether the Copilot SDK uses prompt caching.
+- **Prompt caching: passed.** It works, with a 5-minute lifetime.
+- **The erasure runbook,** by a dry run on an invented test file (WP-020).
 
 ## Appendix C: AI behaviour rules and testing
 
@@ -1605,8 +1633,8 @@ These are decided with the learner at a co-design session. They must be **config
 
 **Cycle**
 1. The **code-writing agent** on the owner's work platform writes one **work package** at a time. It reads the build spec and blueprint, and opens the curriculum library only when a package needs it.
-2. The owner passes the package to **Claude Code**. Claude Code checks that the package's `Based on: STATE v<n>` line matches the repo, then applies it, runs `npm test`, fixes small problems (recording them as deviations) and opens a pull request.
-3. After the merge, Claude Code updates `STATE.md`, with a new version number, date, last work package and commit. It returns a short implementation report.
+2. The owner passes the package to **Claude Code**. Claude Code checks that the package's `Based on: STATE v<n>` line matches the version of `STATE.md` on `main`, then applies it, runs `npm test`, fixes small problems (recording them as deviations) and opens a pull request.
+3. In the same pull request, Claude Code updates `STATE.md` with a new version number, the date and the last work package. It returns a short implementation report, and the owner merges the pull request.
 4. The owner pastes the report and the new `STATE.md` into the agent's chat. The agent always uses the highest-numbered `STATE.md`.
 
 **Rules**
@@ -1614,14 +1642,31 @@ These are decided with the learner at a co-design session. They must be **config
 - The master specification is never uploaded to the work platform.
 - When the agent's chat becomes long, start a fresh one with the system prompt and the latest `STATE.md`.
 
-## Items to verify in phase 0
+**Also:**
+- The primary coding agent works from `Workplan-phase<n>.md` in its library (D8). Owner decisions between master versions go in `build-spec-amendments.md` (D9).
+- One repository per package, with no branch names. Private-repository packages use `Based on: n/a` (D10).
+- The owner pastes Claude Code's **full** report into the primary coding agent's chat.
+- The after-merge routine in the Codespace, plain-text web addresses, and SDK checks from a file (D11).
 
-These are unverified. Test them before building on them (blueprint §13):
-1. **Image input through the Copilot SDK (first).** If it fails, the owner decides how handwriting is handled.
-2. The names and configuration of the SDK's web tools, and how reliable web search is.
-3. Model IDs and prices (`npm run models`), and Haiku's reliability for photo reading, topic matching, spelling and the live check. Move the checker to Sonnet if needed.
-4. That alert issues and weekly-wake failure alerts reach the owner.
-5. The Worker's CPU limit with uploads; Android install requirements; school network access; two-step verification on the learner's GitHub account.
-6. Whether the Copilot SDK uses prompt caching.
+## Items still to verify, and open points
+
+**Verified in phase 0 (to 29 October 2026):**
+- image input through the Copilot SDK (use **blob** attachments), with handwriting read well;
+- Android install without a service worker;
+- model IDs and start-up tests;
+- web tools and prompt caching;
+- port visibility;
+- storage sync, including clash recovery;
+- sign-in on phone, laptop and shared computer;
+- parent-role checks;
+- 8 MB uploads through the Worker;
+- the 30-minute idle timeout.
+
+**Still to verify** (blueprint §13, workplan):
+1. The device half of verify step 9 (WP-014b): a photo taken while the backend sleeps appears on the laptop and is processed after waking.
+2. Alerts and the weekly wake (WP-015, WP-016).
+3. Curriculum outlines (WP-019a–d).
+4. End to end, school network, credential register and the erasure dry run (WP-020).
+5. Haiku's reliability for topic matching, spelling and the live check (phase 1). Move the checker to Sonnet if needed.
 
 Thresholds (§57), the idle timeout and the retention periods are settings, to be tuned after real use.

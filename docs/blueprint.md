@@ -1,6 +1,6 @@
 # Technical blueprint: the learning-support app (`edu-support-app`)
 
-**Version:** 1.0 (October 2026)
+**Version:** 1.3 (29 October 2026: phase 0 findings to WP-014a-fix; capture route, inbox polling and sync-clash recovery)
 **Status:** build reference for Claude Code. It replaces the earlier generic blueprint.
 **Requirements:** the **build spec** in `docs/build-spec.md`. It is generated from the private
 master specification, which always wins if the two disagree.
@@ -70,7 +70,8 @@ allowance), Copilot (the owner's Business seat). No other services or accounts a
 
 | Path | Purpose |
 |---|---|
-| `CLAUDE.md` | Working rules for Claude Code, including the privacy rule |
+| `CLAUDE.md` | Claude Code's role, procedure and privacy rules (supplied by the owner; not written by the agent) |
+| `docs/STATE.md` | Current repository state, versioned; Claude Code updates it in every pull request |
 | `docs/build-spec.md` | Requirements (generated from the private master) |
 | `docs/blueprint.md` | This document |
 | `.devcontainer/devcontainer.json` | Codespace image, `gh` feature, foreground start |
@@ -115,6 +116,7 @@ events/              <YYYY-MM>.jsonl                               (append-only)
 index/               snapshot.json                                 (small contents page only)
 evals-private/       samples of the learner's writing for the spelling tests (never copied out)
 docs/                master specification, credential register, runbooks/erasure.md
+CLAUDE.md            Claude Code's rules for this private repository (supplied by the owner)
 .github/workflows/   alert.yml
 ```
 
@@ -221,12 +223,17 @@ exec tail -n 40 -f "$LOG"
 
 ### 3.5 Server essentials
 
-- `GET /api/health` returns
-  `{ ok, ai: { ready, roles, errors }, storage: { ok, lastPush }, startedAt, restsAt, port }`.
-  `restsAt` is `startedAt + IDLE_TIMEOUT_MIN`.
+- `GET /api/health` (no pass) returns `{ ok, ai, storage, startedAt, restsAt, port }`.
+  - All times are **UK time** (`+00:00` or `+01:00`). `restsAt` is `startedAt + IDLE_TIMEOUT_MIN`.
+  - `ai` is `{ ready, roles, errors, mode }`. `mode` is `starting`, `off`, `mock` or `copilot`, and
+    each role is `{ model, ok, ms | error }`.
+  - `storage` is `{ ok, ready, lastPull, lastPush, pending, detail }`.
+  - `port` is `{ visibility, detail, attempts, updatedAt }`.
+- `GET /api/item?type=&id=&task=` (pass) follows the same rules as the Worker's `/item` (section 5.2).
 - **Every other endpoint requires a valid pass** (section 6) and checks the role.
 - **CORS:** echo the `Origin` back only if it's the Pages origin (or localhost in development).
-  Allow the headers `Content-Type, Authorization`.
+  Allow the headers `Content-Type, Authorization`. Localhost is allowed only when `DEV_ORIGINS`
+  is set.
 - Send every error as JSON `{ error }` with a sensible status.
 - Limits: normal JSON bodies 256 KB; `POST /api/uploads` up to 8 MB; per-pass rate limits; a daily
   AI request ceiling as a safety net.
@@ -248,15 +255,28 @@ exec tail -n 40 -f "$LOG"
 
 1. Domain code calls `store.put(path, record)` or `store.append(eventsFile, event)`. The file is
    written in the local clone straight away, and memory indexes are updated.
-2. Changes are **batched for 5–10 seconds**. Then the server runs `git add -A`, `git commit`,
-   `git pull --rebase` and `git push`. The two writers never touch the same files, so the rebase is
-   always clean.
-3. If the push fails, keep the commit, retry with back-off, and report it in `/api/health`.
+2. Changes are **batched for 5 seconds**. Then the server runs `git add -A`, `git commit`,
+   `git pull --rebase` and `git push`. The two writers normally touch different files, so the
+   rebase is usually clean. Clashes are settled as in step 7.
+3. If the push fails, keep the commit, retry with back-off, and report it in `/api/health`. Git
+   error text has the storage repository's name replaced with `<storage-repo>`, because
+   `/api/health` is public.
 4. **Rewrite the snapshot at most once per batch.**
 5. Use a single in-process lock for all git operations. The server never runs two git commands at
    once.
 6. Authenticate git with `STORAGE_TOKEN`, via an HTTPS credential helper or the remote URL in
    memory. Never write the token into `.git/config` in a file that is committed anywhere.
+7. **Sync clashes (proven in WP-014a-fix).** If `git pull --rebase` clashes, the server settles
+   the files it makes itself:
+   - `events/*.jsonl` is merged line by line, keeping both sides once;
+   - `index/snapshot.json` takes the remote copy and is rebuilt in the next batch;
+   - `inbox/` prefers the remote (Worker) copy;
+   - `uploads/` prefers the local (server) copy.
+
+   For anything else, it aborts the rebase and keeps local commits. It sets `storage.detail` to
+   `needs attention: sync clash in <paths>` (paths only) and stops pulling until restart; saving
+   carries on locally. **Manual fix:** resolve the clash in `/workspaces/storage`, then
+   `npm run server`.
 
 ### 4.3 Snapshot (`index/snapshot.json`): a small contents page
 
@@ -273,7 +293,8 @@ The snapshot lets the always-on Worker show something useful while the Codespace
     "nextSession": null,
     "settings": { "accessibility": { }, "presentation": { } },
     "recent": [{ "type": "notebook", "id": "n_…", "title": "…", "updatedAt": "…" },
-               { "type": "feedback", "id": "f_…", "title": "…", "updatedAt": "…" }],
+               { "type": "feedback", "id": "f_…", "title": "…", "updatedAt": "…" },
+               { "type": "upload", "id": "u_…", "title": "Photo", "status": "processing", "updatedAt": "…" }],
     "inboxPending": 0
   },
   "parent": {
@@ -285,19 +306,42 @@ The snapshot lets the always-on Worker show something useful while the Codespace
 ```
 
 - The Worker returns **only the section for the caller's role**.
+- **Uploads** appear only in the learner's `recent` list, titled "Photo" or "File", with their
+  `status` and nothing else. They never include extracted text, and never appear in the parent
+  section.
+- The app's display name comes from `profile/app.json` (`displayName`, then `name`), or is null.
+  `planStatus` and `nextSession` stay null until phase 4.
+- The snapshot is written by the store's `beforeCommit` step, so the first batch after start-up
+  refreshes it.
 - Individual items are fetched with `GET /item` (section 5.2), which applies the same permission
   rules as the server.
 
 ### 4.4 Inbox
 
-- While the Codespace sleeps, the Worker writes each capture as `inbox/<clientId>.<ext>` plus
-  `inbox/<clientId>.json`. The metadata includes the source, size, `capturedAt` and the
-  uploader's role. **`clientId` is generated on the device**, so a retry overwrites the same file
-  instead of creating a duplicate.
-- At start-up, and whenever it pulls, the server processes the inbox. It moves each capture into
-  `uploads/`, creates the Upload record, queues extraction and deletes the inbox files.
-- The Worker's `GET /inbox` lists pending items, so other devices can show "received, waiting to
-  be read".
+- **One route for every capture (owner decision, 29 October 2026).** Captures always go through
+  the Worker's `POST /inbox`, **even when the Codespace is awake**. There is no direct server upload
+  route. While the tutor is awake, a capture appears as processed about 10–20 seconds after
+  upload.
+- **The device makes the base64**, and the Worker only forwards it. The Worker writes the file,
+  then its metadata: `inbox/<clientId>.<ext>` plus `inbox/<clientId>.json`.
+  - The metadata includes the source (`camera`, `gallery` or `file`), the kind (`brief` or `own`),
+    the size, `capturedAt` and the uploader's role.
+  - **`clientId` is generated on the device** and must match `^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$`. A
+    retry reuses it, so it overwrites the same file instead of creating a duplicate.
+- **The server processes the inbox at start-up and then every 10 seconds while awake,** backing
+  off for 60 seconds after errors.
+  - It moves each capture into `uploads/`, creates the Upload record with status **`processing`**
+    (received, waiting to be read) and deletes the inbox files.
+  - Images that fail the model-limit check (A-002) are marked `failed`.
+  - Reading starts in phase 1, which works through any `processing` backlog automatically.
+- The Worker's `GET /inbox` lists complete pending captures, so other devices can show "received".
+  In phase 0 the learner page shows *"Received – it'll be read once reading is switched on."* for
+  `processing`, and *"This photo is too large to read. Please take it again."* for `failed`.
+- **Shared code blocks.** The `PASS`, `ITEM` and `INBOX` blocks (in `server/auth.js`,
+  `server/storage/items.js` and `server/storage/inbox.js`) are copied verbatim into
+  `wake/worker.js`, and tests check the copies are identical. The front end can't import server
+  code, so constants it needs (the client ID pattern, types, the 8 MB limit, the failure message)
+  are copied into `web/shared/`, with tests that the copies match.
 
 ### 4.5 Deletion
 
@@ -356,12 +400,13 @@ All periods are settings in `server/config.js`.
 |---|---|---|
 | `GET /auth/login?shared=0\|1` | Anyone | Redirects to GitHub OAuth with a signed `state` (timestamp + `shared` flag; no storage needed). Requests **no scopes** |
 | `GET /auth/callback` | GitHub | Exchanges the code, calls `GET /user`, checks the login against `ALLOWED_ACCOUNTS`, mints a pass, then redirects to `APP_URL` (or `APP_URL/parent/`) with the pass in the URL **fragment** (`#pass=…`). It doesn't keep the GitHub token |
-| `GET /status` | Pass | `{ state }` of the Codespace |
-| `POST /wake` | Pass | Starts the Codespace if needed; returns `{ state, started }`. `409` means "already starting" and is not an error |
+| `GET /` | Anyone | `{ ok, service, missing, settingsErrors }`, giving setting names only |
+| `GET /status` | Pass | `{ state, backendUrl }` |
+| `POST /wake` | Pass | Starts the Codespace if needed; returns `{ state, started, backendUrl }`. A `409` from GitHub means "already starting" and is returned as 200 with `started: false` |
 | `GET /snapshot` | Pass | The caller's section of `index/snapshot.json` |
-| `GET /item?type=&id=` | Pass | One record. Learner: own records. Parent: only records with `sharedWithParent` set |
-| `POST /inbox` | Learner pass | Writes a capture (≤ 8 MB) and its metadata to `inbox/` |
-| `GET /inbox` | Pass | Lists pending inbox items (metadata only) |
+| `GET /item?type=&id=&task=` | Pass | One record, looked up by `type` + `id` (+ `task` for items in a task folder). Learner: all types. Parent: only notes, plans and drafts with `sharedWithParent` set. Unshared and missing both return 404 |
+| `POST /inbox?clientId=&type=&source=&kind=&capturedAt=` | Learner pass | Body: base64 text made on the device, up to 8 MB decoded. Writes the file, then its metadata, to `inbox/`. Returns 201 `{ clientId, uploadId, bytes, status: "received" }`; otherwise 400, 403, 413 or 502 |
+| `GET /inbox` | Pass | `{ items: [{ clientId, uploadId, bytes }], count }`, complete captures only |
 | `scheduled()` | Cron | Weekly wake (section 9.3) |
 
 ### 5.3 Rules that apply to every endpoint
@@ -374,15 +419,20 @@ All periods are settings in `server/config.js`.
   `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2022-11-28`.
 - Show GitHub's `x-accepted-github-permissions` header in errors only for 401, 403 and 404.
 - Contents API: files over 1 MB must be read with `Accept: application/vnd.github.raw`.
-- **(unverified)** The free plan's CPU limit when base64-encoding an 8 MB file. Test in phase 0.
-  The browser resizes photos to about 300 KB, so normal use is small.
+- **Verified (phase 0):** an 8 MB upload goes through the free plan in 4.2–5.4 seconds, because the
+  device makes the base64 and the Worker only forwards it. Photos are resized on the device to
+  1,600 px and no more than about 700 KB (A-002), so normal use is far smaller.
+- Errors: pass failures return 401 `{ error, reason }`; GitHub failures return 502
+  `{ error, githubStatus, acceptedPermissions? }`; other origins get 403; non-inbox bodies over
+  1 KB get 413.
 
 ### 5.4 Deploying
 
 1. Cloudflare dashboard → **Workers & Pages** → **Create** → **Create Worker**.
 2. Name it and select **Deploy**.
 3. Select **Edit code**, paste the whole of `wake/worker.js`, then select **Deploy**.
-4. Add the variables and secrets, then select **Deploy** again.
+4. Add the variables and secrets. In the current Cloudflare screens: **Add variable**, tick
+   **Secret** for secrets, then **Add variable and deploy**.
 5. Add the cron trigger (section 9.3).
 
 There is no automatic deploy. After any change to `worker.js` in the repository, paste it into
@@ -415,8 +465,11 @@ base64url(JSON{ sub:"<github login>", role:"learner"|"parent", ver:<PASS_VERSION
 - **Shared computer:** `exp` = 4 hours. The pass is stored in `sessionStorage`, and **nothing else
   is saved in the browser**: no cache, and edits are queued in memory only.
 - **To sign out every device,** raise `PASS_VERSION` in both places.
-- **OAuth app settings:** callback URL `https://<worker>.<account>.workers.dev/auth/callback`;
-  no scopes.
+- **OAuth app settings:** the **Redirect URI** (GitHub's current form uses this label) is
+  `https://<worker>.<account>.workers.dev/auth/callback`; no scopes.
+- **Browser storage keys** are prefixed `edu-support.` (for example `edu-support.pass.learner`). All
+  of the owner's GitHub Pages sites share one browser origin, so the prefix keeps them apart. Each
+  role has its own key.
 
 ### 6.3 Roles
 
@@ -445,9 +498,17 @@ read unshared items.
 - **At start-up,** send one tiny test message to each configured role's model and report the
   results in `/api/health`. Copilot errors embed long header dumps, so extract the `"body"` text
   for display.
-- **Image input (unverified; phase 0 test 1).** Photo reading depends on the SDK accepting images
-  for the light model. If it doesn't, the fallback is server-side text extraction for printed
-  briefs. Handwriting would then need a decision from the owner.
+- **Image input (verified in phase 0, WP-006).**
+  - The SDK accepts images as a file attachment (`{ type: "file", path }`) or as a blob attachment
+    (`{ type: "blob", data, mimeType }`). **Use blob attachments,** so the model never sees a
+    server file path.
+  - Printed and handwritten briefs were read correctly, so no handwriting fallback is needed.
+  - Attaching an image raises no tool-permission request, so it works with every tool refused.
+- **Model limits come from the model list**, never hard-coded. For example, Haiku 5.5 accepts JPEG,
+  PNG, WebP, GIF and PDF, up to 3,072 KB per image and 5 images per message.
+- **SDK version:** `@github/copilot-sdk` 1.0.22, pinned in `package-lock.json`. It fails to load
+  under `node -e` (it calls `createRequire` on `[eval]`), so SDK checks must run from a module file.
+- **Mock AI:** set `AI_MOCK=1` to use `server/ai/mock.js`. Every test uses it.
 
 ```js
 // server/ai/copilot.js (outline)
@@ -518,7 +579,7 @@ replies use:
 
 | Tool | Where | Notes |
 |---|---|---|
-| Web search, web fetch | Research and Learn routes | SDK built-in tools. **(unverified)** Confirm the exact names and configuration in phase 0; test reliability early |
+| Web search, web fetch | Research and Learn routes | SDK built-in tools `web_search` and `web_fetch`, permission kind `url`. **Verified (WP-007):** controlled by the allowed list; about 36 seconds per search. Shell, write, read and MCP requests are always refused. The SDK's `BuiltInTools` list (`{ Isolated: [...] }`) doesn't include web tools, so don't rely on it |
 | `read_notebook(taskId?, topicId?)` | Research, Plan, Learn | Custom read-only tool (`defineTool`) |
 | `read_curriculum(topicId)` | All routes | Custom read-only tool |
 
@@ -590,10 +651,10 @@ The model returns a list of suggestions:
   2. Store an event containing only the date and level.
   3. Send the alert (section 8).
 - **What the learner sees:**
-  - Level 3: an immediate reply that says, for example, *"I'll let mum and dad know"*, plus UK
+  - Level 3: an immediate reply that says, for example, *"I'll let `{parents}` know"*, plus UK
     helplines (Childline 0800 1111; Shout, text 85258; Samaritans 116 123; 999 in immediate
     danger).
-  - Level 2: a lighter line, such as *"If you want to talk it through, mum and dad are around."*
+  - Level 2: a lighter line, such as *"If you want to talk it through, `{parents}` are around."*
   - Level 1: a kind reply only.
 
 ### 7.11 Paste check (code, no AI)
@@ -611,6 +672,26 @@ The model returns a list of suggestions:
 - The expected cost is about 650 credits a month in term time (build spec §43).
 - If Copilot is unavailable or the allowance runs out, the non-AI parts keep working: Upcoming,
   the notebook, pre-generated questions and the timer.
+
+### 7.13 Spelling corrections in briefs (amendment A-001, phase 1)
+
+- Each Upload records `contentKind`: `brief` or `own`. It is set by the route the upload came
+  through:
+  - **brief:** "What are you working on?" or adding a task;
+  - **own:** Review my work and draft uploads;
+  - **unclear:** treated as `own`.
+  This routing rule is confirmed.
+- **Briefs:**
+  - Extraction returns the verbatim text, plus proposed corrections for obvious misspellings, as
+    `{ original, corrected, position }`.
+  - The §7.9 code filter is applied with stricter settings: **one word only, UK spelling.**
+  - Names, places, case studies, set texts, subject terms and anything uncertain are never
+    corrected; they are flagged as uncertain instead.
+  - The confirmation screen shows each change with one-tap undo, and `undone` is recorded.
+  - The Task's question text and `question` anchor use the corrected text. The verbatim text stays
+    on the Upload.
+- **Own writing** is transcribed exactly. Spelling help for it comes only from the spelling role
+  (§7.9).
 
 ---
 
@@ -745,9 +826,27 @@ The data is safe in the storage repository.
 
 - Use `<input type="file" accept="image/*" capture="environment">` for photos, plus a normal file
   picker for PDF and Word files.
-- Photos are resized in the browser on a canvas, to 1,600 px on the longest edge as JPEG
-  (about 300 KB). PDF and Word files are sent unchanged, up to 8 MB.
-- Every capture gets a `clientId` generated on the device.
+- **Every image route is resized in the browser** on a canvas: camera, gallery, and the file
+  picker when it is given an image (amendment A-002).
+  - Resize to 1,600 px on the longest edge, as JPEG.
+  - Aim for about 300 KB, and never more than about 700 KB.
+  - Test this with a detailed colour photo over 4 MB.
+- PDF and Word files are sent unchanged, up to 8 MB.
+- **Scanned PDFs (A-003).** If the server can't extract text from a PDF, it checks the PDF against
+  the light model's limits from the model list. If it is within them, the server sends it as a
+  blob attachment, like a photo. If not:
+  - don't send it;
+  - mark the Upload `failed`;
+  - log the event without content;
+  - show *"This PDF can't be read as it is. Please take photos of the pages instead."*
+- **Server safety net (A-002).** Before sending an image to a model, check its size and type
+  against **that model's limits from the model list**. If it fails:
+  - don't send it;
+  - mark the Upload `failed`;
+  - log the event without content;
+  - show *"This photo is too large to read. Please take it again."*
+- Every capture gets a `clientId` generated on the device. Uploads are saved as
+  `<uploadId>.<ext>`, so the phone's file name is never used.
 
 ### 10.5 Names
 
@@ -763,17 +862,19 @@ The data is safe in the storage repository.
 - Use semantic HTML, with **real text only** and no text in images, so Android's own voice typing
   and read-aloud work. Everything must work by keyboard on the laptop, with contrast at AA or
   better. On phones, there must be no sideways scrolling and tap targets must be large.
-- Make the app installable: add a web app manifest and icons. **(unverified)** Check Chrome's
-  current install requirements on Android during phase 0.
+- The app is installable through a web app manifest and icons. **Verified in phase 0:** Android
+  Chrome installs it as a full app **without a service worker**.
 - Ask for confirmation with an in-page `<dialog>`, never `confirm()`.
 - Code in `web/shared/` is used by both the browser and Node, so it uses no DOM-only or Node-only
   APIs.
 
 ### 10.7 Parent page (`web/parent/`)
 
+- **The parent page never wakes the Codespace** (owner decision, WP-012). It checks the pass through
+  the Worker's `/status`, and reads the snapshot and shared items through the Worker.
 - Phase 1 shows the alert history and a note that the summary is coming later.
 - Phase 5 adds the summary, "View more detail" (counts and statuses only) and shared items.
-- The learner's "What Dad sees" preview uses the same parent-side calculation, so the two can never
+- The learner's "What `{parent}` sees" preview uses the same parent-side calculation, so the two can never
   differ.
 
 ---
@@ -785,6 +886,9 @@ The data is safe in the storage repository.
 | `npm test` | Unit and integration tests with the mock AI (see below) |
 | `npm run evals` | The boundary test set against the configured models, judged by the `judge` role. It writes a report of the failures plus 5 random passes. Results are git-ignored. Spelling samples are read from `evals-private/` in the storage repo at run time and are never copied into the public repo |
 | `npm run models` | Lists the model IDs and prices available to the account |
+| `npm run spike:image`, `npm run spike:web` | Phase 0 tests 1 and 2: image input; web tools, refusals and prompt cache |
+| `npm run storage:check` | Verify step 7: clone, write and push, then push again after a commit made on GitHub |
+| `node scripts/worker-check.js`, `item-check.js`, `inbox-check.js` | Live checks of the Worker set-up, the parent role and the inbox (invented data, tidied up afterwards) |
 
 `npm test` covers:
 - pass signing and expiry, version and account checks;
@@ -823,7 +927,7 @@ skill-file change,** the failures only.
 
 | Name | Where | Purpose | Notes |
 |---|---|---|---|
-| `COPILOT_GITHUB_TOKEN` | Codespaces secret | AI calls | Fine-grained, Copilot Requests; **note its expiry** |
+| `COPILOT_GITHUB_TOKEN` | **Repository** Codespaces secret on the app repo | AI calls | Fine-grained, Public repositories (read-only), Copilot Requests; **note its expiry**. A *user* secret with the same name applies only to the repositories it lists |
 | `GH_PORTS_TOKEN` | Codespaces secret | Make the port Public | Classic, `codespace` scope only; **note its expiry** |
 | `STORAGE_TOKEN` (server) | Codespaces secret | Clone, push, send alerts | Fine-grained, storage repo only, Contents read/write; **note its expiry** |
 | `GITHUB_TOKEN` (Worker) | Worker secret | Status and wake | Fine-grained, app repo only, Codespaces read plus lifecycle admin; **note its expiry** |
@@ -845,7 +949,7 @@ skill-file change,** the failures only.
 
 ## 13. Phase 0 set-up checklist
 
-Do the steps in order, and confirm each one works before moving on.
+Do the steps in order, and confirm each one works before moving on. **Progress (29 October 2026):** steps 1–8 and 10 have passed, and the server half of step 9. The live record is the workplan and `STATE.md`.
 
 1. **Repositories.** In the public `edu-support-app`, add `CLAUDE.md`, `docs/`, `web/` (a
    sign-in screen only) and `pages.yml`, and set Pages → Source: GitHub Actions. In the private
@@ -881,14 +985,20 @@ Do the steps in order, and confirm each one works before moving on.
 12. **Weekly wake.** Add the cron trigger, and simulate a failure (for example with a wrong
     Codespace name in a test run).
     *Verify:* the "Weekly wake failed" issue arrives.
-13. **Curriculum outlines.** In a session working on the **storage** repository, generate outlines
-    and stable topic IDs for every qualification from the owner's original PDFs.
-    *Verify:* the owner spot-checks one qualification.
+13. **Curriculum outlines.** The **code-writing agent** writes the outlines and stable topic IDs from
+    the owner's original PDFs in its curriculum library, as work packages targeting the **storage**
+    repository, one qualification at a time. Claude Code only validates and commits them.
+    *Verify:* the owner spot-checks one qualification before it is committed.
 14. **End to end.** Stop the Codespace, open the Pages site in a private window and sign in.
     *Verify:* the snapshot appears at once, and live AI is available within about 2 minutes.
 15. **School network.** Ask the learner to open the site on a school PC.
     *Verify:* `github.com`, `*.github.io`, `*.workers.dev` and `*.app.github.dev` all load.
 16. **Credential register.** Complete it, with expiry dates.
+17. **Erasure dry run** (in WP-020, after step 16). In `edu-support-data`, with the Codespace
+    server stopped and the inbox empty, commit an invented test file. Then follow
+    `docs/runbooks/erasure.md` to erase it from history.
+    *Verify:* `git log --all -- <path>` shows nothing; the Codespace re-clones cleanly; the app
+    starts normally.
 
 ---
 
@@ -911,6 +1021,15 @@ Do the steps in order, and confirm each one works before moving on.
 | Parent page shows content it shouldn't | Missing role check | Fix the check in **both** the Worker and the server; extend the test |
 | Everyone suddenly signed out | `PASS_VERSION` or `PASS_SIGNING_KEY` changed in one place only | Make the Worker and the Codespace match |
 | Sign-in loops back to the sign-in screen | OAuth callback URL mismatch, or the fragment was lost | Check the OAuth app's callback URL and `APP_URL` |
+| `npm error Missing script` after a merge | The Codespace is still on older code; `git pull` ran before the merge | `git pull`, then check with `git log --oneline -3` that the merge is there |
+| `git pull` blocked by an untracked `package-lock.json` | An earlier `npm install` created it locally | Delete the local `package-lock.json`, then `git pull` |
+| `No such file or directory` after pasting a web address | A web address was typed into the terminal | Harmless; open web addresses in the browser |
+| A second server exits with `EADDRINUSE` (`port 3000 is already in use … exiting`) | The queued `postAttachCommand` (`--watch`) starts a server whenever the running one exits, including during `npm run server`'s restart pause | Harmless if `pgrep -f '^node server/index\.js'` shows one server; `start-server.sh` and `devcontainer.json` stay unchanged |
+| `/api/health` storage shows `needs attention: sync clash in …` | A clash the server can't settle itself (not an event log, snapshot, inbox or upload file) | Resolve it in `/workspaces/storage`, then `npm run server` |
+| Port visibility fails on attempt 1 with a tunnel 404, then succeeds | Normal start-up timing | Nothing; `server/port.js` retries |
+| `git log` fills the screen and won't return | Long output opens a pager | Press `q`, or use `git --no-pager log --oneline -3` |
+| `import('@github/copilot-sdk')` fails under `node -e` | SDK 1.0.22 calls `createRequire` on `[eval]` | Run SDK checks from a module file |
+| A test image "not found" | `.jpg` vs `.jpeg` | Use the file's exact name; test photos go in `.server/` |
 
 ---
 
@@ -918,12 +1037,14 @@ Do the steps in order, and confirm each one works before moving on.
 
 - The owner is a **GitHub novice**. Give numbered instructions with one action per step, saying
   exactly where to click.
-- Put **each terminal command in its own copyable code block, one line each.**
+- Put **each terminal command in its own copyable code block, one line each.** Write web
+  addresses as plain text, never in a code block, so they aren't pasted into the terminal.
 - Write in **UK English** and end each answer with a **percentage confidence score**.
 - **Never** ask the owner to print or paste a token. For diagnostics, print only variable names or
   yes/no results.
 - After changes to `.devcontainer/`, say a rebuild is needed. After server changes, say to run
-  `git pull` then `npm run server` in the Codespace. After a Worker change, say to paste
+  `git pull`, then `npm install` if dependencies changed, then `npm run server` in the Codespace,
+  and to check with `git log --oneline -3` that the merge is there. After a Worker change, say to paste
   `worker.js` into Cloudflare again. After front-end-only changes, merging is enough.
 - The owner likes to see options with a recommendation, an HTML mock-up before big UI changes, and
   a pull request for each piece of work.
