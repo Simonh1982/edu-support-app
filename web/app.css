@@ -12,6 +12,7 @@
   --accent: #1d4f7a;
   --accent-fg: #ffffff;
   --focus: #b35900;
+  --warn: #a4262c;
   --tap: 3rem;
   color-scheme: light dark;
 }
@@ -24,6 +25,7 @@
     --accent: #8cc4f0;
     --accent-fg: #0b1b29;
     --focus: #ffb366;
+    --warn: #ff9e9e;
   }
 }
 
@@ -136,6 +138,11 @@ button.primary[disabled] {
   margin: 1.25rem 0 var(--paragraph-gap);
 }
 
+/* An actions row whose only button is hidden takes no space. */
+.actions:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
 .actions button {
   flex: 1 1 12rem;
   width: auto;
@@ -154,6 +161,55 @@ button.primary[disabled] {
   margin-top: 1.25rem;
   padding: 0.75rem 1rem;
   border-left: 4px solid var(--accent);
+}
+
+h2 {
+  font-size: 1.3em;
+  line-height: 1.3;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.capture {
+  margin-top: 1.5rem;
+}
+
+.captures {
+  list-style: none;
+  margin: 0 0 var(--paragraph-gap);
+  padding: 0;
+}
+
+.capture-item {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--muted);
+  border-left: 4px solid var(--accent);
+  border-radius: 0.5rem;
+}
+
+.capture-item[data-state="failed"],
+.capture-item[data-state="retry"],
+.capture-item[data-state="rejected"] {
+  border-left-color: var(--warn);
+}
+
+.capture-title,
+.capture-message,
+.capture-detail {
+  display: block;
+}
+
+.capture-title {
+  font-weight: 600;
+}
+
+.capture-detail {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.capture-item button {
+  margin-top: 0.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

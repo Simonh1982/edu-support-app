@@ -1,4 +1,4 @@
-// Learner page: sign-in, pass handling and waking the tutor (WP-012).
+// Learner page: sign-in, pass handling, waking the tutor (WP-012) and capture (WP-014b).
 import { config } from "./config.js";
 import {
   checkNewPass,
@@ -11,6 +11,7 @@ import {
   usableStorage,
 } from "./shared/auth.js";
 import { createWaker, WAKE_MESSAGES } from "./shared/wake.js";
+import { createCaptureScreen } from "./capture.js";
 
 // Kept as an export of this file so existing tests and callers still work.
 export { loginUrl };
@@ -44,6 +45,15 @@ function init() {
   const session = usableStorage(() => window.sessionStorage);
   let waker = null;
 
+  // Captures go to the Worker's inbox, so they work while the tutor is still waking (blueprint §4.4).
+  const capture = createCaptureScreen({
+    workerUrl: config.workerUrl,
+    onSignedOut: () => {
+      clearPass({ role: ROLE, local, session });
+      showSignIn("revoked", { focus: true });
+    },
+  });
+
   function stopWaking() {
     waker?.stop();
     waker = null;
@@ -51,6 +61,7 @@ function init() {
 
   function showSignIn(code, { focus = false } = {}) {
     stopWaking();
+    capture?.stop();
     els.home.hidden = true;
     els.signIn.hidden = false;
     els.form.querySelector("button[type=submit]")?.removeAttribute("disabled");
@@ -91,6 +102,7 @@ function init() {
     els.sharedNote.hidden = !pass.payload.shared;
     if (focus) els.homeHeading.focus();
     startWaking(pass);
+    capture?.start(pass.token);
   }
 
   els.form.addEventListener("submit", (event) => {
