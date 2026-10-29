@@ -23,6 +23,39 @@ export const USAGE = 'Usage: node scripts/inbox-check.js [worker address]';
 export const LARGE_BYTES = INBOX_MAX_BYTES - 64 * 1024;
 const WAIT_MS = 90_000;
 const STEP_MS = 3_000;
+// How long the tidy-up waits for the running server to push what it took in (WP-014a-fix).
+export const PUSH_WAIT_MS = 30_000;
+
+/**
+ * Waits until the running server reports nothing left to push, so the tidy-up's deletions land as a
+ * later commit instead of clashing with the server's own unpushed commit. Gives up quietly after
+ * waitMs, or at once if the server can't be reached. Returns true if the server had pushed.
+ */
+export async function waitForServerPush({ serverHealth, sleep = sleepDefault, clock = () => Date.now(), waitMs = PUSH_WAIT_MS, stepMs = STEP_MS }) {
+  const started = clock();
+  while (clock() - started < waitMs) {
+    let health = null;
+    try {
+      health = await serverHealth();
+    } catch {
+      health = null;
+    }
+    if (!health?.storage) return false;
+    if (health.storage.ok === true && health.storage.pending === 0) return true;
+    await sleep(stepMs);
+  }
+  return false;
+}
+
+/** The running server's /api/health in this Codespace, or null. */
+export async function localHealth(env = process.env, fetchImpl = globalThis.fetch) {
+  try {
+    const response = await fetchImpl(`http://localhost:${env.PORT || 3000}/api/health`, { headers: { Accept: 'application/json' } });
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Device-style IDs for this run, so a rerun never collides with an earlier one. */
 export function checkIds(now = new Date()) {
@@ -65,7 +98,7 @@ async function readJsonFile(file) {
 export async function runCheck({
   workerUrl, env = process.env, fetchImpl = globalThis.fetch, makeStore = createStore, tmpRoot = os.tmpdir(),
   out = console.log, sleep = sleepDefault, now = () => new Date(), clock = () => Date.now(),
-  waitMs = WAIT_MS, stepMs = STEP_MS, largeBytes = LARGE_BYTES, readRecord = null,
+  waitMs = WAIT_MS, stepMs = STEP_MS, largeBytes = LARGE_BYTES, readRecord = null, serverHealth = null,
 }) {
   let allOk = true;
   const line = (n, label, ok, detail) => {
@@ -161,7 +194,9 @@ export async function runCheck({
     else if (!smallOk || !largeOk) detail = `small: ${smallRecord?.status}/${smallRecord?.sizeCheck}, large: ${largeRecord?.status}/${largeRecord?.failureReason}`;
     line(7, 'Image check against the model limit (A-002)', smallOk && largeOk, detail || 'small photo passed, 8 MB photo marked failed');
   } finally {
-    // 8. Always tidy up from a temporary clone, even after a failure
+    // 8. Always tidy up from a temporary clone, even after a failure. First let the server push what
+    // it took in, so these deletions don't clash with its own unpushed commit (WP-014a-fix).
+    if (serverHealth) await waitForServerPush({ serverHealth, sleep, clock, stepMs });
     const tmp = await mkdtemp(path.join(tmpRoot, 'inbox-check-'));
     let tidy = false;
     let detail = '';
@@ -203,7 +238,7 @@ async function main() {
     process.exit(2);
   }
   console.log('This takes up to 2 minutes. Leave it running.');
-  const ok = await runCheck({ workerUrl });
+  const ok = await runCheck({ workerUrl, serverHealth: () => localHealth() });
   process.exit(ok ? 0 : 1);
 }
 

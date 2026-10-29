@@ -10,6 +10,50 @@ import { makeEvent, eventsPath, ukIso } from './records.js';
 export const BATCH_MS = 5_000;
 export const RETRY_DELAYS_MS = Object.freeze([5_000, 15_000, 30_000, 60_000, 120_000]);
 const LOCK_WAIT_MS = 10_000;
+// A pull can replay many local commits; each may stop on a clash. More than this means something is wrong.
+const MAX_REBASE_STEPS = 100;
+// Files the server rebuilds from the rest of the clone, so either side of a clash will do.
+const GENERATED_FILES = Object.freeze(['index/snapshot.json']);
+
+/**
+ * How a sync clash on one path is settled automatically (WP-014a-fix), or null if a person must look.
+ * union: append-only event logs keep both sides' lines. generated: take either side, then rebuild.
+ * prefer-remote: inbox/ (the Worker's side wins; a repeat capture is later dropped as a duplicate).
+ * prefer-local: uploads/ (the server owns them; a learner's photo is never deleted by a clash).
+ * Anything else (learner records) stops syncing until someone checks it.
+ */
+export function conflictRule(relPath) {
+  if (typeof relPath !== 'string') return null;
+  if (/^events\/[A-Za-z0-9._-]+\.jsonl$/.test(relPath)) return 'union';
+  if (GENERATED_FILES.includes(relPath)) return 'generated';
+  if (relPath.startsWith('inbox/')) return 'prefer-remote';
+  if (relPath.startsWith('uploads/')) return 'prefer-local';
+  return null;
+}
+
+/** Both sides of an append-only log: the remote's lines in order, then local lines it doesn't have. */
+export function unionLines(remoteText, localText) {
+  const remote = String(remoteText ?? '').split('\n').filter((l) => l !== '');
+  const seen = new Set(remote);
+  const extra = String(localText ?? '').split('\n').filter((l) => l !== '' && !seen.has(l) && seen.add(l));
+  const lines = [...remote, ...extra];
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+/**
+ * Parses `git ls-files -u` into [{ path, stages }]. During a rebase, stage 2 is the remote's version
+ * (git calls it "ours") and stage 3 is the local commit being replayed ("theirs").
+ */
+export function parseUnmerged(text) {
+  const byPath = new Map();
+  for (const line of String(text ?? '').split('\n')) {
+    const m = /^\d+ [0-9a-f]+ ([123])\t(.+)$/.exec(line);
+    if (!m) continue;
+    if (!byPath.has(m[2])) byPath.set(m[2], new Set());
+    byPath.get(m[2]).add(Number(m[1]));
+  }
+  return [...byPath].map(([p, stages]) => ({ path: p, stages }));
+}
 
 /**
  * Checks a repository-relative path. The server writes everything except inbox/ (Worker only),
@@ -43,6 +87,8 @@ export function createStore({
   let timer = null;
   let retryIndex = 0;
   let stopped = false;
+  // Set when a sync clash needs a person. Pulls stop (saving still works locally) until a restart.
+  let attention = null;
   const status = { ok: false, ready: false, lastPull: null, lastPush: null, pending: 0, detail: 'not started' };
 
   const git = (args, cwd = dir) => runGit(args, { cwd, env });
@@ -105,14 +151,102 @@ export function createStore({
     return r.code === 0 ? Number(r.stdout.trim()) || 0 : 0;
   }
 
-  /** Pull, then push anything committed locally. Returns { pulled, pushed, error? }. Lock must be held. */
+  async function unmergedPaths() {
+    const r = await git(['ls-files', '-u']);
+    return r.code === 0 ? parseUnmerged(r.stdout) : [];
+  }
+
+  /** Settle one clashing path by its rule. Throws if git refuses. Lock must be held, rebase stopped. */
+  async function resolvePath({ path: relPath, stages }) {
+    const hasRemote = stages.has(2);
+    const hasLocal = stages.has(3);
+    const must = async (args) => {
+      const r = await git(args);
+      if (r.code !== 0) throw new Error(`${args[0]} failed for ${relPath}`);
+      return r;
+    };
+    if (!hasRemote && !hasLocal) {
+      await must(['rm', '--quiet', '--', relPath]);
+      return;
+    }
+    if (conflictRule(relPath) === 'union' && hasRemote && hasLocal) {
+      const remote = await must(['show', `:2:${relPath}`]);
+      const local = await must(['show', `:3:${relPath}`]);
+      await writeAtomic(path.join(dir, relPath), unionLines(remote.stdout, local.stdout));
+      await must(['add', '--', relPath]);
+      return;
+    }
+    // checkout keeps binary files (photos) byte for byte; --ours is the remote side during a rebase
+    const preferLocal = conflictRule(relPath) === 'prefer-local';
+    const side = preferLocal ? (hasLocal ? '--theirs' : '--ours') : (hasRemote ? '--ours' : '--theirs');
+    await must(['checkout', side, '--', relPath]);
+    await must(['add', '--', relPath]);
+  }
+
+  /**
+   * Finish a rebase that stopped on clashes, step by step. Returns { ok, rebuild, resolved } or
+   * { ok: false, reason }. Never names the repository or quotes file contents.
+   */
+  async function recoverLocked(firstConflicts) {
+    let conflicts = firstConflicts;
+    let rebuild = false;
+    const resolved = new Set();
+    for (let step = 0; step < MAX_REBASE_STEPS; step += 1) {
+      const blocked = conflicts.filter((c) => conflictRule(c.path) === null).map((c) => c.path);
+      if (blocked.length) {
+        const shown = blocked.slice(0, 3).join(', ');
+        return { ok: false, reason: `sync clash in ${shown}${blocked.length > 3 ? ` and ${blocked.length - 3} more` : ''}` };
+      }
+      try {
+        for (const c of conflicts) {
+          await resolvePath(c);
+          resolved.add(c.path);
+          if (conflictRule(c.path) === 'generated') rebuild = true;
+        }
+      } catch (err) {
+        return { ok: false, reason: `could not settle a sync clash (${err.message})` };
+      }
+      // a commit left with no changes after settling is skipped rather than committed empty
+      const staged = await git(['diff', '--cached', '--quiet']);
+      const next = await git(staged.code === 0 ? ['rebase', '--skip'] : ['-c', 'core.editor=true', 'rebase', '--continue']);
+      if (next.code === 0) return { ok: true, rebuild, resolved: [...resolved] };
+      conflicts = await unmergedPaths();
+      if (conflicts.length === 0) return { ok: false, reason: 'the pull stopped part-way without a clash' };
+    }
+    return { ok: false, reason: 'too many clashing commits' };
+  }
+
+  /**
+   * Pull, then push anything committed locally. Returns { pulled, pushed, error?, attention?, recovered? }.
+   * Lock must be held. A clash on server-made files is settled automatically; any other clash stops
+   * syncing with a clear message instead of retrying for ever (WP-014a-fix).
+   */
   async function syncLocked() {
+    if (attention) return { pulled: 0, pushed: false, error: attention, attention: true };
     const before = await git(['rev-parse', '@{u}']);
     // --autostash: a record written while this runs (outside the lock) mustn't block the pull
     const pull = await git(['pull', '--rebase', '--autostash', '--quiet']);
+    let recovered = null;
     if (pull.code !== 0) {
-      await git(['rebase', '--abort']);
-      return { pulled: 0, pushed: false, error: fail('pull', pull) };
+      const conflicts = await unmergedPaths();
+      if (conflicts.length === 0) {
+        // not a clash (for example, offline): undo any half-started rebase and retry later
+        await git(['rebase', '--abort']);
+        return { pulled: 0, pushed: false, error: fail('pull', pull) };
+      }
+      recovered = await recoverLocked(conflicts);
+      if (!recovered.ok) {
+        await git(['rebase', '--abort']);
+        attention = `needs attention: ${recovered.reason}. Local changes are kept; syncing restarts with the server`;
+        log.error(`[storage] ${attention}`);
+        return { pulled: 0, pushed: false, error: attention, attention: true };
+      }
+      log.log(`[storage] settled a sync clash automatically: ${recovered.resolved.join(', ')}`);
+      if (recovered.rebuild) {
+        // the next batch rebuilds the snapshot from the merged clone (beforeCommit)
+        for (const file of GENERATED_FILES) dirty.add(file);
+        schedule();
+      }
     }
     let pulled = 0;
     if (before.code === 0) {
@@ -120,11 +254,12 @@ export function createStore({
       pulled = count.code === 0 ? Number(count.stdout.trim()) || 0 : 0;
     }
     status.lastPull = ukIso(now());
-    if ((await aheadCount()) === 0) return { pulled, pushed: false };
+    const extra = recovered ? { recovered: recovered.resolved } : {};
+    if ((await aheadCount()) === 0) return { pulled, pushed: false, ...extra };
     const push = await git(['push', '--quiet', 'origin', 'HEAD']);
-    if (push.code !== 0) return { pulled, pushed: false, error: fail('push', push) };
+    if (push.code !== 0) return { pulled, pushed: false, error: fail('push', push), ...extra };
     status.lastPush = ukIso(now());
-    return { pulled, pushed: true };
+    return { pulled, pushed: true, ...extra };
   }
 
   /** Stage and commit everything changed. Lock must be held. Returns the number of files committed. */
@@ -159,7 +294,7 @@ export function createStore({
       const result = await syncLocked();
       if (result.error) {
         update({ ok: false, ready: true, detail: result.error });
-        scheduleRetry();
+        if (!result.attention) scheduleRetry();
         return true; // the clone is usable; pushing will be retried
       }
       retryIndex = 0;
@@ -184,7 +319,7 @@ export function createStore({
       const result = await syncLocked();
       if (result.error) {
         update({ ok: false, detail: result.error });
-        scheduleRetry();
+        if (!result.attention) scheduleRetry();
         return { committed, ...result };
       }
       retryIndex = 0;
