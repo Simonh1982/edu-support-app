@@ -830,7 +830,164 @@ async function handle(request, env) {
   return json(404, { error: MESSAGES.notFound });
 }
 
+// ===== REPO FILE ROUTE START (WP-014c) =====
+// GET /repo-file?path=<path> or POST /repo-file with JSON { "path": "..." }: a read-only copy of one
+// file from the PUBLIC app repository's main branch, so the code-writing agent can read the code
+// through its API tool. No pass and no origin check, because the content is already public and the
+// caller is a server with no Origin header. No token is ever sent and no setting is read, so this
+// can never reach the private storage repository.
+const REPO_FILE_ROUTE = '/repo-file';
+const REPO_FILE_SOURCE = 'https://raw.githubusercontent.com/Simonh1982/edu-support-app/main/';
+const REPO_FILE_MAX_BYTES = 1024 * 1024;
+const REPO_FILE_MAX_PATH = 200;
+const REPO_FILE_MAX_BODY = 1024;
+const REPO_FILE_TIMEOUT_MS = 10000;
+
+function repoFileJson(status, body, headers = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers },
+  });
+}
+
+// Why a path is refused, or null if it is allowed.
+function repoFilePathProblem(path) {
+  if (typeof path !== 'string' || path.length === 0) return 'path is missing';
+  if (path.length > REPO_FILE_MAX_PATH) return `path is longer than ${REPO_FILE_MAX_PATH} characters`;
+  if (!/^[A-Za-z0-9._\/-]+$/.test(path)) return 'path may only contain A-Z a-z 0-9 . _ - /';
+  if (path.startsWith('/')) return 'path must be relative (no leading slash)';
+  if (path.includes('..')) return 'path must not contain ..';
+  if (path.split('/').some((part) => part === '' || part === '.')) return 'path has an empty or "." part';
+  return null;
+}
+
+// Number of lines in the text; a final newline doesn't start a new line.
+function repoFileLineCount(text) {
+  if (text === '') return 0;
+  const lines = text.split('\n').length;
+  return text.endsWith('\n') ? lines - 1 : lines;
+}
+
+// The response body's bytes, or null once it passes max (stops reading straight away).
+async function repoFileReadCapped(response, max) {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > max) {
+    try { await response.body?.cancel(); } catch { /* nothing to tidy */ }
+    return null;
+  }
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    const whole = new Uint8Array(await response.arrayBuffer());
+    return whole.byteLength > max ? null : whole;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      try { await reader.cancel(); } catch { /* nothing to tidy */ }
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+// The path from the query, or from a POST body if it has one. Returns { path } or { response }.
+async function repoFileRequestedPath(request, url) {
+  let path = url.searchParams.get('path');
+  if (request.method === 'GET') return { path };
+  if (request.method !== 'POST') {
+    return { response: repoFileJson(405, { error: 'Use GET or POST.' }, { Allow: 'GET, POST' }) };
+  }
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > REPO_FILE_MAX_BODY) {
+    return { response: repoFileJson(413, { error: 'The request is too large.' }) };
+  }
+  const text = await request.text();
+  if (text.length > REPO_FILE_MAX_BODY) return { response: repoFileJson(413, { error: 'The request is too large.' }) };
+  if (text.trim() !== '') {
+    let body = null;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = null;
+    }
+    if (body && typeof body === 'object' && typeof body.path === 'string') path = body.path;
+    else if (path === null) {
+      return { response: repoFileJson(400, { error: 'That path isn\'t allowed.', reason: 'the body must be JSON like {"path":"docs/STATE.md"}' }) };
+    }
+  }
+  return { path };
+}
+
+/** Answers /repo-file, or returns null for every other address. Never throws. */
+async function handleRepoFile(request, { fetchImpl = globalThis.fetch } = {}) {
+  const url = new URL(request.url);
+  if (url.pathname !== REPO_FILE_ROUTE) return null;
+  try {
+    const asked = await repoFileRequestedPath(request, url);
+    if (asked.response) return asked.response;
+    const { path } = asked;
+    const problem = repoFilePathProblem(path);
+    if (problem) return repoFileJson(400, { error: 'That path isn\'t allowed.', reason: problem });
+
+    let upstream;
+    try {
+      upstream = await fetchImpl(REPO_FILE_SOURCE + path, {
+        method: 'GET',
+        headers: { 'User-Agent': 'edu-support-wake', Accept: 'text/plain' },
+        signal: AbortSignal.timeout(REPO_FILE_TIMEOUT_MS),
+      });
+    } catch {
+      return repoFileJson(502, { error: 'GitHub couldn\'t be reached.' });
+    }
+    if (upstream.status === 404) {
+      try { await upstream.body?.cancel(); } catch { /* nothing to tidy */ }
+      return repoFileJson(404, { error: 'There is no such file on main.', path });
+    }
+    if (!upstream.ok) {
+      try { await upstream.body?.cancel(); } catch { /* nothing to tidy */ }
+      return repoFileJson(502, { error: 'GitHub didn\'t answer properly.', githubStatus: upstream.status });
+    }
+    const bytes = await repoFileReadCapped(upstream, REPO_FILE_MAX_BYTES);
+    if (!bytes) return repoFileJson(413, { error: 'The file is over 1 MB.', path });
+    const text = new TextDecoder('utf-8').decode(bytes);
+    const gap = text === '' || text.endsWith('\n') ? '' : '\n';
+    return new Response(`${text}${gap}--- end of ${path} (${repoFileLineCount(text)} lines) ---\n`, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  } catch (err) {
+    console.error(`[repo-file] failed: ${err?.message ?? String(err)}`);
+    return repoFileJson(500, { error: 'Something went wrong reading that file.' });
+  }
+}
+// ===== REPO FILE ROUTE END =====
+
+// /repo-file is answered before the origin and pass checks (see above); everything else goes to
+// the Worker's existing routes unchanged.
 export default {
+  async fetch(request, env, ctx) {
+    const repoFile = await handleRepoFile(request);
+    if (repoFile) return repoFile;
+    return mainWorker.fetch(request, env, ctx);
+  },
+};
+
+const mainWorker = {
   async fetch(request, env) {
     const settings = env ?? {};
     let response;
