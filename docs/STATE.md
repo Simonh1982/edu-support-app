@@ -1,6 +1,6 @@
-STATE version: 14
-Updated: 2026-10-29 14:43 (UK time)
-Last work package applied: WP-014b
+STATE version: 15
+Updated: 2026-10-29 17:03 (UK time)
+Last work package applied: WP-014c
 
 ## File tree
 ```
@@ -63,6 +63,7 @@ test/storage.test.js
 test/web-shell.test.js
 test/web-tools.test.js
 test/worker-inbox.test.js
+test/worker-repo-file.test.js
 test/worker.test.js
 wake/worker.js
 web/app.css
@@ -114,7 +115,7 @@ web/shared/wake.js
 - `scripts/storage-check.js`: `INBOX_TEST_FILE`, `USAGE`, `parseArgs(argv)`, `runCheck({ settings, wait?, waitForOwner, makeStore?, tmpRoot?, out? })`
 - `server/auth.js` (pass block): constants `PASS_ROLES`, `PASS_TTL_OWN_S`, `PASS_TTL_SHARED_S`, `PASS_MAX_LENGTH`, `PASS_MIN_KEY_LENGTH`, `PASS_CLOCK_SKEW_S`, `PARENT_READABLE_TYPES` (`notebook`, `plan`, `draft`); functions `passB64urlEncode`, `passB64urlDecode`, `parseAllowedAccounts(raw)` → `{ accounts, error }`, `passSettings(env)` → `{ settings, errors }`, `roleFor(accounts, login)`, `mintPass({ login, shared?, settings, now? })`, `verifyPass(token, settings, { now? })` → `{ ok, pass } | { ok: false, reason }` (reasons: `not-configured`, `missing`, `malformed`, `signature`, `expired`, `version`, `account`), `passFromHeader(value)`, `canReadItem(role, type, record)`
 - `server/auth.js` (Node only): `PASS_BLOCK_START`, `PASS_BLOCK_END`, `extractPassBlock(source)`, `AUTH_MESSAGES`, `createAuth({ env?, log?, now? })` → `{ ready, errors, authenticate(headers), authorise(pass, roles), canRead(pass, type, record) }`
-- `wake/worker.js`: `default { fetch(request, env) }` only (Cloudflare module Worker; contains the pass block).
+- `wake/worker.js`: `default { fetch(request, env, ctx) }` only (Cloudflare module Worker; contains the pass, item and inbox blocks). The default export answers `/repo-file` first (REPO FILE ROUTE block) and passes everything else to `mainWorker` (the existing routes, unchanged).
 - `scripts/worker-check.js`: `USAGE`, `normaliseWorkerUrl(text)`, `expectedBackendUrl(env?)`, `runCheck({ workerUrl, env?, fetchImpl?, out? }): Promise<boolean>`
 - **Shared code rule:** the block between the `PASS BLOCK` markers in `server/auth.js` (WP-011) and the block between the `ITEM BLOCK` markers in `server/storage/items.js` (WP-013) and the block between the `INBOX BLOCK` markers in `server/storage/inbox.js` (WP-014a) are each copied verbatim into `wake/worker.js`. Change both copies together; tests check they are identical.
 - **Front-end copies rule:** the copies in `web/shared/capture.js` (`CLIENT_ID_PATTERN`, `INBOX_TYPES`, `INBOX_MAX_BYTES`, `INBOX_SOURCES`, `INBOX_KINDS`, `uploadIdFor`, `IMAGE_TOO_LARGE_MESSAGE`) are checked against `server/storage/inbox.js` and `server/ai/limits.js` by `test/capture.test.js`; a change to either server value must be copied there too.
@@ -154,6 +155,7 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 - `GET /item?type=&id=&task=` (pass; storage settings needed): same rules as `/api/item`; unshared or missing → 404. Reads via the GitHub contents API (`Accept: application/vnd.github.raw`).
 - `POST /inbox?clientId=&type=&source=camera|gallery|file&kind=brief|own&capturedAt=` (learner pass; body = base64 text, up to 8 MB decoded): writes the file, then the metadata, to `inbox/`; 201 `{ clientId, uploadId, bytes, status: 'received' }`; 400/403/413/502.
 - `GET /inbox` (any pass): `{ items: [{ clientId, uploadId, bytes }], count }`, complete captures only.
+- `GET /repo-file?path=` and `POST /repo-file` (JSON `{ path }`) (WP-014c): no pass, no origin check, no CORS headers; reads `Simonh1982/edu-support-app` `main` via raw.githubusercontent.com with no token and no settings. Path rules: relative, only A–Z a–z 0–9 . _ - /, no `..`, no empty or `.` parts, ≤ 200 characters. Returns `text/plain` plus a final line `--- end of <path> (<n> lines) ---`; 400 bad path or body, 404 missing, 405 other methods, 413 file over 1 MB or body over 1 KB, 502 GitHub error. raw.githubusercontent.com may serve a version up to ~5 minutes old.
 - Pass failures: 401 `{ error, reason }`. GitHub failures: 502 `{ error, githubStatus, acceptedPermissions? }`. Other origins: 403. Body over 1 KB: 413.
 
 ## Settings and secrets expected
@@ -170,15 +172,15 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 - Steps 1–7 passed (step 6 on 21 Oct 2026 after WP-008; step 7 on 21 Oct 2026 after WP-009: `storage:check` PASS, pulled the inbox commit before pushing).
 - Step 8 passed 26 Oct 2026: sign-in on phone, laptop and shared computer after WP-012; parent-role `item-check` PASS after WP-013.
 - Step 10 passed 26 Oct 2026 (8 MB through the Worker, 4.2–5.4 s).
-- Step 9 server half passed 26 Oct 2026 (device half in WP-014b).
+- Step 9 passed in full 29 Oct 2026 after WP-014b: a photo taken while the Codespace was stopped showed 'Received – waiting to be read' on the phone and laptop, then 'it'll be read once reading is switched on' about 20 s after Tutor ready. Image resize: 12 MP photo → 1600 × 1200, 266 KB.
 
 ## Deviations in effect
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
 - `test/storage.test.js` (WP-014a-fix): the fake git answers `ls-files` (no unmerged paths), and the "failed pull aborts the rebase" test expects `ls-files` then `rebase` after the failed pull, because `syncLocked` now checks for clashes first.
+- `wake/worker.js` `/repo-file` (WP-014c): no pass, by owner decision, because it serves only the public repository.
 
 ## Known issues
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
-- Verify step 9 device half: waiting for Simon's live check after WP-014b (not yet passed).
 - `spike:web` built-in tool line is misleading with SDK 1.0.22: `BuiltInTools` is `{ Isolated: [...] }` (a curated subset with no web tools), so the report shows `Isolated` as the only tool and flags `web_fetch, web_search` as "not in the SDK list". Reporting only; not changed.
 - The queued `postAttachCommand` (`--watch`) runs once per Codespace start, when the first foreground server exits (seen 26 Oct: new server 1.4 s after `pkill`). Harmless when only one server is running. `start-server.sh` and `devcontainer.json` are proven and unchanged.
 - `node -e "import('@github/copilot-sdk')…"` fails (SDK 1.0.22 calls `createRequire` on the importing filename, which is `[eval]` under `-e`). Importing from a module file, as the server does, works.
