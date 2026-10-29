@@ -1,6 +1,6 @@
-STATE version: 16
-Updated: 2026-10-29 18:02 (UK time)
-Last work package applied: WP-015
+STATE version: 17
+Updated: 2026-10-29 21:45 (UK time)
+Last work package applied: WP-017
 
 ## File tree
 ```
@@ -47,6 +47,7 @@ server/storage/items.js
 server/storage/records.js
 server/storage/snapshot.js
 server/storage/store.js
+test/accessibility.test.js
 test/ai.test.js
 test/alerts.test.js
 test/auth.test.js
@@ -79,6 +80,7 @@ web/index.html
 web/manifest.webmanifest
 web/parent/index.html
 web/parent/parent.js
+web/shared/accessibility.js
 web/shared/auth.js
 web/shared/capture.js
 web/shared/wake.js
@@ -88,6 +90,7 @@ web/shared/wake.js
 - `web/app.js`: `loginUrl` (re-exported from `web/shared/auth.js`); runs the page when a DOM exists
 - `web/shared/auth.js`: `PASS_ROLES`, `PASS_KEY_PREFIX`, `REQUEST_TIMEOUT_MS`, `SIGN_IN_MESSAGES`, `signInMessage`, `workerEndpoint`, `loginUrl`, `readFragment`, `decodePass`, `passIsCurrent`, `checkNewPass`, `memoryStorage`, `usableStorage`, `storageKey`, `savePass`, `loadPass`, `clearPass`, `readJsonBody`, `timeoutSignal`, `workerRequest`
 - `web/shared/wake.js`: `WAKE_SETTINGS`, `WAKE_MESSAGES`, `probeHealth`, `createWaker`
+- `web/shared/accessibility.js`: `ACCESSIBILITY_OPTIONS`, `ACCESSIBILITY_DEFAULTS`, `DYSLEXIA_FONT_STACK`, `ACCESSIBILITY_PROPERTIES`, `ACCESSIBILITY_ATTRIBUTES`, `ACCESSIBILITY_STORAGE_KEY` (`edu-support.settings.accessibility`), `normaliseAccessibility(raw)`, `readAccessibility(body)`, `accessibilityStyle(settings)` → `{ properties, attributes }`, `applyAccessibility(root, settings)`, `resetAccessibility(root)`, `loadAccessibility(store)`, `saveAccessibility(store, settings, { shared? })`, `clearAccessibility(store)`, `createAccessibility({ workerUrl, root, local?, fetchImpl? })` → `{ start({ token, shared }), refresh(), stop() }`
 - `web/shared/capture.js`: `INBOX_MAX_BYTES`, `CLIENT_ID_PATTERN`, `INBOX_TYPES`, `INBOX_SOURCES`, `INBOX_KINDS`, `IMAGE_TOO_LARGE_MESSAGE` (copies; tested against the server), `uploadIdFor`, `RESIZE`, `UPLOAD_TIMEOUT_MS`, `POLL_MS`, `POLL_LIMIT_MS`, `MAX_FILES_AT_ONCE`, `MAX_ROWS`, `FILE_ACCEPT`, `CAPTURE_MESSAGES`, `newClientId`, `titleForClientId`, `formatBytes`, `shortTime`, `classifyFile`, `fitWithin`, `encodeWithinLimits`, `bytesToBase64`, `prepareCapture`, `sendCapture`, `inboxItems`, `snapshotUploads`, `mergeCaptures`, `needsPolling`, `createCaptureQueue` → `{ add, retry, refresh, start, stop, rows, idle }`
 - `web/capture.js`: `resizeImage(file)`, `createCaptureScreen({ workerUrl, onSignedOut, doc? })` → `{ start(token), stop() }` or null
 - `web/config.js`: `config` (frozen object: `{ workerUrl: string }`)
@@ -149,6 +152,18 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 ## Pages
 - Learner `/`: sign-in, signed-in screen, waking (polls `/api/health` every 5 s for up to 5 min; `/status` every third poll; rings again if still `Shutdown`; port hint after 90 s `Available`). Pass in `localStorage` on own devices, `sessionStorage` only on a shared computer.
   - Capture section (camera, gallery, file). Images are resized on the device to JPEG ≤ 1,600 px and ≤ ~700 KB; PDF and Word go unchanged up to 8 MB. Captures go to the Worker `POST /inbox` as `kind=brief`, one at a time, with a device client ID (`p…` photo, `f…` file); Try again reuses the ID. The "Your photos and files" list merges this device's captures, `GET /inbox` (waiting) and the snapshot's upload entries, checked every 15 s while anything is pending, for up to 15 minutes after the last activity. Nothing is kept in browser storage.
+  - Accessibility settings from the snapshot's `settings.accessibility`, applied as CSS custom properties (`--text-scale`, `--line-height`, `--paragraph-gap`, `--font`, `--letter-spacing`, `--word-spacing`) and `data-theme` / `data-contrast` / `data-motion` on `<html>`; read at sign-in and again when the tutor is ready; kept in `localStorage` on own devices only; reset and forgotten at sign-out. Vocabulary (first value is the default; anything else is ignored):
+
+    | Key | Values |
+    |---|---|
+    | `textSize` | `standard`, `large`, `larger`, `x-large`, `largest` (100–200%) |
+    | `font` | `standard`, `dyslexia-friendly` |
+    | `lineSpacing` | `standard`, `wide`, `wider` |
+    | `paragraphSpacing` | `standard`, `wide`, `wider` |
+    | `theme` | `system`, `light`, `dark`, `cream` |
+    | `contrast` | `standard`, `high` |
+    | `reducedMotion` | `false`, `true` |
+
 - Parent `/parent/`: sign-in, pass check through the Worker's `/status`, no waking.
 
 ## Worker routes (`wake/worker.js`)
@@ -179,6 +194,8 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 - Step 8 passed 26 Oct 2026: sign-in on phone, laptop and shared computer after WP-012; parent-role `item-check` PASS after WP-013.
 - Step 10 passed 26 Oct 2026 (8 MB through the Worker, 4.2–5.4 s).
 - Step 9 passed in full 29 Oct 2026 after WP-014b: a photo taken while the Codespace was stopped showed 'Received – waiting to be read' on the phone and laptop, then 'it'll be read once reading is switched on' about 20 s after Tutor ready. Image resize: 12 MP photo → 1600 × 1200, 266 KB.
+- Step 11 passed 29 Oct 2026 after WP-015: three dispatches answered 204; level-3 email within a minute; the second level-2 alert was added as a comment, with no third issue.
+- Step 12 replaced by amendment A-004 (weekly wake dropped): manual check passed 29 Oct 2026 — Auto-delete codespace switched off, bookmark icon showing, Codespace owned by the owner's personal account.
 
 ## Deviations in effect
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
@@ -187,7 +204,8 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 
 ## Known issues
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
-- Verify step 11 waiting for Simon's live check (`npm run alert:check`). Nothing calls `sendAlert` yet (phase 1 `server/wellbeing.js`; Worker wake-failure alert in WP-016).
+- Nothing calls `sendAlert` yet (phase 1 `server/wellbeing.js`). No weekly wake (A-004); the `wake-failed` alert kind is kept but unused.
+- Accessibility settings have no settings screen yet; `profile/accessibility.json` in the storage repository is written in a later phase. The dyslexia-friendly font uses locally installed fonts only (no download), so on Android it falls back to the system sans-serif with wider letter and word spacing.
 - `spike:web` built-in tool line is misleading with SDK 1.0.22: `BuiltInTools` is `{ Isolated: [...] }` (a curated subset with no web tools), so the report shows `Isolated` as the only tool and flags `web_fetch, web_search` as "not in the SDK list". Reporting only; not changed.
 - The queued `postAttachCommand` (`--watch`) runs once per Codespace start, when the first foreground server exits (seen 26 Oct: new server 1.4 s after `pkill`). Harmless when only one server is running. `start-server.sh` and `devcontainer.json` are proven and unchanged.
 - `node -e "import('@github/copilot-sdk')…"` fails (SDK 1.0.22 calls `createRequire` on the importing filename, which is `[eval]` under `-e`). Importing from a module file, as the server does, works.

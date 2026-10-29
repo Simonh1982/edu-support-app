@@ -1,4 +1,5 @@
-// Learner page: sign-in, pass handling, waking the tutor (WP-012) and capture (WP-014b).
+// Learner page: sign-in, pass handling, waking the tutor (WP-012), capture (WP-014b) and the
+// learner's accessibility settings (WP-017).
 import { config } from "./config.js";
 import {
   checkNewPass,
@@ -12,12 +13,14 @@ import {
 } from "./shared/auth.js";
 import { createWaker, WAKE_MESSAGES } from "./shared/wake.js";
 import { createCaptureScreen } from "./capture.js";
+import { createAccessibility } from "./shared/accessibility.js";
 
 // Kept as an export of this file so existing tests and callers still work.
 export { loginUrl };
 
 const ROLE = "learner";
 const RETRY_STATES = new Set(["timeout", "worker", "wakeFailed", "notConfigured"]);
+const READY_STATES = new Set(["ready", "readyNoAi"]);
 
 function setText(element, text) {
   // Only change the text when it differs, so screen readers don't repeat the same message.
@@ -45,6 +48,14 @@ function init() {
   const session = usableStorage(() => window.sessionStorage);
   let waker = null;
 
+  // Text size, spacing, theme and contrast from the snapshot (blueprint §10.6). Read through the
+  // Worker, so they apply while the tutor is still waking.
+  const accessibility = createAccessibility({
+    workerUrl: config.workerUrl,
+    root: document.documentElement,
+    local,
+  });
+
   // Captures go to the Worker's inbox, so they work while the tutor is still waking (blueprint §4.4).
   const capture = createCaptureScreen({
     workerUrl: config.workerUrl,
@@ -62,6 +73,7 @@ function init() {
   function showSignIn(code, { focus = false } = {}) {
     stopWaking();
     capture?.stop();
+    accessibility.stop();
     els.home.hidden = true;
     els.signIn.hidden = false;
     els.form.querySelector("button[type=submit]")?.removeAttribute("disabled");
@@ -87,6 +99,11 @@ function init() {
           showSignIn("revoked", { focus: true });
         } else if (RETRY_STATES.has(result.state)) {
           els.retry.hidden = false;
+        } else if (READY_STATES.has(result.state)) {
+          // The server rebuilds the snapshot when it starts, so read the settings again.
+          accessibility.refresh().catch((err) => {
+            console.error("[settings] could not refresh:", err?.message ?? String(err));
+          });
         }
       })
       .catch((err) => {
@@ -101,6 +118,9 @@ function init() {
     els.home.hidden = false;
     els.sharedNote.hidden = !pass.payload.shared;
     if (focus) els.homeHeading.focus();
+    accessibility.start({ token: pass.token, shared: pass.payload.shared }).catch((err) => {
+      console.error("[settings] could not load:", err?.message ?? String(err));
+    });
     startWaking(pass);
     capture?.start(pass.token);
   }
