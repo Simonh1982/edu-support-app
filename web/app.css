@@ -1,9 +1,13 @@
-/* Settings from the snapshot (text size, spacing, theme) will override these custom
-   properties later (blueprint §10.6), so components use the variables, not raw values. */
+/* The learner's accessibility settings (web/shared/accessibility.js, WP-017) override these custom
+   properties and set data-theme, data-contrast and data-motion on <html> (blueprint §10.6), so
+   components use the variables, not raw values. */
 :root {
   --text-size: 1.125rem;
+  --text-scale: 1;
   --line-height: 1.6;
   --paragraph-gap: 1em;
+  --letter-spacing: normal;
+  --word-spacing: normal;
   --measure: 36rem;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --bg: #ffffff;
@@ -13,6 +17,7 @@
   --accent-fg: #ffffff;
   --focus: #b35900;
   --warn: #a4262c;
+  --border-width: 1px;
   --tap: 3rem;
   color-scheme: light dark;
 }
@@ -27,6 +32,81 @@
     --focus: #ffb366;
     --warn: #ff9e9e;
   }
+}
+
+/* ---------- themes chosen in the settings (override the device's light or dark mode) ---------- */
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #4a4a4a;
+  --accent: #1d4f7a;
+  --accent-fg: #ffffff;
+  --focus: #b35900;
+  --warn: #a4262c;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #121212;
+  --fg: #f2f2f2;
+  --muted: #c8c8c8;
+  --accent: #8cc4f0;
+  --accent-fg: #0b1b29;
+  --focus: #ffb366;
+  --warn: #ff9e9e;
+  color-scheme: dark;
+}
+
+/* A soft cream background, which some readers find easier than bright white. */
+:root[data-theme="cream"] {
+  --bg: #fbf5e6;
+  --fg: #1f1b16;
+  --muted: #4d463c;
+  --accent: #1d4f7a;
+  --accent-fg: #ffffff;
+  --focus: #9a4a00;
+  --warn: #9b1c22;
+  color-scheme: light;
+}
+
+/* ---------- high contrast: strongest colours for the theme in use, thicker borders ---------- */
+:root[data-contrast="high"] {
+  --bg: #ffffff;
+  --fg: #000000;
+  --muted: #000000;
+  --accent: #00315c;
+  --accent-fg: #ffffff;
+  --focus: #8a3b00;
+  --warn: #8b0000;
+  --border-width: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-contrast="high"]:not([data-theme="light"]):not([data-theme="cream"]) {
+    --bg: #000000;
+    --fg: #ffffff;
+    --muted: #ffffff;
+    --accent: #a8d8ff;
+    --accent-fg: #000000;
+    --focus: #ffc680;
+    --warn: #ffb3b3;
+  }
+}
+
+:root[data-contrast="high"][data-theme="dark"] {
+  --bg: #000000;
+  --fg: #ffffff;
+  --muted: #ffffff;
+  --accent: #a8d8ff;
+  --accent-fg: #000000;
+  --focus: #ffc680;
+  --warn: #ffb3b3;
+}
+
+:root[data-contrast="high"][data-theme="cream"] {
+  --bg: #fbf5e6;
+  --fg: #000000;
+  --muted: #000000;
 }
 
 *,
@@ -50,8 +130,10 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font);
-  font-size: var(--text-size);
+  font-size: calc(var(--text-size) * var(--text-scale));
   line-height: var(--line-height);
+  letter-spacing: var(--letter-spacing);
+  word-spacing: var(--word-spacing);
   overflow-wrap: anywhere;
 }
 
@@ -111,6 +193,8 @@ button.secondary {
   border-radius: 0.5rem;
   font: inherit;
   font-weight: 600;
+  letter-spacing: inherit;
+  word-spacing: inherit;
   cursor: pointer;
 }
 
@@ -182,7 +266,7 @@ h2 {
 .capture-item {
   margin-bottom: 0.75rem;
   padding: 0.75rem 1rem;
-  border: 1px solid var(--muted);
+  border: var(--border-width) solid var(--muted);
   border-left: 4px solid var(--accent);
   border-radius: 0.5rem;
 }
@@ -212,6 +296,7 @@ h2 {
   margin-top: 0.5rem;
 }
 
+/* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -221,4 +306,13 @@ h2 {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
