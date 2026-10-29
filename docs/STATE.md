@@ -1,6 +1,6 @@
-STATE version: 12
-Updated: 2026-10-26 11:22 (UK time)
-Last work package applied: WP-014a
+STATE version: 13
+Updated: 2026-10-29 09:08 (UK time)
+Last work package applied: WP-014a-fix
 
 ## File tree
 ```
@@ -57,6 +57,7 @@ test/port.test.js
 test/server.test.js
 test/snapshot.test.js
 test/stamp-versions.test.js
+test/storage-recovery.test.js
 test/storage.test.js
 test/web-shell.test.js
 test/web-tools.test.js
@@ -97,12 +98,12 @@ web/shared/wake.js
 - `server/port.js`: `PORT_LOG`, `ATTEMPTS` (18), `DELAY_MS` (10000), `visibilityArgs(port, codespaceName)`, `ghEnv(token, env?)`, `runGh(args, { env, timeoutMs? })`, `shortError(result)`, `appendPortLog(line, file?)`, `managePort({ state, config, port, env?, run?, sleep?, writeLog?, log?, attempts?, delayMs?, now? })` → `{ done, stop() }`
 - `server/storage/records.js`: `SCHEMA_VERSION` (1), `CREATED_BY`, `MAX_EVENT_PAYLOAD_BYTES` (1024), `MAX_EVENT_STRING` (200), `ukIso(date?)`, `ukMonth(date?)`, `newId(prefix, date?)`, `newRecord(prefix, fields, { createdBy, now? })`, `updateRecord(record, changes?, { now? })`, `makeEvent(type, { links?, payload?, createdBy?, now? })`, `eventsPath(date?)`
 - `server/storage/git.js`: `IDENTITY`, `gitEnv({ token?, env?, host? })`, `cleanGitText(text, max?)`, `runGit(args, { cwd, env, timeoutMs? })`, `createLock()` → `{ run(fn) }`
-- `server/storage/store.js`: `BATCH_MS` (5000), `RETRY_DELAYS_MS`, `checkPath(relPath, { allowInbox? })`, `createStore({ dir, remoteUrl, env, runGit?, batchMs?, retryDelays?, log?, now?, sleep?, onStatus?, beforeCommit? })` → `{ dir, status(), init(), flush(), commitLocal(), put(path, record), append(path, entry), remove(path, { allowInbox? }), move(from, to), sync(), logEvent(type, options?), read(path), list(dir) }`. `beforeCommit` runs inside the git lock, before `git add`, once per batch with changes; a failure is logged and never blocks saving.
+- `server/storage/store.js`: `BATCH_MS` (5000), `RETRY_DELAYS_MS`, `checkPath(relPath, { allowInbox? })`, `createStore({ dir, remoteUrl, env, runGit?, batchMs?, retryDelays?, log?, now?, sleep?, onStatus?, beforeCommit? })` → `{ dir, status(), init(), flush(), commitLocal(), put(path, record), append(path, entry), remove(path, { allowInbox? }), move(from, to), sync(), logEvent(type, options?), read(path), list(dir) }`. `beforeCommit` runs inside the git lock, before `git add`, once per batch with changes; a failure is logged and never blocks saving. Also exports `conflictRule(relPath)`, `unionLines(remoteText, localText)`, `parseUnmerged(text)`; `syncLocked`/`flush`/`sync` results may include `recovered: string[]` or `attention: true`.
 - `server/storage/index.js`: `DEFAULT_STORAGE_DIR` (`/workspaces/storage`), `APP_ROOT`, `storageSettings(env?, { appRoot? })`, `snapshotStep`, `startStorage({ state, config, env?, log?, makeStore?, getImageLimits?, inbox? })` (starts the inbox poller) → store or null (never throws)
 - `server/storage/items.js` (item block): `SNAPSHOT_PATH`, `ITEM_ID_PATTERN`, `ITEM_TYPES`, `itemPath`, `itemTypeAllowed`, `snapshotSection`; Node only: `ITEM_BLOCK_START`, `ITEM_BLOCK_END`, `extractItemBlock`, `itemResponse`
 - `server/storage/inbox.js` (inbox block): `INBOX_MAX_BYTES`, `INBOX_MAX_BASE64`, `CLIENT_ID_PATTERN`, `INBOX_TYPES`, `INBOX_SOURCES`, `INBOX_KINDS`, `inboxPaths`, `uploadIdFor`, `base64Bytes`, `inboxMetadata`; Node only: `INBOX_BLOCK_START`, `INBOX_BLOCK_END`, `extractInboxBlock`, `POLL_MS` (10000), `POLL_BACKOFF_MS` (60000), `LIMITS_WAIT_MS` (45000), `checkInboxMetadata(raw, clientId)`, `uploadRecord({ meta, sizeCheck, now? })`, `processInbox({ store, getImageLimits?, waitForLimits?, now?, log? })` → `{ processed, failed, duplicates, waiting, skipped }`, `startInboxPoller({ store, getImageLimits?, log?, pollMs?, backoffMs?, … })`
 - `server/ai/limits.js`: `IMAGE_TOO_LARGE_MESSAGE`, `imageLimits(list, modelId)`, `checkImage({ bytes, mimeType }, limits)`, `loadImageLimits(handle, role = 'light')` (reads `handle.models[role]` and `handle.ai.listModels()`; null on failure)
-- `scripts/inbox-check.js`: `USAGE`, `LARGE_BYTES`, `checkIds(now?)`, `captures(largeBytes?)`, `runCheck({ workerUrl, env?, fetchImpl?, makeStore?, tmpRoot?, … })`
+- `scripts/inbox-check.js`: `USAGE`, `LARGE_BYTES`, `PUSH_WAIT_MS` (30000), `checkIds(now?)`, `captures(largeBytes?)`, `waitForServerPush({ serverHealth, sleep?, clock?, waitMs?, stepMs? })`, `localHealth(env?, fetchImpl?)`, `runCheck({ workerUrl, env?, fetchImpl?, makeStore?, tmpRoot?, serverHealth?, … })` (tidy-up waits for the server to push first)
 - `server/storage/snapshot.js`: `buildSnapshot`, `UPCOMING_LIMIT`, `RECENT_LIMIT`, `SHARED_LIMIT`
 - `scripts/item-check.js`: `USAGE`, `TEST_IDS`, `testNote`, `runCheck`
 - `scripts/storage-check.js`: `INBOX_TEST_FILE`, `USAGE`, `parseArgs(argv)`, `runCheck({ settings, wait?, waitForOwner, makeStore?, tmpRoot?, out? })`
@@ -128,6 +129,9 @@ web/shared/wake.js
 - `/api/health` `ai` = `{ ready, roles, errors, mode }`; `mode` is `starting` | `off` | `mock` | `copilot`; each `roles` entry is `{ model, ok, ms | error }`. The AI start-up test runs after the server starts listening.
 - `/api/health` `port` = `{ visibility, detail, attempts, updatedAt }`; `visibility` is `unknown` | `n/a` | `pending` | `public` | `private`. The port manager starts after listening.
 - `/api/health` `storage` = `{ ok, ready, lastPull, lastPush, pending, detail }`. Storage starts after listening.
+
+## Sync clashes (WP-014a-fix)
+When `git pull --rebase` clashes, `syncLocked()` settles server-made files itself: event logs (`events/*.jsonl`) are merged by line (both sides kept once); `index/snapshot.json` takes the remote side and is rebuilt in the next batch; `inbox/` prefers the remote (Worker) copy; `uploads/` prefers the local (server) copy. Anything else aborts the rebase, keeps local commits, sets `storage.detail` to `needs attention: sync clash in <paths> …` (paths only) and stops pulling until restart; saving continues locally. Manual fix: inspect and resolve in `/workspaces/storage`, then `npm run server`.
 
 ## Pages
 - Learner `/`: sign-in, signed-in screen, waking (polls `/api/health` every 5 s for up to 5 min; `/status` every third poll; rings again if still `Shutdown`; port hint after 90 s `Available`). Pass in `localStorage` on own devices, `sessionStorage` only on a shared computer.
@@ -158,13 +162,16 @@ web/shared/wake.js
 ## Verify steps passed
 - Steps 1–7 passed (step 6 on 21 Oct 2026 after WP-008; step 7 on 21 Oct 2026 after WP-009: `storage:check` PASS, pulled the inbox commit before pushing).
 - Step 8 passed 26 Oct 2026: sign-in on phone, laptop and shared computer after WP-012; parent-role `item-check` PASS after WP-013.
+- Step 10 passed 26 Oct 2026 (8 MB through the Worker, 4.2–5.4 s).
+- Step 9 server half passed 26 Oct 2026 (device half in WP-014b).
 
 ## Deviations in effect
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
+- `test/storage.test.js` (WP-014a-fix): the fake git answers `ls-files` (no unmerged paths), and the "failed pull aborts the rebase" test expects `ls-files` then `rebase` after the failed pull, because `syncLocked` now checks for clashes first.
 
 ## Known issues
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
-- Verify steps 9 and 10 run by Simon after WP-014a (`inbox-check`); the capture screen and device resizing are WP-014b.
+- Verify step 9 device half: WP-014b.
 - `spike:web` built-in tool line is misleading with SDK 1.0.22: `BuiltInTools` is `{ Isolated: [...] }` (a curated subset with no web tools), so the report shows `Isolated` as the only tool and flags `web_fetch, web_search` as "not in the SDK list". Reporting only; not changed.
-- `EADDRINUSE` on restart: most likely the `--watch` attach command, queued behind the boot-time foreground start, firing during `npm run server`'s 1-second pause. After WP-008 (server frees the port at once on `SIGTERM`), one restart showed a single start launched by `npm run server` and no `EADDRINUSE`. Treat as likely fixed; if it returns, check `grep -E "starting:|already in use" .server/server.log`. `start-server.sh` is proven and unchanged.
+- The queued `postAttachCommand` (`--watch`) runs once per Codespace start, when the first foreground server exits (seen 26 Oct: new server 1.4 s after `pkill`). Harmless when only one server is running. `start-server.sh` and `devcontainer.json` are proven and unchanged.
 - `node -e "import('@github/copilot-sdk')…"` fails (SDK 1.0.22 calls `createRequire` on the importing filename, which is `[eval]` under `-e`). Importing from a module file, as the server does, works.

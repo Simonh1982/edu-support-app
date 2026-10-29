@@ -48,6 +48,7 @@ function fakeGit({ pullFails = 0, pushFails = 0, pulledCount = 0, ahead = 0 } = 
       return ok();
     }
     if (cmd === 'rebase') return ok();
+    if (cmd === 'ls-files') return ok(); // no unmerged paths: a pull failure that isn't a clash (WP-014a-fix)
     if (cmd === 'rev-list') return ok(`${args[2].endsWith('..HEAD') ? fake.ahead : fake.pulledCount}\n`);
     if (cmd === 'push') {
       if (fake.pushFails > 0) {
@@ -259,7 +260,8 @@ test('a failed pull aborts the rebase and never pushes', async () => {
     assert.match(result.error, /^pull failed/);
     const cmds = h.fake.commands();
     const lastPull = cmds.lastIndexOf('pull');
-    assert.equal(cmds[lastPull + 1], 'rebase');
+    // WP-014a-fix: the store first checks for clashes (ls-files), then aborts the rebase
+    assert.deepEqual(cmds.slice(lastPull + 1, lastPull + 3), ['ls-files', 'rebase']);
     assert.ok(!cmds.slice(lastPull).includes('push'));
   } finally { await h.cleanup(); }
 });
