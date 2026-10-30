@@ -1,6 +1,6 @@
-STATE version: 17
-Updated: 2026-10-29 21:45 (UK time)
-Last work package applied: WP-017
+STATE version: 18
+Updated: 2026-10-30 08:05 (UK time)
+Last work package applied: WP-018
 
 ## File tree
 ```
@@ -13,6 +13,13 @@ README.md
 docs/STATE.md
 docs/blueprint.md
 docs/build-spec.md
+evals/cases/background.json
+evals/cases/boundary.json
+evals/cases/spelling.json
+evals/cases/support.json
+evals/cases/wellbeing.json
+evals/run.js
+evals/system-placeholder.md
 models.json
 package-lock.json
 package.json
@@ -53,6 +60,7 @@ test/alerts.test.js
 test/auth.test.js
 test/capture.test.js
 test/codespace.test.js
+test/evals.test.js
 test/front-end.test.js
 test/image-input.test.js
 test/inbox-check.test.js
@@ -111,6 +119,7 @@ web/shared/wake.js
 - `server/storage/records.js`: `SCHEMA_VERSION` (1), `CREATED_BY`, `MAX_EVENT_PAYLOAD_BYTES` (1024), `MAX_EVENT_STRING` (200), `ukIso(date?)`, `ukMonth(date?)`, `newId(prefix, date?)`, `newRecord(prefix, fields, { createdBy, now? })`, `updateRecord(record, changes?, { now? })`, `makeEvent(type, { links?, payload?, createdBy?, now? })`, `eventsPath(date?)`
 - `server/alerts.js`: `ALERT_EVENT_TYPE` (`'app-alert'`), `ALERT_KINDS` (`['wellbeing', 'wake-failed']`), `ALERT_LEVELS` (`[2, 3]`), `ALERT_TIMEOUT_MS` (10000), `GITHUB_API`, `ukDate(now?)`, `alertSettings(env?)` → `{ repo, token } | { skip }`, `alertPayload({ kind, level?, now? })` → `{ payload } | { error }`, `sendAlert({ kind, level?, env?, settings?, fetchImpl?, now?, log?, timeoutMs? })` → `{ ok: true, status } | { ok: false, status, error, acceptedPermissions? }` (never throws)
 - `scripts/alert-check.js`: `USAGE`, `DEFAULT_GAP_S` (90), `parseArgs(argv)`, `runCheck({ settings, only?, gapS?, send?, sleep?, out?, now? })` → `{ verdict: 'SENT' | 'FAIL', lines, results }`
+- `evals/run.js`: `CASES_DIR`, `RESULTS_DIR`, `PLACEHOLDER_PATH`, `SKILL_CORE_PATH`, `REVIEW_PASSES` (5), `DEFAULT_TIMEOUT_S` (120), `CATEGORIES` (14), `BEHAVIOURS` (`decline-and-redirect`, `help`, `guide`, `acknowledge`, `care`, `json`), `CASE_ROLES` (every role except `judge`), `PROBLEMS`, `REPLY_CONTRACT`, `JOB_SYSTEM`, `JUDGE_SYSTEM`, `USAGE`, `parseArgs(argv)`, `validateCase(c)`, `validateCases(list)`, `loadCases(dir?)` → `{ cases, errors }`, `selectCases(cases, { categories?, ids?, limit? })`, `presentationLines(choices)`, `loadSystem({ skillPath?, placeholderPath? })` → `{ text, source }`, `subjectSystem(base, testCase)`, `tagSafe(text)`, `buildTurnPrompt(testCase, history, message)`, `buildJobPrompt(testCase)`, `buildJudgePrompt(testCase, transcript)`, `codeChecks(testCase, parsed)` → problem names, `runCase({ ai, models, testCase, systemText, subjectModel?, judgeModel?, timeoutMs? })` (never throws), `createRandom(seed)`, `pickForReview(results, { passes?, seed? })` → `{ failures, passes }`, `summarise(results)`, `runEvals({ ai, models, cases, systemText, subjectModel?, judgeModel?, seed?, timeoutMs?, onProgress? })` → `{ results, summary, review, seed }`, `formatReport(run, { now?, models?, judgeModel?, systemSource?, mode? })`, `writeResults(run, report, { dir?, now? })` → `{ md, json }`, `privateSamples(env?, fs?)` → `{ available, count }`, `createEvalMock(modelIds)`, `planLines({ cases, models, subjectModel?, judgeModel? })`
 - `server/storage/git.js`: `IDENTITY`, `gitEnv({ token?, env?, host? })`, `cleanGitText(text, max?)`, `runGit(args, { cwd, env, timeoutMs? })`, `createLock()` → `{ run(fn) }`
 - `server/storage/store.js`: `BATCH_MS` (5000), `RETRY_DELAYS_MS`, `checkPath(relPath, { allowInbox? })`, `createStore({ dir, remoteUrl, env, runGit?, batchMs?, retryDelays?, log?, now?, sleep?, onStatus?, beforeCommit? })` → `{ dir, status(), init(), flush(), commitLocal(), put(path, record), append(path, entry), remove(path, { allowInbox? }), move(from, to), sync(), logEvent(type, options?), read(path), list(dir) }`. `beforeCommit` runs inside the git lock, before `git add`, once per batch with changes; a failure is logged and never blocks saving. Also exports `conflictRule(relPath)`, `unionLines(remoteText, localText)`, `parseUnmerged(text)`; `syncLocked`/`flush`/`sync` results may include `recovered: string[]` or `attention: true`.
 - `server/storage/index.js`: `DEFAULT_STORAGE_DIR` (`/workspaces/storage`), `APP_ROOT`, `storageSettings(env?, { appRoot? })`, `snapshotStep`, `startStorage({ state, config, env?, log?, makeStore?, getImageLimits?, inbox? })` (starts the inbox poller) → store or null (never throws)
@@ -135,6 +144,7 @@ web/shared/wake.js
 - `scripts/start-server.sh [--foreground|--watch]`: proven start script (blueprint §3.2); logs to `.server/`.
 - `npm test`: `node --test`. `npm run icons`: regenerate the PNG icons. `npm run server`: restart the server in the background and tail the log. `npm run models [-- --json]`: list the account's Copilot models and check `models.json`. `npm run spike:image -- <image> [--deadline YYYY-MM-DD] [--role <role>] [--mode both|file|blob]`: phase 0 test 1 (image input); refuses images inside the repo except `.server/`. `npm run spike:web [-- --role <role>] [--tools a,b] [--only fetch,search,refuse,cache]`: phase 0 test 2 (web tools, refusals, cache). `npm run storage:check [-- --no-wait]`: phase 0 verify step 7 (clone, write and push, then push again after an `inbox/` commit made on GitHub).
 - `npm run alert:check [-- --only 3|2] [--gap <seconds>]`: verify step 11 (sends real test alerts; Codespace terminal only).
+- `npm run evals [-- --yes | --mock] [--category a,b] [--id a,b] [--limit n] [--model id] [--judge-model id] [--seed n] [--timeout s]`: the boundary test set (blueprint §11). No options = dry run (validates cases, prints the plan, sends nothing). `--yes` uses Copilot credits. Reports go to `evals/results/report-<UK time>.md` and `.json` (git-ignored; they hold model output).
 - `node scripts/inbox-check.js [worker address]`: verify steps 9 (server half) and 10 (8 MB through the Worker); sends two invented files and tidies up.
 - `node scripts/item-check.js [worker address]`: live parent-role check (writes two invented notes, checks learner/parent access through the Worker, deletes them).
 - `node scripts/worker-check.js [worker address]` (asks for the address if not given): set-up check after WP-011 — Worker settings, matching pass secrets, `/status`, backend address and `/wake` on an awake Codespace.
@@ -148,6 +158,9 @@ web/shared/wake.js
 
 ## Sync clashes (WP-014a-fix)
 When `git pull --rebase` clashes, `syncLocked()` settles server-made files itself: event logs (`events/*.jsonl`) are merged by line (both sides kept once); `index/snapshot.json` takes the remote side and is rebuilt in the next batch; `inbox/` prefers the remote (Worker) copy; `uploads/` prefers the local (server) copy. Anything else aborts the rebase, keeps local commits, sets `storage.detail` to `needs attention: sync clash in <paths> …` (paths only) and stops pulling until restart; saving continues locally. Manual fix: inspect and resolve in `/workspaces/storage`, then `npm run server`.
+
+## Evals
+Case files are JSON arrays in `evals/cases/`, generic and invented only. Each case has `id`, `category`, `role`, `turns` (1–6), optional `task` `{ question, anchors }`, optional `presentation` (the four §30 choices), optional `instruction` (background jobs only) and `expect` `{ behaviour, notes, wellbeingLevel?, wellbeingMax?, mustMention?, json?, jsonContains?, mustSuggest? }`. Background jobs (`behaviour: "json"`) are checked in code only; everything else is also judged by the `judge` role. Until `skills/core/SKILL.md` exists, the tutor uses `evals/system-placeholder.md`, and presentation wordings are placeholders in `evals/run.js` (phase 1's prompt assembly replaces both). Private spelling samples (`<STORAGE_DIR>/evals-private/`) are counted only, never read, until phase 1.
 
 ## Pages
 - Learner `/`: sign-in, signed-in screen, waking (polls `/api/health` every 5 s for up to 5 min; `/status` every third poll; rings again if still `Shutdown`; port hint after 90 s `Available`). Pass in `localStorage` on own devices, `sessionStorage` only on a shared computer.
@@ -201,9 +214,11 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
 - `test/storage.test.js` (WP-014a-fix): the fake git answers `ls-files` (no unmerged paths), and the "failed pull aborts the rebase" test expects `ls-files` then `rebase` after the failed pull, because `syncLocked` now checks for clashes first.
 - `wake/worker.js` `/repo-file` (WP-014c): no pass, by owner decision, because it serves only the public repository.
+- `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
+- Eval set is an outline (34 cases; target 40–60). Results before phase 1 reflect the placeholder prompt, not the real skill files.
 - Nothing calls `sendAlert` yet (phase 1 `server/wellbeing.js`). No weekly wake (A-004); the `wake-failed` alert kind is kept but unused.
 - Accessibility settings have no settings screen yet; `profile/accessibility.json` in the storage repository is written in a later phase. The dyslexia-friendly font uses locally installed fonts only (no download), so on Android it falls back to the system sans-serif with wider letter and word spacing.
 - `spike:web` built-in tool line is misleading with SDK 1.0.22: `BuiltInTools` is `{ Isolated: [...] }` (a curated subset with no web tools), so the report shows `Isolated` as the only tool and flags `web_fetch, web_search` as "not in the SDK list". Reporting only; not changed.
