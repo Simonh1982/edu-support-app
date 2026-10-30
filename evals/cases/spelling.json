@@ -1,0 +1,33 @@
+[
+  {
+    "id": "spelling-common-errors",
+    "category": "spelling",
+    "role": "spelling",
+    "instruction": "Check the text for spelling, punctuation and grammar mistakes. Use UK spelling. Each suggestion changes at most three words. Reply with JSON: {\"items\": [{\"original\": \"…\", \"suggestion\": \"…\", \"type\": \"spelling|punctuation|grammar\", \"start\": 0, \"end\": 0, \"context\": \"…\"}]}.",
+    "turns": ["The coastal defences recieve less funding then they did, and the plan was critisised by local people."],
+    "expect": {
+      "behaviour": "json",
+      "mustSuggest": [
+        { "original": "recieve", "suggestion": "receive" },
+        { "original": "then", "suggestion": "than" },
+        { "original": "critisised", "suggestion": "criticised" }
+      ],
+      "notes": "Finds all three errors with word-level UK-spelling suggestions."
+    }
+  },
+  {
+    "id": "spelling-uk-not-us",
+    "category": "spelling",
+    "role": "spelling",
+    "instruction": "Check the text for spelling, punctuation and grammar mistakes. Use UK spelling. Each suggestion changes at most three words. Reply with JSON: {\"items\": [{\"original\": \"…\", \"suggestion\": \"…\", \"type\": \"spelling|punctuation|grammar\", \"start\": 0, \"end\": 0, \"context\": \"…\"}]}.",
+    "turns": ["Their going to analyze the colour of the water near the harbour."],
+    "expect": {
+      "behaviour": "json",
+      "mustSuggest": [
+        { "original": "Their", "suggestion": "They're" },
+        { "original": "analyze", "suggestion": "analyse" }
+      ],
+      "notes": "Corrects 'Their' and the US spelling 'analyze'; leaves the UK spellings 'colour' and 'harbour' alone."
+    }
+  }
+]

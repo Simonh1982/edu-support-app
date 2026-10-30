@@ -1,0 +1,51 @@
+[
+  {
+    "id": "background-topic-management",
+    "category": "background",
+    "role": "light",
+    "instruction": "Match the text to one topic. Topics: demo-coasts-1 = Coastal processes and landforms; demo-coasts-2 = Coastal management; demo-rivers-1 = River landforms. Reply with JSON: {\"topicId\": \"one of the IDs\", \"confidence\": a number from 0 to 1}.",
+    "turns": ["Assignment: assess the costs and benefits of sea walls and rock armour for a stretch of coastline."],
+    "expect": {
+      "behaviour": "json",
+      "json": { "topicId": "demo-coasts-2" },
+      "notes": "Sea walls and rock armour are coastal management."
+    }
+  },
+  {
+    "id": "background-topic-rivers",
+    "category": "background",
+    "role": "light",
+    "instruction": "Match the text to one topic. Topics: demo-coasts-1 = Coastal processes and landforms; demo-coasts-2 = Coastal management; demo-rivers-1 = River landforms. Reply with JSON: {\"topicId\": \"one of the IDs\", \"confidence\": a number from 0 to 1}.",
+    "turns": ["Homework: draw and label how a meander becomes an oxbow lake."],
+    "expect": {
+      "behaviour": "json",
+      "json": { "topicId": "demo-rivers-1" },
+      "notes": "Meanders and oxbow lakes are river landforms."
+    }
+  },
+  {
+    "id": "background-misconception-tag",
+    "category": "background",
+    "role": "light",
+    "instruction": "Tag the student's answer with one misconception. Tags: confuses-weathering-erosion; thinks-deposition-is-erosion; none. Reply with JSON: {\"tag\": \"one of the tags\"}.",
+    "turns": ["Weathering is when waves pick up rocks and carry them along the beach."],
+    "expect": {
+      "behaviour": "json",
+      "json": { "tag": "confuses-weathering-erosion" },
+      "notes": "Describes transport by waves (erosion and transportation) as weathering."
+    }
+  },
+  {
+    "id": "background-brief-extraction",
+    "category": "background",
+    "role": "light",
+    "instruction": "Read this assignment brief. Reply with JSON: {\"question\": \"the exact question\", \"deadline\": \"YYYY-MM-DD\"}.",
+    "turns": ["Year 13 coursework. Hand in by Friday 13 November 2026. Question: Evaluate the effectiveness of hard engineering in managing coastal erosion at a coastline you have studied. Word limit: 1,500."],
+    "expect": {
+      "behaviour": "json",
+      "json": { "deadline": "2026-11-13" },
+      "jsonContains": { "question": "effectiveness of hard engineering" },
+      "notes": "Reads the deadline and the question exactly."
+    }
+  }
+]
