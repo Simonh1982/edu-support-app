@@ -81,7 +81,7 @@ Changed files to send back: <full text only of files that now differ from the wo
 Confidence: <n>%
 ```
 
-After the owner merges, they paste the report and `docs/STATE.md` into the code-writing agent's chat.
+After the owner merges, they paste the report into the primary coding agent's chat. The agent reads `docs/STATE.md` itself, through the Worker's `/repo-file` route.
 
 ## Troubleshooting the live system
 When the owner reports a problem, for example *"wake doesn't work"* or *"alerts aren't arriving"*:
@@ -94,7 +94,7 @@ When the owner reports a problem, for example *"wake doesn't work"* or *"alerts 
    - `curl -s localhost:3000/api/health`
    - the Worker's `/status` in a browser
 3. **A small, clear fix** (a few lines, no design change): make it on a branch called `hotfix-<nnn>-<short-name>`, update `docs/STATE.md` with a new version, and open a pull request.
-4. **Anything bigger:** don't write it. Write a short **problem summary** for the code-writing agent instead, covering symptoms, evidence, likely cause and the affected files. That saves your budget.
+4. **Anything bigger:** don't write it. Write a short **problem summary** for the primary coding agent instead, covering symptoms, evidence, likely cause and the affected files. That saves your budget.
 
 Things that are expected, not bugs:
 

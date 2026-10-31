@@ -229,10 +229,11 @@ test('runSpike with the mock: every check runs and the report is readable', asyn
   assert.deepEqual(report.results.map((r) => [r.check, r.verdict]), [
     ['fetch', 'PASS'], ['search', 'CHECK'], ['refuse (allowed list)', 'PASS'], ['refuse (permission check only)', 'PASS'], ['cache (m-haiku)', 'NOT SEEN'],
   ]);
-  assert.deepEqual(report.notInSdk, ['web_search']);
+  assert.equal('notInSdk' in report, false);
   const text = formatReport(report).join('\n');
-  assert.match(text, /SDK built-in tools \(2\): bash, web_fetch/);
-  assert.match(text, /not in the SDK list: web_search/);
+  assert.match(text, /SDK BuiltInTools export \(reference only; not used for the allowed list\): bash, web_fetch/);
+  assert.match(text, /Allowed list used: web_fetch, web_search\n/);
+  assert.doesNotMatch(text, /not in the SDK list/);
   assert.match(text, /call 2 usage: inputTokens=5000/);
 });
 
