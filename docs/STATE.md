@@ -1,6 +1,6 @@
-STATE version: 22
-Updated: 2026-10-31 17:57 (UK time)
-Last work package applied: WP-102 (then an owner-approved hotfix outside any package: `zod` override, see Deviations)
+STATE version: 23
+Updated: 2026-10-31 19:01 (UK time)
+Last work package applied: WP-103
 
 ## File tree
 ```
@@ -24,6 +24,7 @@ models.json
 package-lock.json
 package.json
 scripts/alert-check.js
+scripts/curriculum-check.js
 scripts/inbox-check.js
 scripts/item-check.js
 scripts/list-copilot-models.js
@@ -44,10 +45,12 @@ server/ai/json.js
 server/ai/limits.js
 server/ai/mock.js
 server/ai/models.js
+server/ai/read-tools.js
 server/ai/tools.js
 server/alerts.js
 server/auth.js
 server/config.js
+server/curriculum.js
 server/documents.js
 server/index.js
 server/port.js
@@ -63,6 +66,7 @@ test/ai.test.js
 test/alerts.test.js
 test/auth.test.js
 test/capture.test.js
+test/curriculum.test.js
 test/codespace.test.js
 test/custom-tools.test.js
 test/documents.test.js
@@ -73,6 +77,7 @@ test/inbox-check.test.js
 test/inbox.test.js
 test/items.test.js
 test/port.test.js
+test/read-tools.test.js
 test/server.test.js
 test/snapshot.test.js
 test/stamp-versions.test.js
@@ -122,6 +127,10 @@ web/shared/wake.js
 - `server/ai/tools.js`: `WEB_TOOLS` (`['web_fetch', 'web_search']`), `WEB_PERMISSION_KINDS` (`['url']`), `NEVER_ALLOWED_KINDS` (`['shell', 'write', 'read', 'mcp']`), `permissionPolicy(kinds = [])` → `(request) => boolean`, `toolNameOf(value): string | null`, `describePermission(request)` → `{ kind, tool }`, `CUSTOM_TOOL_KIND` (`'custom-tool'`), `CUSTOM_TOOL_NAME_PATTERN`, `MAX_TOOL_RESULT_CHARS` (20000), `TOOL_ERROR_TEXT` (`'Not available.'`), `decidePermission(request, { allowPermission?, customNames? } = {}): boolean`, `checkCustomTools(list = []): string[]`, `toolResultText(value, max?): string`, `wrapToolHandler(tool, { onCall?, now? } = {})` → `async (args) => string` (onCall gets `{ name, ok, ms }` only)
 - `scripts/spike-custom-tools.js`: `CHECKS` (`['call', 'refuse']`), `DEMO_TOOL`, `DEMO_TOPIC`, `USAGE`, `parseArgs(argv)`, `demoTool(code?)` → `{ code, seen, tool }`, `judgeCall({ parsed, code, seen })`, `runCall({ ai, model, timeoutMs })`, `runRefusal({ ai, model, variant, timeoutMs })`, `runSpike({ ai, models, role?, only?, timeoutMs? })`, `formatReport(report): string[]`
 - `server/documents.js`: `DOCX_TYPE`, `PDF_TYPE`, `DOCUMENT_TYPES`, `MAX_DOCUMENT_BYTES` (= `INBOX_MAX_BYTES`), `MAX_PAGES` (40), `MAX_TEXT_CHARS` (100000), `EXTRACT_TIMEOUT_MS` (20000), `SCANNED_CHARS_PER_PAGE` (40), `LOW_TEXT_PAGE_CHARS` (10), `EXTRACT_REASONS`, `cleanText(text): string`, `textChars(text): number`, `joinTextItems(items): string`, `judgePages(pageChars)` → `{ scanned, lowTextPages, totalChars }`, `loadMammoth(importer?)` → `{ lib } | { error }`, `loadPdfjs(importer?, resolver?)` → `{ lib, fontDir, cmapDir } | { error }`, `extractDocument({ bytes, mimeType, timeoutMs?, maxPages?, loaders?, clock? })` → `{ ok: true, kind, text, pageCount, pagesRead, pageChars, scanned, lowTextPages, truncated, warnings, ms }` or `{ ok: false, kind, reason, ms }` (reasons from error names only, never messages). Not called by the running app yet (WP-107).
+- `server/curriculum.js`: `CURRICULUM_DIR`, `CURRICULUM_FILES`, `QUAL_DIR_PATTERN`, `TOPIC_ID_PATTERN`, `MAX_FILE_BYTES` (2 MB), `MAX_COMMAND_WORDS` (30), `stringList(value): string[]`, `parseRecords(source): object[]`, `optionalGroupUnitIds(groups): Set`, `unitStatus(qual)` → `{ complete, incomplete, mandatory, optional, selected, active, current, currentSet }` (A-005: incomplete choice → every unit active), `loadQualification(root, name)` → `{ qual, errors }`, `loadCurriculum({ dir })` → `{ qualifications: Map, topics: Map, errors }`, `topicUnitState(curriculum, topic)` → `{ active, current }`, `listTopics(curriculum, { qualId?, activeOnly = true, currentOnly = false }?)` → `[{ id, qualId, unitId, title, kind }]`, `topicExtract(curriculum, topicId)` → `{ qualification, unit, topic, assessmentObjectives, commandWords } | null`, `startCurriculum({ dir, log? })` → curriculum or null (logs counts, file names and topic IDs only). Loaded by `server/index.js` once storage is ready; not yet used by any route (WP-104/111).
+- `server/ai/read-tools.js`: `READ_CURRICULUM`, `READ_NOTEBOOK`, `NOTEBOOK_DIR`, `MAX_NOTEBOOK_ENTRIES` (20), `MAX_NOTEBOOK_FILES` (500), `MAX_ENTRY_TEXT` (2000), `TEXT_AUTHORS` (`learner, ai, source`), `readCurriculumTool({ getCurriculum })`, `notebookEntryForModel(raw)`, `readNotebookEntries(storageDir)`, `selectNotebookEntries(entries, scope = {}, args = {})` → `{ entries, more } | { entries: [], note }` (another task's notes never returned; model args only narrow the server's scope), `readNotebookTool({ getStorageDir, scope?, readEntries? })`, `createReadTools({ getCurriculum, getStorageDir, scope? })` → `[read_curriculum, read_notebook]`.
+  - **Notebook record contract (for WP-115):** `{ id, type, title, text: { value, author }, taskId?, topicIds?, source?: { title, author, url }, updatedAt, deletedAt? }`; `read_notebook` also accepts `text` as a string with a top-level `author`.
+- `scripts/curriculum-check.js`: `checkLines(curriculum): Promise<string[]>` (counts, unit-choice status and field names only, never content).
 - `scripts/make-documents.js`: `crc32(buf): number`, `makeZip(entries): Buffer`, `makeDocx(paragraphs): Buffer`, `makePdf(pages): Buffer` (invented fixtures built in memory)
 - `scripts/spike-documents.js`: `CHECKS` (`docx, pdf, scan, broken, long`), `MARKERS`, `LONG_PAGES` (60), `USAGE`, `parseArgs(argv)`, `typeForFile(name)`, `judge(check, result)`, `fixtureFor(check)`, `summary(result)`, `runSpike({ only?, file?, extract?, read? })`, `libraryVersions(resolver?, readJson?)`, `formatReport(report, versions?): string[]`
 - `scripts/spike-web-tools.js`: `CHECKS`, `USAGE`, `parseArgs(argv)`, `numericFields(data)`, `createCollector()`, `toolEvidence(collector)`, `judgeFetch(parsed, evidence)`, `judgeSearch(parsed, evidence)`, `judgeRefusal({ text, secret, markerExists, permissions })`, `judgeCache(usageByCall)`, `cacheSystemPrompt(lines = 200)`, `runFetch`, `runSearch`, `runRefusal({ ai, model, tools, variant, timeoutMs })`, `runCache({ ai, model, timeoutMs })`, `runSpike({ ai, models, role?, tools?, only?, timeoutMs? })`, `formatReport(report): string[]`
@@ -152,7 +161,7 @@ web/shared/wake.js
 ## Scripts
 - `scripts/stamp-versions.sh <web-dir> <version>`: deploy-time `?v=` stamping (exit 2 bad args, exit 1 unstamped reference).
 - `scripts/start-server.sh [--foreground|--watch]`: proven start script (blueprint §3.2); logs to `.server/`.
-- `npm test`: `node --test`. `npm run icons`: regenerate the PNG icons. `npm run server`: restart the server in the background and tail the log. `npm run models [-- --json]`: list the account's Copilot models and check `models.json`. `npm run spike:image -- <image> [--deadline YYYY-MM-DD] [--role <role>] [--mode both|file|blob]`: phase 0 test 1 (image input); refuses images inside the repo except `.server/`. `npm run spike:web [-- --role <role>] [--tools a,b] [--only fetch,search,refuse,cache]`: phase 0 test 2 (web tools, refusals, cache); the SDK `BuiltInTools` export is shown for reference only. `npm run spike:tools [-- --role <role>] [--only call,refuse]`: phase 1 spike (WP-101): the model calls an invented read-only custom tool, and shell, file and web requests stay refused (uses Copilot credits). `npm run spike:docs [-- --only docx,pdf,scan,broken,long] [--file <.pdf|.docx>]`: WP-102 document extraction spike (invented files built in memory; `--file` prints counts only, never text; no credits). `npm run storage:check [-- --no-wait]`: phase 0 verify step 7 (clone, write and push, then push again after an `inbox/` commit made on GitHub).
+- `npm test`: `node --test`. `npm run icons`: regenerate the PNG icons. `npm run server`: restart the server in the background and tail the log. `npm run models [-- --json]`: list the account's Copilot models and check `models.json`. `npm run spike:image -- <image> [--deadline YYYY-MM-DD] [--role <role>] [--mode both|file|blob]`: phase 0 test 1 (image input); refuses images inside the repo except `.server/`. `npm run spike:web [-- --role <role>] [--tools a,b] [--only fetch,search,refuse,cache]`: phase 0 test 2 (web tools, refusals, cache); the SDK `BuiltInTools` export is shown for reference only. `npm run spike:tools [-- --role <role>] [--only call,refuse]`: phase 1 spike (WP-101): the model calls an invented read-only custom tool, and shell, file and web requests stay refused (uses Copilot credits). `npm run curriculum:check`: loads `curriculum/` from the storage clone (`STORAGE_DIR` or `/workspaces/storage`) as the server does; prints counts, unit-choice status and field names only; exits 1 with `Overall: CHECK` if anything is missing. `npm run spike:docs [-- --only docx,pdf,scan,broken,long] [--file <.pdf|.docx>]`: WP-102 document extraction spike (invented files built in memory; `--file` prints counts only, never text; no credits). `npm run storage:check [-- --no-wait]`: phase 0 verify step 7 (clone, write and push, then push again after an `inbox/` commit made on GitHub).
 - `npm run alert:check [-- --only 3|2] [--gap <seconds>]`: verify step 11 (sends real test alerts; Codespace terminal only).
 - `npm run evals [-- --yes | --mock] [--category a,b] [--id a,b] [--limit n] [--model id] [--judge-model id] [--seed n] [--timeout s]`: the boundary test set (blueprint §11). No options = dry run (validates cases, prints the plan, sends nothing). `--yes` uses Copilot credits. Reports go to `evals/results/report-<UK time>.md` and `.json` (git-ignored; they hold model output).
 - `node scripts/inbox-check.js [worker address]`: verify steps 9 (server half) and 10 (8 MB through the Worker); sends two invented files and tidies up.
@@ -237,9 +246,10 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
+- Curriculum field names not yet confirmed against the private files in the Codespace (until the owner runs `npm run curriculum:check`). Claude Code ran it against a local checkout of the private curriculum on 31 Oct 2026: 4 qualifications, 312 topics, 0 problems, `Overall: PASS`. Note: the private qualification records hold the either/or groups as `structure.optionalGroups`, but the loader reads a top-level `optionalGroups`; no effect today, because every unit has `type` mandatory/optional.
 - `wake/worker.js` `/repo-file`: the final catch logs `err?.message ?? String(err)`, whereas every other catch in the Worker logs only `err?.name`. Low risk: the route reads only the public repository, uses no token or setting, and doesn't log the path. Change it to `err?.name` in the next package that changes the Worker anyway, so that no extra Cloudflare paste is needed (owner decision, 31 Oct 2026).
 - `wake/worker.js`: the opening comment still says a later package adds the weekly wake (WP-016). A-004 removed that. Correct it in the same Worker change.
-- Dependencies: `@github/copilot-sdk` 1.0.22, `mammoth` 1.13.0, `pdfjs-dist` 6.4.299 (all pinned). `pdfjs-dist` needs Node >=22.13.0 (Codespace image `javascript-node:1-22`) and pulls in the optional native package `@napi-rs/canvas` 1.1.0 (not used for text). `isEvalSupported` no longer exists in pdf.js 6.4.299 (ignored; the library has no runtime code compilation). `zod` is overridden to 4.6.7 (see Deviations); `npm audit` reports 0 vulnerabilities..
+- Dependencies: `@github/copilot-sdk` 1.0.22, `mammoth` 1.13.0, `pdfjs-dist` 6.4.299 (all pinned). `pdfjs-dist` needs Node >=22.13.0 (Codespace image `javascript-node:1-22`) and pulls in the optional native package `@napi-rs/canvas` 1.1.0 (not used for text). `isEvalSupported` no longer exists in pdf.js 6.4.299 (ignored; the library has no runtime code compilation). `zod` is overridden to 4.6.7 (see Deviations); `npm audit` reports 0 vulnerabilities.
 - Eval set is an outline (34 cases; target 40–60). Results before phase 1 reflect the placeholder prompt, not the real skill files.
 - Nothing calls `sendAlert` yet (phase 1 `server/wellbeing.js`). No weekly wake (A-004); the `wake-failed` alert kind is kept but unused.
 - Accessibility settings have no settings screen yet; `profile/accessibility.json` in the storage repository is written in a later phase. The dyslexia-friendly font uses locally installed fonts only (no download), so on Android it falls back to the system sans-serif with wider letter and word spacing.
