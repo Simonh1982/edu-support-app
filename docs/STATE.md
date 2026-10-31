@@ -1,6 +1,6 @@
-STATE version: 21
-Updated: 2026-10-31 17:38 (UK time)
-Last work package applied: WP-102
+STATE version: 22
+Updated: 2026-10-31 17:57 (UK time)
+Last work package applied: WP-102 (then an owner-approved hotfix outside any package: `zod` override, see Deviations)
 
 ## File tree
 ```
@@ -226,19 +226,20 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - Step 17 passed 31 Oct 2026: erasure dry run with an invented file in the storage repository. The owner rewrote the history and force-pushed `main`. The file is gone from all history (404 on GitHub; Claude Code confirmed it's absent from every commit). The Codespace cloned storage again cleanly (`storage` ok, ready, nothing pending) and the app reached Tutor ready. The private erasure runbook was updated to match (WP-020b): the owner runs it; stop the server but keep the Codespace running; delete `/workspaces/storage` straight after the force-push, before the server starts again.
 - **Phase 0 exit check complete (31 Oct 2026):** sign-in works on the phone, laptop and a shared computer; a photo taken while the backend was asleep appeared once it was awake; a test level-3 alert reached the owner. The school network check is no longer part of the exit check (A-006).
 - WP-101 custom tools: `npm run spike:tools` run by the owner in the Codespace on 31 Oct 2026: `call`, `refuse (allowed list)` and `refuse (permission check only)` all PASS.
+- WP-102 document extraction: `npm run spike:docs` run by the owner in the Codespace on 31 Oct 2026 (Node 22.16.0, mammoth 1.13.0, pdfjs-dist 6.4.299): docx, pdf, scan, broken and long all PASS; Overall PASS.
 - Docs uploaded by the owner on 31 Oct 2026: `docs/blueprint.md` "Version: 1.4 (31 October 2026: phase 0 complete; …)"; `docs/build-spec.md` "Version: generated from master specification v3.6 (31 October 2026)".
 
 ## Deviations in effect
+- `package.json` (owner-approved hotfix, 31 Oct 2026, not from a work package): `"overrides": { "zod": "4.6.7" }` added after `dependencies`; lockfile regenerated. Reason: `npm audit` flagged 2 high (GHSA-mrhx-c7xc-m3w5, memory exhaustion) in `zod` 4.3.6, which `@github/copilot-sdk` 1.0.22 pins exactly (1.0.28 pins the same). Nothing in the app or the SDK imports `zod` at run time (SDK uses it in type definitions only). After the override: `npm audit` 0 vulnerabilities; `npm ci`, `npm test` (361/361) and `npm run spike:docs` pass; the SDK still loads (`defineTool` present). Future packages that edit `package.json` must keep the `overrides` block; remove it only once the SDK pins `zod` >=4.6.6.
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
 - `test/storage.test.js` (WP-014a-fix): the fake git answers `ls-files` (no unmerged paths), and the "failed pull aborts the rebase" test expects `ls-files` then `rebase` after the failed pull, because `syncLocked` now checks for clashes first.
 - `wake/worker.js` `/repo-file` (WP-014c): no pass, by owner decision, because it serves only the public repository.
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
-- Document extraction proven offline only until the owner runs `npm run spike:docs` in the Codespace (WP-102).
 - `wake/worker.js` `/repo-file`: the final catch logs `err?.message ?? String(err)`, whereas every other catch in the Worker logs only `err?.name`. Low risk: the route reads only the public repository, uses no token or setting, and doesn't log the path. Change it to `err?.name` in the next package that changes the Worker anyway, so that no extra Cloudflare paste is needed (owner decision, 31 Oct 2026).
 - `wake/worker.js`: the opening comment still says a later package adds the weekly wake (WP-016). A-004 removed that. Correct it in the same Worker change.
-- Dependencies: `@github/copilot-sdk` 1.0.22, `mammoth` 1.13.0, `pdfjs-dist` 6.4.299 (all pinned). `pdfjs-dist` needs Node >=22.13.0 (Codespace image `javascript-node:1-22`) and pulls in the optional native package `@napi-rs/canvas` 1.1.0 (not used for text). `isEvalSupported` no longer exists in pdf.js 6.4.299 (ignored; the library has no runtime code compilation). `npm audit` reports 2 high (`zod` <4.6.6 via `@github/copilot-sdk`; pre-existing, not from WP-102; the only offered fix downgrades the SDK, so not applied).
+- Dependencies: `@github/copilot-sdk` 1.0.22, `mammoth` 1.13.0, `pdfjs-dist` 6.4.299 (all pinned). `pdfjs-dist` needs Node >=22.13.0 (Codespace image `javascript-node:1-22`) and pulls in the optional native package `@napi-rs/canvas` 1.1.0 (not used for text). `isEvalSupported` no longer exists in pdf.js 6.4.299 (ignored; the library has no runtime code compilation). `zod` is overridden to 4.6.7 (see Deviations); `npm audit` reports 0 vulnerabilities..
 - Eval set is an outline (34 cases; target 40–60). Results before phase 1 reflect the placeholder prompt, not the real skill files.
 - Nothing calls `sendAlert` yet (phase 1 `server/wellbeing.js`). No weekly wake (A-004); the `wake-failed` alert kind is kept but unused.
 - Accessibility settings have no settings screen yet; `profile/accessibility.json` in the storage repository is written in a later phase. The dyslexia-friendly font uses locally installed fonts only (no download), so on Android it falls back to the system sans-serif with wider letter and word spacing.
