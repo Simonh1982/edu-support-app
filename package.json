@@ -16,6 +16,7 @@
     "spike:web": "node scripts/spike-web-tools.js",
     "spike:tools": "node scripts/spike-custom-tools.js",
     "spike:docs": "node scripts/spike-documents.js",
+    "curriculum:check": "node scripts/curriculum-check.js",
     "storage:check": "node scripts/storage-check.js",
     "alert:check": "node scripts/alert-check.js",
     "evals": "node evals/run.js"
