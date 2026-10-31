@@ -1,6 +1,6 @@
 # Technical blueprint: the learning-support app (`edu-support-app`)
 
-**Version:** 1.3 (29 October 2026: phase 0 findings to WP-014a-fix; capture route, inbox polling and sync-clash recovery)
+**Version:** 1.4 (31 October 2026: **phase 0 complete**; no weekly wake (A-004), units chosen in the app (A-005), `/repo-file`, owner-run erasure)
 **Status:** build reference for Claude Code. It replaces the earlier generic blueprint.
 **Requirements:** the **build spec** in `docs/build-spec.md`. It is generated from the private
 master specification, which always wins if the two disagree.
@@ -28,7 +28,7 @@ platform.
 │ GitHub Pages (static site)   │ ──────▶ │ sign-in (GitHub OAuth) → signed pass       │
 │ learner app  /               │         │ /status, /wake  (Codespace lifecycle token)│
 │ parent page  /parent/        │         │ /snapshot, /item, /inbox (storage token)   │
-│ cache + queue (own devices)  │         │ weekly cron wake (+ failure alert)         │
+│ cache + queue (own devices)  │         │ /repo-file (public repo; no pass)          │
 └──────────────┬───────────────┘         └───────────────┬──────────────────────────┘
                │ API when awake (HTTPS, port 3000 Public) │ GitHub REST API
                ▼                                          ▼
@@ -53,11 +53,13 @@ platform.
   Codespace and is the **only writer of main records**. The Worker writes only to `inbox/`.
 - **Worker:** a Cloudflare Worker that is always awake. It handles sign-in, wakes the Codespace,
   serves a small read-only **snapshot** plus individual items while the Codespace sleeps, accepts
-  captures into the inbox, and runs a weekly wake.
+  captures into the inbox, and serves public-repository files to the primary coding agent
+  (`/repo-file`). There is **no weekly wake** (A-004): the Codespace is kept with Auto-delete off.
 - **Alerts:** the server sends a `repository_dispatch` event to the storage repository. A GitHub
   Actions workflow there opens or updates an issue as `github-actions[bot]`, so GitHub notifies
   the owner. GitHub doesn't notify you about your own actions, so issues opened with the owner's
-  token would arrive silently.
+  token would arrive silently. The owner is notified **by email**. GitHub Mobile doesn't push new
+  issues: that would need each issue assigned to the owner (open decision, workplan WP-142).
 
 **Cost:** GitHub (free), Cloudflare Workers (free plan), Codespaces (within the owner's personal
 allowance), Copilot (the owner's Business seat). No other services or accounts are needed.
@@ -125,6 +127,12 @@ CLAUDE.md            Claude Code's rules for this private repository (supplied b
   time zone. The full record list is in build spec Appendix A.
 - **Statuses are calculated, not stored** (topic status, plan status, streaks, counts,
   recommendations). `server/derived/` computes them from records and events.
+- **Curriculum files (WP-019a–d).**
+  - Five JSON files per qualification, holding records one per line.
+  - `qualification.json` also holds `optionalGroups` (either/or pairs) and
+    `optionalChoiceComplete`.
+  - **The server writes `selectedUnits` and `currentUnits`** into `qualification.json` when the
+    learner chooses units in the app (A-005). Nothing else in `curriculum/` is written by the app.
 
 ---
 
@@ -230,6 +238,9 @@ exec tail -n 40 -f "$LOG"
   - `storage` is `{ ok, ready, lastPull, lastPush, pending, detail }`.
   - `port` is `{ visibility, detail, attempts, updatedAt }`.
 - `GET /api/item?type=&id=&task=` (pass) follows the same rules as the Worker's `/item` (section 5.2).
+- **Phase 1 (A-005):** a **learner-only** route saves unit selection (`selectedUnits`,
+  `currentUnits`), with the exact route defined in WP-120. The parent role is refused, and the
+  event records unit IDs only.
 - **Every other endpoint requires a valid pass** (section 6) and checks the role.
 - **CORS:** echo the `Origin` back only if it's the Pages origin (or localhost in development).
   Allow the headers `Content-Type, Authorization`. Localhost is allowed only when `DEV_ORIGINS`
@@ -311,6 +322,8 @@ The snapshot lets the always-on Worker show something useful while the Codespace
   section.
 - The app's display name comes from `profile/app.json` (`displayName`, then `name`), or is null.
   `planStatus` and `nextSession` stay null until phase 4.
+- `learner.settings.units` (phase 1, A-005) holds the selected and current unit IDs for each
+  qualification. It never appears in the parent section.
 - The snapshot is written by the store's `beforeCommit` step, so the first batch after start-up
   refreshes it.
 - Individual items are fetched with `GET /item` (section 5.2), which applies the same permission
@@ -348,14 +361,19 @@ The snapshot lets the always-on Worker show something useful while the Codespace
 - Deleting an item removes it from current files, together with its derived material (extracted
   text, corrections). Links from other records are cleared.
 - The confirmation text is in build spec §32.2.
-- **Full erasure from history happens only on request**, following
-  `docs/runbooks/erasure.md` in the storage repository:
-  1. pause writes;
-  2. confirm the inbox is empty;
-  3. run `git filter-repo` to remove the path or text;
-  4. force-push;
-  5. re-clone in the Codespace;
-  6. note that GitHub may keep cached copies briefly, and contact GitHub Support if complete
+- **Full erasure from history happens only on request,** and **the owner runs it**, following
+  `docs/runbooks/erasure.md` in the storage repository. It needs a force-push to `main`, which
+  Claude Code can't do. Proven in the phase 0 dry run (31 October 2026):
+  1. pause captures, and confirm the inbox is empty;
+  2. **stop the server but keep the Codespace running**, because starting the Codespace again would
+     start the server from the old copy;
+  3. rewrite history with `git filter-repo` in a fresh clone in `/tmp`, using the storage token
+     without printing it;
+  4. force-push `main`;
+  5. **straight away, delete `/workspaces/storage`**, before anything can start the server.
+     Otherwise the server could push the erased commits back;
+  6. restart the server, which clones a fresh copy, and check that the erased paths have gone;
+  7. note that GitHub may keep cached copies briefly, and contact GitHub Support if complete
      removal is needed.
 
 ### 4.6 Retention and expiry (run at start-up; no scheduler needed)
@@ -407,10 +425,12 @@ All periods are settings in `server/config.js`.
 | `GET /item?type=&id=&task=` | Pass | One record, looked up by `type` + `id` (+ `task` for items in a task folder). Learner: all types. Parent: only notes, plans and drafts with `sharedWithParent` set. Unshared and missing both return 404 |
 | `POST /inbox?clientId=&type=&source=&kind=&capturedAt=` | Learner pass | Body: base64 text made on the device, up to 8 MB decoded. Writes the file, then its metadata, to `inbox/`. Returns 201 `{ clientId, uploadId, bytes, status: "received" }`; otherwise 400, 403, 413 or 502 |
 | `GET /inbox` | Pass | `{ items: [{ clientId, uploadId, bytes }], count }`, complete captures only |
-| `scheduled()` | Cron | Weekly wake (section 9.3) |
+| `GET /repo-file?path=`, `POST /repo-file` (JSON `{ path }`) | **Anyone** (WP-014c) | Reads `edu-support-app` `main` through raw.githubusercontent.com, with no token. Path: relative; letters, digits, `.`, `_`, `-` and `/` only; no `..`; at most 200 characters. Returns plain text plus a final line `--- end of <path> (<n> lines) ---`; 400, 404, 405, 413 (over 1 MB) or 502. May be up to about 5 minutes behind a merge |
 
 ### 5.3 Rules that apply to every endpoint
 
+- **The one deliberate exception: `/repo-file`** has no pass, origin check or CORS headers, because
+  it serves only the public repository's files (owner decision, WP-014c).
 - **Pass check on every request:** the signature is valid, it hasn't expired,
   `ver == PASS_VERSION`, and the login is still in `ALLOWED_ACCOUNTS`. Removing an account
   therefore takes effect immediately.
@@ -433,7 +453,6 @@ All periods are settings in `server/config.js`.
 3. Select **Edit code**, paste the whole of `wake/worker.js`, then select **Deploy**.
 4. Add the variables and secrets. In the current Cloudflare screens: **Add variable**, tick
    **Secret** for secrets, then **Add variable and deploy**.
-5. Add the cron trigger (section 9.3).
 
 There is no automatic deploy. After any change to `worker.js` in the repository, paste it into
 Cloudflare again.
@@ -735,8 +754,9 @@ jobs:
             await github.rest.issues.create({ owner, repo, title, body: "No details are recorded. Please check in." });
 ```
 
-- Issues are created by `github-actions[bot]`, so the owner is notified by email and by push if
-  they use the GitHub Mobile app. The owner must be **watching** the storage repository, which is
+- Issues are created by `github-actions[bot]`, so the owner is notified **by email** (proven: within
+  a minute). GitHub Mobile doesn't push new issues; push would need each issue assigned to the
+  owner (open decision, workplan WP-142). The `wake-failed` kind is kept but unused (A-004). The owner must be **watching** the storage repository, which is
   the default for repositories they create.
 - The display name used in issue titles can be read from `profile/app.json` by the workflow if
   wanted. The title never contains anything the learner said.
@@ -770,22 +790,21 @@ nothing to change in `web/config.js`.
 - When the backend stops answering, the app switches to snapshot mode and keeps unsent work in the
   queue. After the next wake, the conversation resumes from the saved turns.
 
-### 9.3 Weekly wake (Worker cron)
+### 9.3 Keeping the Codespace (amendment A-004)
 
-- Cloudflare → Worker → **Settings → Triggers → Cron Triggers**: add `0 3 * * 1` (Mondays, 03:00
-  UTC).
-- `scheduled()` calls the same start logic as `/wake`. A `409` response counts as success.
-- **On failure** (any 401, 403, 404 or 5xx), it sends `repository_dispatch` with
-  `{ kind: "wake-failed" }` using `STORAGE_TOKEN`. The owner is then notified (section 8).
-- Each wake resets GitHub's 30-day deletion clock. The cost is about 2 hours of Codespace time a
-  month.
+- The Codespace is kept with **Auto-delete codespace** switched off: in its **⋯** menu on
+  github.com/codespaces, a bookmark icon shows next to its name. GitHub therefore never deletes it
+  for being unused.
+- There is **no weekly wake** and no cron trigger, so nothing checks the Worker's tokens between
+  uses. Renew them by the dates in the private credential register.
 
 ### 9.4 If the Codespace is ever replaced
 
 1. Create a new Codespace on `main`.
-2. Check that the Codespaces secrets are scoped to the app repository (they carry over).
-3. Update `CODESPACE_NAME` in the Worker.
-4. Fully stop and start the new Codespace.
+2. **Straight away, switch off Auto-delete codespace** on it (section 9.3).
+3. Check that the Codespaces secrets are scoped to the app repository (they carry over).
+4. Update `CODESPACE_NAME` in the Worker.
+5. Fully stop and start the new Codespace.
 
 The data is safe in the storage repository.
 
@@ -877,6 +896,16 @@ The data is safe in the storage repository.
 - The learner's "What `{parent}` sees" preview uses the same parent-side calculation, so the two can never
   differ.
 
+### 10.8 Settings screens (phase 1)
+
+These sit behind the smaller **Settings** link, never among the three main actions:
+- **accessibility**, which writes `profile/accessibility.json`;
+- **presentation choices** (set options turned into fixed wordings; build spec §30);
+- **unit selection (A-005)**, which is learner only:
+  - mandatory units are locked, and optional units need the exact number required;
+  - either/or groups are respected;
+  - an incomplete choice is said plainly.
+
 ---
 
 ## 11. Testing
@@ -889,6 +918,10 @@ The data is safe in the storage repository.
 | `npm run spike:image`, `npm run spike:web` | Phase 0 tests 1 and 2: image input; web tools, refusals and prompt cache |
 | `npm run storage:check` | Verify step 7: clone, write and push, then push again after a commit made on GitHub |
 | `node scripts/worker-check.js`, `item-check.js`, `inbox-check.js` | Live checks of the Worker set-up, the parent role and the inbox (invented data, tidied up afterwards) |
+
+**Evals:** with no options, `npm run evals` is a dry run that sends nothing. `--yes` uses Copilot
+credits, so don't run with `--yes` until the real skill files exist (WP-104). `npm test` never
+calls models.
 
 `npm test` covers:
 - pass signing and expiry, version and account checks;
@@ -925,13 +958,17 @@ skill-file change,** the failures only.
 
 ## 12. Configuration and credential register
 
+**Names, created dates and expiry dates live in the private credential register**
+(`docs/credential-register.md` in the storage repository), never here. Cloudflare invocation logs
+are on. This is accepted, because no `Authorization` header is logged (checked in phase 0).
+
 | Name | Where | Purpose | Notes |
 |---|---|---|---|
 | `COPILOT_GITHUB_TOKEN` | **Repository** Codespaces secret on the app repo | AI calls | Fine-grained, Public repositories (read-only), Copilot Requests; **note its expiry**. A *user* secret with the same name applies only to the repositories it lists |
 | `GH_PORTS_TOKEN` | Codespaces secret | Make the port Public | Classic, `codespace` scope only; **note its expiry** |
 | `STORAGE_TOKEN` (server) | Codespaces secret | Clone, push, send alerts | Fine-grained, storage repo only, Contents read/write; **note its expiry** |
 | `GITHUB_TOKEN` (Worker) | Worker secret | Status and wake | Fine-grained, app repo only, Codespaces read plus lifecycle admin; **note its expiry** |
-| `STORAGE_TOKEN` (Worker) | Worker secret | Snapshot, item, inbox, wake-failure alert | A separate token; storage repo only, Contents read/write; **note its expiry** |
+| `STORAGE_TOKEN` (Worker) | Worker secret | Snapshot, item, inbox | A separate token; storage repo only, Contents read/write; **note its expiry** |
 | `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` | Worker | Sign-in | From the GitHub OAuth app |
 | `PASS_SIGNING_KEY` | Worker **and** Codespace | Sign and verify passes | Change both together |
 | `PASS_VERSION` | Worker **and** Codespace | Sign out all devices | Raise both together |
@@ -949,7 +986,7 @@ skill-file change,** the failures only.
 
 ## 13. Phase 0 set-up checklist
 
-Do the steps in order, and confirm each one works before moving on. **Progress (29 October 2026):** steps 1–8 and 10 have passed, and the server half of step 9. The live record is the workplan and `STATE.md`.
+Do the steps in order, and confirm each one works before moving on. **Phase 0 complete (31 October 2026).** Every step passed, except step 12 (replaced by a bookmark check, A-004) and step 15 (optional, A-006). The live record is `STATE.md`.
 
 1. **Repositories.** In the public `edu-support-app`, add `CLAUDE.md`, `docs/`, `web/` (a
    sign-in screen only) and `pages.yml`, and set Pages → Source: GitHub Actions. In the private
@@ -977,26 +1014,27 @@ Do the steps in order, and confirm each one works before moving on. **Progress (
    reaches the app; the parent role can't open unshared items.
 9. **Snapshot and inbox.** *Verify:* with the Codespace stopped, the phone shows the snapshot; a
    photo taken then appears on the laptop as "received", and once the Codespace is awake it is
-   processed within 10 seconds.
+   processed within about 20 seconds.
 10. **Worker CPU.** *Verify:* an 8 MB upload through `/inbox` succeeds on the free plan.
 11. **Alerts.** Send a test dispatch for level 3 and one for level 2 (twice in one day).
     *Verify:* the owner, and the forwarding address if set up, receive them within 5 minutes; the
     second level-2 alert is added as a comment.
-12. **Weekly wake.** Add the cron trigger, and simulate a failure (for example with a wrong
-    Codespace name in a test run).
-    *Verify:* the "Weekly wake failed" issue arrives.
+12. **Keeping the Codespace** (replaces the weekly wake, A-004). *Verify:* the Codespace shows the
+    bookmark icon (Auto-delete off) and is owned by the owner's personal account.
 13. **Curriculum outlines.** The **code-writing agent** writes the outlines and stable topic IDs from
     the owner's original PDFs in its curriculum library, as work packages targeting the **storage**
     repository, one qualification at a time. Claude Code only validates and commits them.
     *Verify:* the owner spot-checks one qualification before it is committed.
 14. **End to end.** Stop the Codespace, open the Pages site in a private window and sign in.
     *Verify:* the snapshot appears at once, and live AI is available within about 2 minutes.
-15. **School network.** Ask the learner to open the site on a school PC.
+15. **School network** (optional, A-006; WP-020-school). Ask the learner to open the site on a
+    school PC. If any address is blocked, the learner uses the phone app at school.
     *Verify:* `github.com`, `*.github.io`, `*.workers.dev` and `*.app.github.dev` all load.
 16. **Credential register.** Complete it, with expiry dates.
-17. **Erasure dry run** (in WP-020, after step 16). In `edu-support-data`, with the Codespace
-    server stopped and the inbox empty, commit an invented test file. Then follow
-    `docs/runbooks/erasure.md` to erase it from history.
+17. **Erasure dry run** (in WP-020, after step 16; **run by the owner**). In `edu-support-data`,
+    commit an invented test file. Then follow `docs/runbooks/erasure.md` to erase it from history:
+    the server is stopped but the Codespace keeps running, and `/workspaces/storage` is deleted
+    straight after the force-push.
     *Verify:* `git log --all -- <path>` shows nothing; the Codespace re-clones cleanly; the app
     starts normally.
 
@@ -1030,6 +1068,8 @@ Do the steps in order, and confirm each one works before moving on. **Progress (
 | `git log` fills the screen and won't return | Long output opens a pager | Press `q`, or use `git --no-pager log --oneline -3` |
 | `import('@github/copilot-sdk')` fails under `node -e` | SDK 1.0.22 calls `createRequire` on `[eval]` | Run SDK checks from a module file |
 | A test image "not found" | `.jpg` vs `.jpeg` | Use the file's exact name; test photos go in `.server/` |
+| Waking fails and the Codespace isn't listed on github.com/codespaces | It was deleted or replaced | Create one (section 9.4), switch off Auto-delete straight away, update `CODESPACE_NAME` |
+| An erased file has come back after an erasure | The server restarted from the Codespace's old copy before it was deleted | Stop the server, delete `/workspaces/storage`, then repeat the erasure from the fresh-clone step |
 
 ---
 
@@ -1051,3 +1091,23 @@ Do the steps in order, and confirm each one works before moving on. **Progress (
 - **Never put anything about the learner in this public repository** (see the top of this
   document). If the build spec and this blueprint ever disagree with the private master
   specification, ask the owner. Don't guess.
+
+---
+
+## 16. Phase 1 notes
+
+- **Unverified until their spikes:**
+  - custom read-only tools through the SDK (`defineTool`; WP-101);
+  - server-side Word and PDF text extraction, which needs new, pinned dependencies (WP-102).
+  Don't build on either before its spike passes.
+- **Carried from phase 0:**
+  - photos are sent as **blob** attachments;
+  - the `processing` backlog is read automatically;
+  - A-001 (brief corrections), A-003 (scanned PDFs) and A-005 (unit selection);
+  - `server/wellbeing.js` calls `sendAlert` (levels 2 and 3);
+  - per-pass rate limits and a daily AI request ceiling (section 3.5) arrive with the first AI
+    routes (WP-105).
+- **Worker tidy-ups** go in the next package that changes the Worker:
+  - `/repo-file`'s final catch should log `err?.name` only;
+  - remove the opening comment about a weekly wake.
+- **`npm run evals --yes`** waits for the real skill files (WP-104).

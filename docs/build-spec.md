@@ -1,8 +1,8 @@
 # Build specification: `edu-support-app`
 
-**What this is:** the requirements for building the app. It is generated from the private master specification with personal details removed. **If the two ever disagree, the master wins: ask the owner.**
-**Companion document:** `edu-support-app_technical_blueprint.md` (how the app is built).
-**Version:** generated from master specification v3.5 (29 October 2026).
+**What this is:** the requirements for building the app. It is generated from the private master specification with personal details removed. **If the two ever disagree, the master wins: ask the owner.**  
+**Companion document:** `edu-support-app_technical_blueprint.md` (how the app is built).  
+**Version:** generated from master specification v3.6 (31 October 2026).
 
 **How to read it**
 - Sections keep the master's numbering, so references such as §23.5 match the blueprint.
@@ -19,7 +19,7 @@
 
 The app is an AI-enabled educational support, revision and organisation app for one sixth-form learner.
 
-The learner is studying A-level subjects, a BTEC National qualification and, later, an Extended Project Qualification. The exact qualifications, units and options are held in private data (Appendix A.2).
+The learner is studying A-level subjects, a BTEC National qualification and, later, an Extended Project Qualification. The exact qualifications, units and options are held in private data (Appendix A.2), and the learner chooses units in the app (§6).
 
 The app will help the learner:
 
@@ -117,7 +117,7 @@ The learner's qualifications are configured in private data: awarding bodies, sp
 - a unit-based BTEC National qualification; and
 - an AQA Extended Project Qualification, a project the learner defines.
 
-Appendix A.2 sets out the Topic kinds needed to support all three.
+Appendix A.2 sets out the Topic kinds needed to support all three. The learner chooses optional and current units in the app (A-005, §6).
 
 ---
 
@@ -159,6 +159,12 @@ The learner home screen should focus on three large actions:
 3. **See what’s coming up**
 
 A smaller link should provide access to recent work, progress and achievements, and settings.
+
+**Unit selection (A-005)** is one of the settings.
+- The learner chooses his optional units and marks which units are current.
+- Mandatory units are locked, and optional units need the exact number the qualification requires. Either/or pairs are respected.
+- If the choice is incomplete, the app says so plainly and treats every unit as possible until it's complete.
+- Only the learner can change this. The parent side never shows it.
 
 The home screen may also display one concise recommendation, such as:
 
@@ -778,7 +784,7 @@ The live check applies to **assignment-related replies only**: Plan my answer, R
 
 ### 23.7 Testing the boundary
 
-A test set of 40–60 prompts is run with `npm test` against each candidate model, and whenever a skill file changes (details in Appendix C). It covers leak attempts **and** legitimate requests that must not be refused. A second model judges each reply. The owner reviews the results as follows:
+A test set of 40–60 prompts is run with `npm run evals` (: `npm test` never calls models) against each candidate model, and whenever a skill file changes (details in Appendix C). It covers leak attempts **and** legitimate requests that must not be refused. A second model judges each reply. The owner reviews the results as follows:
 - **after a model change:** the failures plus 5 random passes;
 - **after a small skill-file tweak:** the failures only.
 
@@ -929,7 +935,7 @@ The AI responds according to three levels:
 - Detection by AI will sometimes miss warning signs and sometimes raise false alarms. It is a **backstop, not a safety system**, and nobody should rely on it as one.
 - **At the time.** At level 3 the AI says something like *"I’ll let `{parents}` know."* At level 2 it uses a lighter line, such as *"If you want to talk it through, `{parents}` are around."* At level 1 it gives a sympathetic reply only.
 - **Timing.** Level 3 alerts are sent immediately. Level 2 sends at most one alert a day: the first level-2 moment opens that day’s alert and any later ones are added to it.
-- **Channel.** The server signals the private repository, and a GitHub Actions workflow opens an issue as `github-actions[bot]`, with a title that says nothing about what he said (e.g. *"Check in with the learner (level 3)"*). Because the bot opens it, GitHub notifies the owner by email and push; GitHub does not notify people about their own actions. This is tested in phase 0.
+- **Channel.** The server signals the private repository, and a GitHub Actions workflow opens an issue as `github-actions[bot]`, with a title that says nothing about what he said (e.g. *"Check in with the learner (level 3)"*). Because the bot opens it, GitHub notifies the owner **by email**; GitHub does not notify people about their own actions. GitHub Mobile doesn't push new issues. Push would need each alert issue assigned to the owner, which is an open decision. This is tested in phase 0.
 - **Detection.** Only **messages the learner types to the app** are rated, through a `wellbeingLevel` field in the reply at no extra cost.
   - **Never rated:** drafts, notes, uploaded briefs, spelling checks and sources. Schoolwork on difficult themes (a character's death in Drama, a disaster in Geography) therefore doesn't raise false alarms.
   - The AI is told to distinguish *discussing a topic* from *talking about himself*. Tests include Drama- and Geography-style themes.
@@ -942,7 +948,7 @@ The AI responds according to three levels:
 
 - **All information about the learner** is kept in the private repository `edu-support-data`. This includes records, uploads, the event log and the master specification.
 - The public repository `edu-support-app` holds only code, the AI’s skill files and invented test data.
-- **Deletion.** Deleting removes the item from the app straight away. Material derived from it (extracted text, corrections) goes with it; linked tasks remain without the link. The confirmation reads: *"Removed from the app. A backup copy remains in the app’s history. Ask `{parent}` if you want it erased completely."* Full erasure from the history happens **only on request**, in a single Claude Code session, following a short runbook kept in the private repository. **Delete the account** removes everything from the app; full erasure then means replacing the storage repository, also on request.
+- **Deletion.** Deleting removes the item from the app straight away. Material derived from it (extracted text, corrections) goes with it; linked tasks remain without the link. The confirmation reads: *"Removed from the app. A backup copy remains in the app’s history. Ask `{parent}` if you want it erased completely."* Full erasure from the history happens **only on request**. It is carried out by **the owner**, following the runbook in the private repository, because Claude Code can't force-push `main`. The runbook was tested in the phase 0 dry run. **Delete the account** removes everything from the app; full erasure then means replacing the storage repository, also on request.
 - **How long conversations are kept.** AI conversations linked to a task are removed **30 days after the task is completed**. Conversations not linked to a task are kept for **60 days**. Drafts, plans and feedback are kept as part of his learning history. Both periods are settings. The 30 days start when the task is **first** marked submitted or done. Clean-ups run each time the server starts, so no scheduler is needed.
 - **Keeping the public repository clean.** A `CLAUDE.md` file in `edu-support-app` instructs that no information about the learner is ever committed there. The prompt profile, tone examples written about him and samples of his writing are kept in the private repository.
 
@@ -1137,7 +1143,7 @@ This should be assessed during technical planning with Claude Code.
 
 No other paid services are needed. Codespaces use is expected to stay within the personal free allowance.
 
-- **Weekly wake.** The Worker wakes the Codespace once a week (about 2 hours a month), so GitHub never deletes it for being unused. If a wake fails, the owner is alerted through the same Actions workflow as other alerts.
+- **Keeping the Codespace (A-004).** The Codespace is kept with **Auto-delete codespace** switched off, shown by a bookmark icon on github.com/codespaces, so GitHub never deletes it for being unused. There is no weekly wake. If the Codespace is ever replaced, switch Auto-delete off straight away and update the Worker's `CODESPACE_NAME`.
 - **Technical detail** is in the app's own technical blueprint (`edu-support-app_technical_blueprint.md`), which replaces the generic blueprint.
 - **How the code is written and implemented** is set out in Appendix E.
 
@@ -1242,9 +1248,9 @@ Each phase ends when its exit check passes, not on a date.
 
 | Phase | Contents | Exit check |
 |---|---|---|
-| **0. Foundations** | Both repositories (`edu-support-app`, `edu-support-data`), Pages, Codespace and Copilot connection. The Worker: waking, inbox and inbox listing, snapshot, GitHub sign-in with a 30-day pass checked on every request. Storage module (pull before push, batched commits), event log, credential register, `models.json`, mock AI, outline test set, `CLAUDE.md`. The alert workflow. Installable app icon, accessibility basics, separate learner and parent pages. Curriculum outlines and stable topic IDs for all qualifications. The **first capability test is image input** through the Copilot SDK. The weekly wake and its failure alert are included. Image size safeguards (A-002) in the inbox and capture package. An erasure dry run in the final check | Sign-in works on his phone, the laptop and a shared computer. A photo taken while the backend is asleep appears on the laptop once it is awake. A test level-3 alert reaches the owner. School network access checked |
-| **Co-design session** | Before phase 1, run by the owner (Appendix D) | The learner has chosen the name and look, reacted to the tone examples, and his current units are known |
-| **1. MVP: Work and Learn** | Capture to Task with anchors and confirmation; the Upcoming list. The three work routes with attempt before help. Live search, source cards, notebook with authorship, paste check. Learn something with knowledge checks (answers and confidence saved). Spelling check and **"Check my spelling"**. Full detail for current units. Boundary rules, test set and live check. Disclosure handling and alerts. First-run welcome, end-of-session "next step", "What the app knows about you" screen with a "What `{parent}` sees" preview, deletion. Spelling corrections for briefs (A-001); photos sent as blob attachments. Scanned PDFs (A-003) | Passes §57, including **zero leaks on the test set**. The learner uses it for real homework. **Follow-up with the learner after his first fortnight** |
+| **0. Foundations** | Both repositories (`edu-support-app`, `edu-support-data`), Pages, Codespace and Copilot connection. The Worker: waking, inbox and inbox listing, snapshot, GitHub sign-in with a 30-day pass checked on every request. Storage module (pull before push, batched commits), event log, credential register, `models.json`, mock AI, outline test set, `CLAUDE.md`. The alert workflow. Installable app icon, accessibility basics, separate learner and parent pages. Curriculum outlines and stable topic IDs for all qualifications. The **first capability test is image input** through the Copilot SDK. The weekly wake was dropped (A-004); the Codespace is kept with Auto-delete off. Image size safeguards (A-002) in the inbox and capture package. An erasure dry run in the final check | Sign-in works on his phone, the laptop and a shared computer. A photo taken while the backend is asleep appears on the laptop once it is awake. A test level-3 alert reaches the owner. The school network check is optional (A-006). **Closed 31 October 2026** |
+| **Co-design session** | Before phase 1, run by the owner (Appendix D) | The learner has chosen the name and look, reacted to the tone examples, and units can be chosen later in the app (A-005) |
+| **1. MVP: Work and Learn** | Capture to Task with anchors and confirmation; the Upcoming list. The three work routes with attempt before help. Live search, source cards, notebook with authorship, paste check. Learn something with knowledge checks (answers and confidence saved). Spelling check and **"Check my spelling"**. Full detail for current units. Boundary rules, test set and live check. Disclosure handling and alerts. First-run welcome, end-of-session "next step", "What the app knows about you" screen with a "What `{parent}` sees" preview, deletion. Spelling corrections for briefs (A-001); photos sent as blob attachments. Scanned PDFs (A-003). Unit selection (A-005) | Passes §57, including **zero leaks on the test set**. The learner uses it for real homework. **Follow-up with the learner after his first fortnight** |
 | **2. EPQ and deeper review** | AQA EPQ with project topics the learner creates and a project-log style notebook. Draft-to-draft comparison, feedback anchored to his text, "I don’t agree", a first independence signal | Ready before the EPQ starts (expected November). If phase 2 isn't ready in time, phase 1's research and notebook cover the early stages (topic choice, research) |
 | **3. Revise** | **Check-in with the learner first.** Question banks, quizzes, flashcards, exam-style practice with model answers after his attempt. Confidence ratings, misconceptions, scheduler (plain code), Surprise me, mastery labels, focus timer. Inferences switched on (20-week review) | In place well before his first mocks or tests |
 | **4. Planning** | Availability, planned sessions, realism checks, a "welcome back" screen after a gap, and an improved Recommended next | A missed week can be recovered with one action |
@@ -1411,14 +1417,14 @@ The MVP will be defined through structured planning with Claude Code. The planni
 
 | Record | Key fields |
 |---|---|
-| Qualification | Title, awarding body, specification code, version, selected units or options, active? |
+| Qualification | Title, awarding body, specification code, version, active?; **selected and current units, set by the learner in the app**; optional groups (either/or pairs); whether the optional choice is complete  |
 | Unit / component | Qualification, code, title, how it is assessed (exam / coursework) |
 | Topic | **Kind (content topic / learning aim / component / project)** , unit, title, specification reference and page, learning outcomes, related assessment objectives, **detail level (outline / full)** , created by (specification or the learner, for EPQ). **The shared key across all records; IDs never change** |
 | Assessment objective | Code, description, weighting |
 | Command word | Word, meaning, qualification |
 | Criteria / mark-scheme document | Qualification, unit, file, sections indexed by topic or assessment objective |
 
-**Preparation.** Every topic gets an outline and a stable ID from the start, generated from **the owner’s original PDFs** . Full detail is prepared for current units first; Which units are current is held in private data. More detail is added each term. Set texts themselves are not stored.
+**Preparation.** Every topic gets an outline and a stable ID from the start, generated from **the owner’s original PDFs** . Full detail is prepared for current units first; Which units are current is held in private data, set by the learner in the app (A-005). More detail is added each term. Set texts themselves are not stored.
 
 ### A.3 Work
 
@@ -1493,10 +1499,10 @@ flowchart LR
   P[Phone / laptop / school PC] -->|sign-in, snapshot, items, inbox, wake| W[Cloudflare Worker]
   P -->|API when awake| S[Codespace server<br/>only writer of main records]
   W -->|read snapshot and items, write and list inbox| R[(edu-support-data<br/>private repo)]
-  W -->|start Codespace; weekly wake| S
+  W -->|start Codespace| S
   S -->|pull, commit, push| R
   S -->|repository signal| A[GitHub Actions workflow]
-  W -->|wake-failed signal| A
+  AG[Primary coding agent] -->|/repo-file: public repo only| W
   A -->|opens alert issue as bot| R
   S -->|allowed tools only| M[Copilot models]
 ```
@@ -1520,7 +1526,7 @@ flowchart LR
 **Waking and keeping alive**
 - Wake on request, with a 30-minute idle timeout; the server warns about 5 minutes before it rests.
 - The Worker's `/status` also returns the backend's address, so a replaced Codespace needs only one Worker setting changed.
-- A **weekly Worker wake** prevents deletion after 30 days. If it fails, an alert issue is raised.
+- **No weekly wake (A-004).** The Codespace is kept with Auto-delete switched off.
 - The server runs **in the foreground** in `postStartCommand`, which is proven to be needed for remote waking.
 
 **Sign-in**
@@ -1529,7 +1535,9 @@ flowchart LR
 - The allowed accounts, pass version and signing key live in **both** the Worker and the Codespace, and must be changed together.
 - **The parent page never wakes the Codespace.**
 
-**Alerts.** The server, or the Worker for wake failures, sends a repository signal. A GitHub Actions workflow opens the issue as `github-actions[bot]`, so the owner is notified.
+**Alerts.** The server sends a repository signal. A GitHub Actions workflow opens the issue as `github-actions[bot]`, so the owner is notified **by email**.
+
+**Repository file reader (WP-014c).** The Worker's `/repo-file?path=` lets the primary coding agent read files from the public repository's `main` branch. It is the one deliberate exception to the pass rule: no pass, no token, public repository only.
 
 **Credentials to track, with expiry dates:**
 1. Copilot token;
@@ -1545,11 +1553,11 @@ flowchart LR
 - **Web tools: passed** (WP-007). `web_search` and `web_fetch` are controlled by the allowed list.
 - **The Worker's CPU limit with uploads: passed.** 8 MB in 4.2–5.4 seconds.
 - **Android install: passed.** It installs as a full app without a service worker.
-- School network access.
+- **School network access: optional** (A-006), whenever convenient (WP-020-school).
 - Two-step verification on the learner's GitHub account.
-- That alerts reach the owner.
+- **Alerts: passed** (29 October 2026); the email arrives within a minute.
 - **Prompt caching: passed.** It works, with a 5-minute lifetime.
-- **The erasure runbook,** by a dry run on an invented test file (WP-020).
+- **The erasure runbook: passed** (31 October 2026, dry run carried out by the owner).
 
 ## Appendix C: AI behaviour rules and testing
 
@@ -1588,7 +1596,7 @@ These are invented tasks, used for illustration only.
 
 ### C.3 Test set
 
-40–60 prompts, run with `npm test` against each candidate model, covering:
+40–60 prompts, run with `npm run evals` against each candidate model , covering:
 - direct requests;
 - "just an example" or role-play framing;
 - extraction spread across several turns;
@@ -1618,6 +1626,8 @@ These are decided with the learner at a co-design session. They must be **config
 - which presentation choices are offered (§30);
 - the parent display labels `{parent}` and `{parents}`.
 
+Units are chosen by the learner in the app (§6, A-005), so they don't need settling at the session.
+
 ## Appendix E: Development workflow
 
 **Documents**
@@ -1629,18 +1639,18 @@ These are decided with the learner at a co-design session. They must be **config
 | `edu-support-app_technical_blueprint.md` | Public repo `docs/blueprint.md`; work-platform library | How the app is built |
 | Code-writing agent system prompt | Work platform | The agent's role, handover format and coding standards |
 | `CLAUDE.md` | Public repo | Claude Code's rules: privacy, apply as given, check before applying, report format |
-| `STATE.md` | Public repo `docs/`; pasted into the agent's chat | The current state of the repo, versioned |
+| `STATE.md` | Public repo `docs/`; read by the primary coding agent with `read_repo_file`  | The current state of the repo, versioned |
 
 **Cycle**
 1. The **code-writing agent** on the owner's work platform writes one **work package** at a time. It reads the build spec and blueprint, and opens the curriculum library only when a package needs it.
 2. The owner passes the package to **Claude Code**. Claude Code checks that the package's `Based on: STATE v<n>` line matches the version of `STATE.md` on `main`, then applies it, runs `npm test`, fixes small problems (recording them as deviations) and opens a pull request.
 3. In the same pull request, Claude Code updates `STATE.md` with a new version number, the date and the last work package. It returns a short implementation report, and the owner merges the pull request.
-4. The owner pastes the report and the new `STATE.md` into the agent's chat. The agent always uses the highest-numbered `STATE.md`.
+4. The owner pastes the report into the agent's chat, and the agent reads the new `STATE.md` itself with `read_repo_file` (WP-014c).
 
 **Rules**
 - Nothing about the learner goes in the public repository.
 - The master specification is never uploaded to the work platform.
-- When the agent's chat becomes long, start a fresh one with the system prompt and the latest `STATE.md`.
+- When the agent's chat becomes long, start a fresh one with the system prompt and a short handover summary. The new chat reads `STATE.md` itself.
 
 **Also:**
 - The primary coding agent works from `Workplan-phase<n>.md` in its library (D8). Owner decisions between master versions go in `build-spec-amendments.md` (D9).
@@ -1650,8 +1660,8 @@ These are decided with the learner at a co-design session. They must be **config
 
 ## Items still to verify, and open points
 
-**Verified in phase 0 (to 29 October 2026):**
-- image input through the Copilot SDK (use **blob** attachments), with handwriting read well;
+**Phase 0 closed on 31 October 2026.** Everything on the phase 0 list was verified, including:
+- image input (use **blob** attachments), with handwriting read well;
 - Android install without a service worker;
 - model IDs and start-up tests;
 - web tools and prompt caching;
@@ -1660,13 +1670,18 @@ These are decided with the learner at a co-design session. They must be **config
 - sign-in on phone, laptop and shared computer;
 - parent-role checks;
 - 8 MB uploads through the Worker;
-- the 30-minute idle timeout.
+- the 30-minute idle timeout;
+- alerts (by email);
+- curriculum outlines;
+- the end-to-end check (tutor ready in 18 seconds);
+- the credential register;
+- the erasure dry run (run by the owner).
 
-**Still to verify** (blueprint §13, workplan):
-1. The device half of verify step 9 (WP-014b): a photo taken while the backend sleeps appears on the laptop and is processed after waking.
-2. Alerts and the weekly wake (WP-015, WP-016).
-3. Curriculum outlines (WP-019a–d).
-4. End to end, school network, credential register and the erasure dry run (WP-020).
-5. Haiku's reliability for topic matching, spelling and the live check (phase 1). Move the checker to Sonnet if needed.
+**Still to verify:**
+1. Haiku's reliability for topic matching, spelling and the live check (phase 1, WP-125). Move the checker to Sonnet if needed.
+2. School network access (optional, A-006, WP-020-school).
+3. Two-step verification on the learner's GitHub account (recorded privately).
+
+**Open decisions:** whether alert issues are assigned to the owner, so GitHub Mobile pushes them (WP-142); when the co-design session is held.
 
 Thresholds (§57), the idle timeout and the retention periods are settings, to be tuned after real use.
