@@ -2,7 +2,7 @@
 
 **What this is:** the requirements for building the app. It is generated from the private master specification with personal details removed. **If the two ever disagree, the master wins: ask the owner.**  
 **Companion document:** `edu-support-app_technical_blueprint.md` (how the app is built).  
-**Version:** generated from master specification v3.6 (31 October 2026).
+**Version:** generated from master specification v3.7 (31 October 2026).
 
 **How to read it**
 - Sections keep the master's numbering, so references such as §23.5 match the blueprint.
@@ -201,6 +201,8 @@ The learner's recent list in the snapshot also shows his uploads, as "Photo" or 
 ### 6.2 Learner and parent pages
 
 The learner and parent interfaces have **separate web addresses**. The learner interface has no link to the parent page. A separate address is not protection on its own: every request for parent data must come from the owner’s signed-in GitHub account (§40).
+
+The `{parent}` label can be plural (for example a label naming both parents), so on-screen text must agree with it, such as *"What {parent} see"* when it is plural. Store a singular or plural flag with the label.
 
 ---
 
@@ -908,6 +910,8 @@ The learner should be able to give simple feedback such as:
 
 The app should remember relevant learning preferences.
 
+**Thumbs up and down (A-007).** Every AI reply the learner reads has a thumbs up and a thumbs down. A tap is stored as an event with no text, and he can change or remove it. The owner sees counts only. The counts are used to tune tone and the test set, and are never sent to the model.
+
 The learner should not need to complete a formal learning-style questionnaire.
 
 ## 32. Privacy boundary
@@ -1249,8 +1253,8 @@ Each phase ends when its exit check passes, not on a date.
 | Phase | Contents | Exit check |
 |---|---|---|
 | **0. Foundations** | Both repositories (`edu-support-app`, `edu-support-data`), Pages, Codespace and Copilot connection. The Worker: waking, inbox and inbox listing, snapshot, GitHub sign-in with a 30-day pass checked on every request. Storage module (pull before push, batched commits), event log, credential register, `models.json`, mock AI, outline test set, `CLAUDE.md`. The alert workflow. Installable app icon, accessibility basics, separate learner and parent pages. Curriculum outlines and stable topic IDs for all qualifications. The **first capability test is image input** through the Copilot SDK. The weekly wake was dropped (A-004); the Codespace is kept with Auto-delete off. Image size safeguards (A-002) in the inbox and capture package. An erasure dry run in the final check | Sign-in works on his phone, the laptop and a shared computer. A photo taken while the backend is asleep appears on the laptop once it is awake. A test level-3 alert reaches the owner. The school network check is optional (A-006). **Closed 31 October 2026** |
-| **Co-design session** | Before phase 1, run by the owner (Appendix D) | The learner has chosen the name and look, reacted to the tone examples, and units can be chosen later in the app (A-005) |
-| **1. MVP: Work and Learn** | Capture to Task with anchors and confirmation; the Upcoming list. The three work routes with attempt before help. Live search, source cards, notebook with authorship, paste check. Learn something with knowledge checks (answers and confidence saved). Spelling check and **"Check my spelling"**. Full detail for current units. Boundary rules, test set and live check. Disclosure handling and alerts. First-run welcome, end-of-session "next step", "What the app knows about you" screen with a "What `{parent}` sees" preview, deletion. Spelling corrections for briefs (A-001); photos sent as blob attachments. Scanned PDFs (A-003). Unit selection (A-005) | Passes §57, including **zero leaks on the test set**. The learner uses it for real homework. **Follow-up with the learner after his first fortnight** |
+| **Co-design session** | Before phase 1, run by the owner (Appendix D) | The learner has chosen the name and look, reacted to the tone examples, and units can be chosen later in the app (A-005). **Held:** outcomes C1–C12 |
+| **1. MVP: Work and Learn** | Capture to Task with anchors and confirmation; the Upcoming list. The three work routes with attempt before help. Live search, source cards, notebook with authorship, paste check. Learn something with knowledge checks (answers and confidence saved). Spelling check and **"Check my spelling"**. Full detail for current units. Boundary rules, test set and live check. Disclosure handling and alerts. First-run welcome, end-of-session "next step", "What the app knows about you" screen with a "What `{parent}` sees" preview, deletion. Spelling corrections for briefs (A-001); photos sent as blob attachments. Scanned PDFs (A-003). Unit selection (A-005). Thumbs up and down on replies (A-007) | Passes §57, including **zero leaks on the test set**. The learner uses it for real homework. **Follow-up with the learner after his first fortnight** |
 | **2. EPQ and deeper review** | AQA EPQ with project topics the learner creates and a project-log style notebook. Draft-to-draft comparison, feedback anchored to his text, "I don’t agree", a first independence signal | Ready before the EPQ starts (expected November). If phase 2 isn't ready in time, phase 1's research and notebook cover the early stages (topic choice, research) |
 | **3. Revise** | **Check-in with the learner first.** Question banks, quizzes, flashcards, exam-style practice with model answers after his attempt. Confidence ratings, misconceptions, scheduler (plain code), Surprise me, mastery labels, focus timer. Inferences switched on (20-week review) | In place well before his first mocks or tests |
 | **4. Planning** | Availability, planned sessions, realism checks, a "welcome back" screen after a gap, and an improved Recommended next | A missed week can be recovered with one action |
@@ -1467,6 +1471,7 @@ The MVP will be defined through structured planning with Claude Code. The planni
 | Event log | Type, time, links, small payload |
 | AI turn | Feature, task or topic, model, tokens, credits, latency, success, task-specific-content flag, check result (passed / regenerated / fallback shown), **wellbeingLevel** , text. **Text is removed before saving for level 2 and 3 turns; task-linked turns are removed 30 days after the task is completed; others after 60 days**  |
 | Support event | Type, context, preceding attempt, outcome (tried again / solved / gave up) |
+| Reply feedback (event) | AI turn ID, route, vote (up / down / removed), time. **No text**  |
 | Disclosure event | Date and level only |
 | Notification sent | Type, record it relates to, date |
 
@@ -1682,6 +1687,8 @@ Units are chosen by the learner in the app (§6, A-005), so they don't need sett
 2. School network access (optional, A-006, WP-020-school).
 3. Two-step verification on the learner's GitHub account (recorded privately).
 
-**Open decisions:** whether alert issues are assigned to the owner, so GitHub Mobile pushes them (WP-142); when the co-design session is held.
+**Open decisions:** whether alert issues are assigned to the owner, so GitHub Mobile pushes them (WP-142).
+
+**Co-design session: held.** Its outcomes are private settings (workplan WP-141). The learner's remaining optional unit choices can be set in the app (WP-120).
 
 Thresholds (§57), the idle timeout and the retention periods are settings, to be tuned after real use.
