@@ -1,6 +1,6 @@
-STATE version: 20
-Updated: 2026-10-31 16:54 (UK time)
-Last work package applied: WP-101
+STATE version: 21
+Updated: 2026-10-31 17:38 (UK time)
+Last work package applied: WP-102
 
 ## File tree
 ```
@@ -27,8 +27,10 @@ scripts/alert-check.js
 scripts/inbox-check.js
 scripts/item-check.js
 scripts/list-copilot-models.js
+scripts/make-documents.js
 scripts/make-icons.js
 scripts/spike-custom-tools.js
+scripts/spike-documents.js
 scripts/spike-image-input.js
 scripts/spike-web-tools.js
 scripts/stamp-versions.sh
@@ -46,6 +48,7 @@ server/ai/tools.js
 server/alerts.js
 server/auth.js
 server/config.js
+server/documents.js
 server/index.js
 server/port.js
 server/storage/git.js
@@ -62,6 +65,7 @@ test/auth.test.js
 test/capture.test.js
 test/codespace.test.js
 test/custom-tools.test.js
+test/documents.test.js
 test/evals.test.js
 test/front-end.test.js
 test/image-input.test.js
@@ -117,6 +121,9 @@ web/shared/wake.js
 - `scripts/spike-image-input.js`: `REPO_ROOT`, `USAGE`, `parseArgs(argv)`, `resolveImagePath(input, { cwd?, repoRoot? } = {})`, `ukDate(now = new Date()): string`, `briefPrompts(today)` → `{ system, prompt }`, `checkBrief(parsed, { deadline? } = {})` → `{ verdict: 'PASS' | 'CHECK' | 'FAIL', reasons }`, `visionInfo(list, modelId)`, `runSpike({ ai, models, role?, imagePath, mode?, deadline?, now?, timeoutMs? })`, `formatReport(report): string[]`
 - `server/ai/tools.js`: `WEB_TOOLS` (`['web_fetch', 'web_search']`), `WEB_PERMISSION_KINDS` (`['url']`), `NEVER_ALLOWED_KINDS` (`['shell', 'write', 'read', 'mcp']`), `permissionPolicy(kinds = [])` → `(request) => boolean`, `toolNameOf(value): string | null`, `describePermission(request)` → `{ kind, tool }`, `CUSTOM_TOOL_KIND` (`'custom-tool'`), `CUSTOM_TOOL_NAME_PATTERN`, `MAX_TOOL_RESULT_CHARS` (20000), `TOOL_ERROR_TEXT` (`'Not available.'`), `decidePermission(request, { allowPermission?, customNames? } = {}): boolean`, `checkCustomTools(list = []): string[]`, `toolResultText(value, max?): string`, `wrapToolHandler(tool, { onCall?, now? } = {})` → `async (args) => string` (onCall gets `{ name, ok, ms }` only)
 - `scripts/spike-custom-tools.js`: `CHECKS` (`['call', 'refuse']`), `DEMO_TOOL`, `DEMO_TOPIC`, `USAGE`, `parseArgs(argv)`, `demoTool(code?)` → `{ code, seen, tool }`, `judgeCall({ parsed, code, seen })`, `runCall({ ai, model, timeoutMs })`, `runRefusal({ ai, model, variant, timeoutMs })`, `runSpike({ ai, models, role?, only?, timeoutMs? })`, `formatReport(report): string[]`
+- `server/documents.js`: `DOCX_TYPE`, `PDF_TYPE`, `DOCUMENT_TYPES`, `MAX_DOCUMENT_BYTES` (= `INBOX_MAX_BYTES`), `MAX_PAGES` (40), `MAX_TEXT_CHARS` (100000), `EXTRACT_TIMEOUT_MS` (20000), `SCANNED_CHARS_PER_PAGE` (40), `LOW_TEXT_PAGE_CHARS` (10), `EXTRACT_REASONS`, `cleanText(text): string`, `textChars(text): number`, `joinTextItems(items): string`, `judgePages(pageChars)` → `{ scanned, lowTextPages, totalChars }`, `loadMammoth(importer?)` → `{ lib } | { error }`, `loadPdfjs(importer?, resolver?)` → `{ lib, fontDir, cmapDir } | { error }`, `extractDocument({ bytes, mimeType, timeoutMs?, maxPages?, loaders?, clock? })` → `{ ok: true, kind, text, pageCount, pagesRead, pageChars, scanned, lowTextPages, truncated, warnings, ms }` or `{ ok: false, kind, reason, ms }` (reasons from error names only, never messages). Not called by the running app yet (WP-107).
+- `scripts/make-documents.js`: `crc32(buf): number`, `makeZip(entries): Buffer`, `makeDocx(paragraphs): Buffer`, `makePdf(pages): Buffer` (invented fixtures built in memory)
+- `scripts/spike-documents.js`: `CHECKS` (`docx, pdf, scan, broken, long`), `MARKERS`, `LONG_PAGES` (60), `USAGE`, `parseArgs(argv)`, `typeForFile(name)`, `judge(check, result)`, `fixtureFor(check)`, `summary(result)`, `runSpike({ only?, file?, extract?, read? })`, `libraryVersions(resolver?, readJson?)`, `formatReport(report, versions?): string[]`
 - `scripts/spike-web-tools.js`: `CHECKS`, `USAGE`, `parseArgs(argv)`, `numericFields(data)`, `createCollector()`, `toolEvidence(collector)`, `judgeFetch(parsed, evidence)`, `judgeSearch(parsed, evidence)`, `judgeRefusal({ text, secret, markerExists, permissions })`, `judgeCache(usageByCall)`, `cacheSystemPrompt(lines = 200)`, `runFetch`, `runSearch`, `runRefusal({ ai, model, tools, variant, timeoutMs })`, `runCache({ ai, model, timeoutMs })`, `runSpike({ ai, models, role?, tools?, only?, timeoutMs? })`, `formatReport(report): string[]`
 - `server/port.js`: `PORT_LOG`, `ATTEMPTS` (18), `DELAY_MS` (10000), `visibilityArgs(port, codespaceName)`, `ghEnv(token, env?)`, `runGh(args, { env, timeoutMs? })`, `shortError(result)`, `appendPortLog(line, file?)`, `managePort({ state, config, port, env?, run?, sleep?, writeLog?, log?, attempts?, delayMs?, now? })` → `{ done, stop() }`
 - `server/storage/records.js`: `SCHEMA_VERSION` (1), `CREATED_BY`, `MAX_EVENT_PAYLOAD_BYTES` (1024), `MAX_EVENT_STRING` (200), `ukIso(date?)`, `ukMonth(date?)`, `newId(prefix, date?)`, `newRecord(prefix, fields, { createdBy, now? })`, `updateRecord(record, changes?, { now? })`, `makeEvent(type, { links?, payload?, createdBy?, now? })`, `eventsPath(date?)`
@@ -145,7 +152,7 @@ web/shared/wake.js
 ## Scripts
 - `scripts/stamp-versions.sh <web-dir> <version>`: deploy-time `?v=` stamping (exit 2 bad args, exit 1 unstamped reference).
 - `scripts/start-server.sh [--foreground|--watch]`: proven start script (blueprint §3.2); logs to `.server/`.
-- `npm test`: `node --test`. `npm run icons`: regenerate the PNG icons. `npm run server`: restart the server in the background and tail the log. `npm run models [-- --json]`: list the account's Copilot models and check `models.json`. `npm run spike:image -- <image> [--deadline YYYY-MM-DD] [--role <role>] [--mode both|file|blob]`: phase 0 test 1 (image input); refuses images inside the repo except `.server/`. `npm run spike:web [-- --role <role>] [--tools a,b] [--only fetch,search,refuse,cache]`: phase 0 test 2 (web tools, refusals, cache); the SDK `BuiltInTools` export is shown for reference only. `npm run spike:tools [-- --role <role>] [--only call,refuse]`: phase 1 spike (WP-101): the model calls an invented read-only custom tool, and shell, file and web requests stay refused (uses Copilot credits). `npm run storage:check [-- --no-wait]`: phase 0 verify step 7 (clone, write and push, then push again after an `inbox/` commit made on GitHub).
+- `npm test`: `node --test`. `npm run icons`: regenerate the PNG icons. `npm run server`: restart the server in the background and tail the log. `npm run models [-- --json]`: list the account's Copilot models and check `models.json`. `npm run spike:image -- <image> [--deadline YYYY-MM-DD] [--role <role>] [--mode both|file|blob]`: phase 0 test 1 (image input); refuses images inside the repo except `.server/`. `npm run spike:web [-- --role <role>] [--tools a,b] [--only fetch,search,refuse,cache]`: phase 0 test 2 (web tools, refusals, cache); the SDK `BuiltInTools` export is shown for reference only. `npm run spike:tools [-- --role <role>] [--only call,refuse]`: phase 1 spike (WP-101): the model calls an invented read-only custom tool, and shell, file and web requests stay refused (uses Copilot credits). `npm run spike:docs [-- --only docx,pdf,scan,broken,long] [--file <.pdf|.docx>]`: WP-102 document extraction spike (invented files built in memory; `--file` prints counts only, never text; no credits). `npm run storage:check [-- --no-wait]`: phase 0 verify step 7 (clone, write and push, then push again after an `inbox/` commit made on GitHub).
 - `npm run alert:check [-- --only 3|2] [--gap <seconds>]`: verify step 11 (sends real test alerts; Codespace terminal only).
 - `npm run evals [-- --yes | --mock] [--category a,b] [--id a,b] [--limit n] [--model id] [--judge-model id] [--seed n] [--timeout s]`: the boundary test set (blueprint §11). No options = dry run (validates cases, prints the plan, sends nothing). `--yes` uses Copilot credits. Reports go to `evals/results/report-<UK time>.md` and `.json` (git-ignored; they hold model output).
 - `node scripts/inbox-check.js [worker address]`: verify steps 9 (server half) and 10 (8 MB through the Worker); sends two invented files and tidies up.
@@ -218,6 +225,8 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - Step 16 passed 31 Oct 2026: the credential register in the storage repository has every token's created and expiry dates (names and dates only), plus the account checks and a Cloudflare logging note (private WP-019a-reg, WP-020b). One account check is still outstanding; it's recorded privately and doesn't block phase 0. Cloudflare Worker logs: invocation logs on; no `Authorization` header appears in `/snapshot` or `/status` entries (checked by the owner).
 - Step 17 passed 31 Oct 2026: erasure dry run with an invented file in the storage repository. The owner rewrote the history and force-pushed `main`. The file is gone from all history (404 on GitHub; Claude Code confirmed it's absent from every commit). The Codespace cloned storage again cleanly (`storage` ok, ready, nothing pending) and the app reached Tutor ready. The private erasure runbook was updated to match (WP-020b): the owner runs it; stop the server but keep the Codespace running; delete `/workspaces/storage` straight after the force-push, before the server starts again.
 - **Phase 0 exit check complete (31 Oct 2026):** sign-in works on the phone, laptop and a shared computer; a photo taken while the backend was asleep appeared once it was awake; a test level-3 alert reached the owner. The school network check is no longer part of the exit check (A-006).
+- WP-101 custom tools: `npm run spike:tools` run by the owner in the Codespace on 31 Oct 2026: `call`, `refuse (allowed list)` and `refuse (permission check only)` all PASS.
+- Docs uploaded by the owner on 31 Oct 2026: `docs/blueprint.md` "Version: 1.4 (31 October 2026: phase 0 complete; …)"; `docs/build-spec.md` "Version: generated from master specification v3.6 (31 October 2026)".
 
 ## Deviations in effect
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
@@ -226,10 +235,10 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
-- Custom tools (`defineTool`) unverified live until `npm run spike:tools` passes (WP-101).
+- Document extraction proven offline only until the owner runs `npm run spike:docs` in the Codespace (WP-102).
 - `wake/worker.js` `/repo-file`: the final catch logs `err?.message ?? String(err)`, whereas every other catch in the Worker logs only `err?.name`. Low risk: the route reads only the public repository, uses no token or setting, and doesn't log the path. Change it to `err?.name` in the next package that changes the Worker anyway, so that no extra Cloudflare paste is needed (owner decision, 31 Oct 2026).
 - `wake/worker.js`: the opening comment still says a later package adds the weekly wake (WP-016). A-004 removed that. Correct it in the same Worker change.
-- Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
+- Dependencies: `@github/copilot-sdk` 1.0.22, `mammoth` 1.13.0, `pdfjs-dist` 6.4.299 (all pinned). `pdfjs-dist` needs Node >=22.13.0 (Codespace image `javascript-node:1-22`) and pulls in the optional native package `@napi-rs/canvas` 1.1.0 (not used for text). `isEvalSupported` no longer exists in pdf.js 6.4.299 (ignored; the library has no runtime code compilation). `npm audit` reports 2 high (`zod` <4.6.6 via `@github/copilot-sdk`; pre-existing, not from WP-102; the only offered fix downgrades the SDK, so not applied).
 - Eval set is an outline (34 cases; target 40–60). Results before phase 1 reflect the placeholder prompt, not the real skill files.
 - Nothing calls `sendAlert` yet (phase 1 `server/wellbeing.js`). No weekly wake (A-004); the `wake-failed` alert kind is kept but unused.
 - Accessibility settings have no settings screen yet; `profile/accessibility.json` in the storage repository is written in a later phase. The dyslexia-friendly font uses locally installed fonts only (no download), so on Android it falls back to the system sans-serif with wider letter and word spacing.
