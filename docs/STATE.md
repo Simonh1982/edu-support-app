@@ -1,6 +1,6 @@
-STATE version: 18
-Updated: 2026-10-30 08:05 (UK time)
-Last work package applied: WP-018
+STATE version: 19
+Updated: 2026-10-31 09:19 (UK time)
+Last work package applied: WP-020c
 
 ## File tree
 ```
@@ -209,6 +209,12 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - Step 9 passed in full 29 Oct 2026 after WP-014b: a photo taken while the Codespace was stopped showed 'Received – waiting to be read' on the phone and laptop, then 'it'll be read once reading is switched on' about 20 s after Tutor ready. Image resize: 12 MP photo → 1600 × 1200, 266 KB.
 - Step 11 passed 29 Oct 2026 after WP-015: three dispatches answered 204; level-3 email within a minute; the second level-2 alert was added as a comment, with no third issue.
 - Step 12 replaced by amendment A-004 (weekly wake dropped): manual check passed 29 Oct 2026 — Auto-delete codespace switched off, bookmark icon showing, Codespace owned by the owner's personal account.
+- Step 13 passed by 31 Oct 2026: curriculum outlines with fixed topic IDs for all four qualifications are committed to the storage repository (private WP-019a, 019b, 019c, 019d). The owner spot-checked each one before it was committed.
+- Step 14 passed by 31 Oct 2026: with the Codespace stopped, in a private window, the snapshot appeared at once and the tutor was ready 18 s after waking (target: about 2 minutes). Bookmark icon rechecked: still showing.
+- Step 15 (school network) taken out of the phase 0 exit check by amendment A-006 (31 Oct 2026). Done when convenient (WP-020-school); if the school blocks any of the addresses, the learner uses the phone app at school. Not yet done.
+- Step 16 passed 31 Oct 2026: the credential register in the storage repository has every token's created and expiry dates (names and dates only), plus the account checks and a Cloudflare logging note (private WP-019a-reg, WP-020b). One account check is still outstanding; it's recorded privately and doesn't block phase 0. Cloudflare Worker logs: invocation logs on; no `Authorization` header appears in `/snapshot` or `/status` entries (checked by the owner).
+- Step 17 passed 31 Oct 2026: erasure dry run with an invented file in the storage repository. The owner rewrote the history and force-pushed `main`. The file is gone from all history (404 on GitHub; Claude Code confirmed it's absent from every commit). The Codespace cloned storage again cleanly (`storage` ok, ready, nothing pending) and the app reached Tutor ready. The private erasure runbook was updated to match (WP-020b): the owner runs it; stop the server but keep the Codespace running; delete `/workspaces/storage` straight after the force-push, before the server starts again.
+- **Phase 0 exit check complete (31 Oct 2026):** sign-in works on the phone, laptop and a shared computer; a photo taken while the backend was asleep appeared once it was awake; a test level-3 alert reached the owner. The school network check is no longer part of the exit check (A-006).
 
 ## Deviations in effect
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
@@ -217,6 +223,8 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
+- `wake/worker.js` `/repo-file`: the final catch logs `err?.message ?? String(err)`, whereas every other catch in the Worker logs only `err?.name`. Low risk: the route reads only the public repository, uses no token or setting, and doesn't log the path. Change it to `err?.name` in the next package that changes the Worker anyway, so that no extra Cloudflare paste is needed (owner decision, 31 Oct 2026).
+- `wake/worker.js`: the opening comment still says a later package adds the weekly wake (WP-016). A-004 removed that. Correct it in the same Worker change.
 - Dependencies: `@github/copilot-sdk` 1.0.22 (pinned).
 - Eval set is an outline (34 cases; target 40–60). Results before phase 1 reflect the placeholder prompt, not the real skill files.
 - Nothing calls `sendAlert` yet (phase 1 `server/wellbeing.js`). No weekly wake (A-004); the `wake-failed` alert kind is kept but unused.
