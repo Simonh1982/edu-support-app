@@ -249,11 +249,7 @@ export async function runSpike({ ai, models, role = 'conversation', tools = [...
     results.push(await runRefusal({ ai, model, tools, variant: 'handler', timeoutMs }));
   }
   if (only.includes('cache')) results.push(await runCache({ ai, model: models.light, timeoutMs }));
-  return {
-    role, model, tools, builtIn,
-    notInSdk: builtIn.length ? tools.filter((t) => !builtIn.includes(t)) : [],
-    results,
-  };
+  return { role, model, tools, builtIn, results };
 }
 
 function permissionText(permissions) {
@@ -265,10 +261,10 @@ function permissionText(permissions) {
 export function formatReport(report) {
   const lines = [];
   lines.push(`Role: ${report.role}  Model: ${report.model}`);
-  lines.push(report.builtIn.length
-    ? `SDK built-in tools (${report.builtIn.length}): ${report.builtIn.join(', ')}`
-    : 'SDK built-in tools: not listed by this SDK');
-  lines.push(`Allowed list used: ${report.tools.join(', ')}${report.notInSdk.length ? `  (not in the SDK list: ${report.notInSdk.join(', ')})` : ''}`);
+  // The SDK's BuiltInTools export is a curated subset (1.0.22: { Isolated: [...] }) without the
+  // web tools, so it is shown for reference only and never compared with the allowed list.
+  lines.push(`SDK BuiltInTools export (reference only; not used for the allowed list): ${report.builtIn.length ? report.builtIn.join(', ') : 'none'}`);
+  lines.push(`Allowed list used: ${report.tools.join(', ')}`);
   for (const r of report.results) {
     lines.push('');
     lines.push(`--- ${r.check}: ${r.verdict}${r.ms !== undefined ? ` (${r.ms} ms)` : ''}`);

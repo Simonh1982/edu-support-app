@@ -3,7 +3,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { NEVER_ALLOWED_KINDS } from './tools.js';
+import { checkCustomTools, decidePermission, wrapToolHandler } from './tools.js';
 
 export const SDK_PACKAGE = '@github/copilot-sdk';
 
@@ -64,6 +64,25 @@ export function builtInToolNames(value) {
   return [...new Set(names.filter((n) => typeof n === 'string' && n))].sort();
 }
 
+/**
+ * The app's own read-only tools as SDK tools. Handlers are wrapped (server/ai/tools.js), so a
+ * failure becomes "Not available." for the model instead of an exception inside the SDK.
+ */
+export function sdkTools(sdk, customTools, { onToolCall } = {}) {
+  return customTools.map((tool) => {
+    const config = {
+      description: tool.description,
+      parameters: tool.parameters,
+      handler: wrapToolHandler(tool, { onCall: onToolCall }),
+    };
+    // VERIFY: defineTool(name, { description, parameters, handler }) in SDK 1.0.22 (README form;
+    // raw JSON schemas are accepted). If the installed types take one object ({ name, ... }),
+    // change this line only.
+    if (typeof sdk.defineTool === 'function') return sdk.defineTool(tool.name, config);
+    return { name: tool.name, ...config };
+  });
+}
+
 function rejectResult() {
   return { kind: 'reject', feedback: 'Not available.' };
 }
@@ -104,14 +123,12 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
     return starting;
   }
 
-  /** Approve or refuse one permission request. Shell, write, read and MCP are always refused. */
-  function decide(request, invocation, allowPermission, onPermission) {
-    let allowed = false;
-    try {
-      allowed = allowPermission(request) === true && !NEVER_ALLOWED_KINDS.includes(request?.kind);
-    } catch {
-      allowed = false;
-    }
+  /**
+   * Approve or refuse one permission request. Shell, write, read and MCP are always refused;
+   * the app's own tools are approved by name only.
+   */
+  function decide(request, invocation, allowPermission, onPermission, customNames) {
+    const allowed = decidePermission(request, { allowPermission, customNames });
     if (onPermission) {
       try { onPermission(request, allowed); } catch { /* a reporting error must not change the decision */ }
     }
@@ -123,20 +140,26 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
   /**
    * Send one prompt in a fresh session and return the reply text.
    * @param {{ model: string, system: string, prompt: string, attachments?: object[],
-   *           tools?: string[], allowPermission?: (request: object) => boolean,
+   *           tools?: string[], customTools?: object[],
+   *           allowPermission?: (request: object) => boolean,
    *           onPermission?: (request: object, allowed: boolean) => void,
-   *           onEvent?: (event: object) => void, unsafeAllToolsForTest?: boolean,
-   *           timeoutMs?: number }} request
+   *           onEvent?: (event: object) => void,
+   *           onToolCall?: (call: { name: string, ok: boolean, ms: number }) => void,
+   *           unsafeAllToolsForTest?: boolean, timeoutMs?: number }} request
    *   attachments: image attachments built by server/ai/image-input.js
    *   tools: the allowed list of built-in tool names (default: none)
+   *   customTools: the app's own read-only tools, { name, description, parameters, handler }
+   *     (checked by checkCustomTools; added to the allowed list automatically)
    *   allowPermission: which permission requests to approve (default: none)
-   *   unsafeAllToolsForTest: phase 0 refusal test only; leaves every tool available so the
+   *   unsafeAllToolsForTest: refusal tests only; leaves every tool available so the
    *     permission check is the only guard
    */
   async function ask({
-    model, system, prompt, attachments, tools = [], allowPermission = refuseAll,
-    onPermission, onEvent, unsafeAllToolsForTest = false, timeoutMs = 60_000,
+    model, system, prompt, attachments, tools = [], customTools = [], allowPermission = refuseAll,
+    onPermission, onEvent, onToolCall, unsafeAllToolsForTest = false, timeoutMs = 60_000,
   }) {
+    // Checked before the client starts, so a bad definition fails fast and costs nothing.
+    const customNames = new Set(checkCustomTools(customTools));
     const c = await ensureClient();
     // VERIFY: createSession config names: systemMessage { mode: 'replace' }, availableTools
     // (a list means only those tools), infiniteSessions, onPermissionRequest(request, invocation).
@@ -144,10 +167,13 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
       model,
       systemMessage: { mode: 'replace', content: system },
       infiniteSessions: { enabled: false },
-      onPermissionRequest: (request, invocation) => decide(request, invocation, allowPermission, onPermission),
+      onPermissionRequest: (request, invocation) => decide(request, invocation, allowPermission, onPermission, customNames),
     };
+    // VERIFY: createSession accepts tools: [...] for app-defined tools.
+    if (customNames.size) config.tools = sdkTools(sdk, customTools, { onToolCall });
     // Leaving availableTools out means every tool, so it is always set outside the refusal test.
-    if (!unsafeAllToolsForTest) config.availableTools = [...tools];
+    // VERIFY: availableTools also filters app-defined tools, so their names are listed too.
+    if (!unsafeAllToolsForTest) config.availableTools = [...tools, ...customNames];
     const session = await c.createSession(config);
     let unsubscribe = null;
     if (onEvent && typeof session.on === 'function') {
@@ -206,5 +232,8 @@ export function createCopilotAi({ sdk, token, workDir = DEFAULT_WORK_DIR, log = 
     }
   }
 
-  return { mode: 'copilot', ask, listModels, listBuiltInTools, stop };
+  // Reported by npm run spike:tools: plain tool objects are used if defineTool is missing.
+  const features = Object.freeze({ defineTool: typeof sdk?.defineTool === 'function' });
+
+  return { mode: 'copilot', ask, listModels, listBuiltInTools, stop, features };
 }
