@@ -14,6 +14,7 @@ import { loadImageLimits } from './ai/limits.js';
 import { startCurriculum } from './curriculum.js';
 import { matchApiRoute, handleApi } from './api.js';
 import { createRateLimiter, createAiCeiling, passKey, RATE_LIMIT_MESSAGE } from './rate-limits.js';
+import { startReader } from './reader.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -224,6 +225,10 @@ async function main() {
   let imageLimits = null;
   // curriculum outlines from the storage clone (WP-103); the work routes check topic IDs against it
   let curriculum = null;
+  // set once the curriculum has been tried, so the reader never matches topics before it loads
+  let curriculumLoaded = false;
+  // reads photos waiting as `processing` (WP-106)
+  let readerHandle = null;
   // daily AI request ceiling (blueprint §7.12); the AI routes call aiCeiling.take() from WP-111
   const aiCeiling = createAiCeiling({ limit: config.aiDailyCeiling });
   // setting names and problems only, never values (blueprint §12)
@@ -244,6 +249,7 @@ async function main() {
       // free the port at once, so a replacement server can listen while Copilot shuts down
       server.close();
       portHandle?.stop();
+      readerHandle?.stop();
       // stop the Copilot runtime and commit unsaved records locally (the next start pushes them),
       // but never let shutdown hang
       const stopping = aiHandle ? aiHandle.ai.stop() : Promise.resolve();
@@ -267,11 +273,20 @@ async function main() {
     if (config.publicUrl) console.log(`Public address: ${config.publicUrl}`);
     // make the port Public now: Codespace restarts reset it to Private (blueprint §3.3)
     portHandle = managePort({ state, config, port });
+    // reading needs storage, the curriculum and the real AI: the mock AI never reads real uploads
+    readerHandle = startReader({
+      getStore: () => storeHandle,
+      getAi: () => aiHandle,
+      getCurriculum: () => curriculum,
+      isReady: () => Boolean(storeHandle && curriculumLoaded && aiHandle?.ai?.mode === 'copilot'),
+      aiCeiling,
+    });
     // storage also starts after listening, so /api/health can show its progress (storage.detail)
     startStorage({ state, config, getImageLimits: () => imageLimits }).then(async (store) => {
       storeHandle = store;
       // read once the clone is up to date; logs counts and file names only (never content)
       if (store) curriculum = await startCurriculum({ dir: store.dir });
+      curriculumLoaded = true;
     });
     // AI starts after listening, so /api/health answers (ai.mode "starting") during the test
     startAi({ state }).then(async (handle) => {
