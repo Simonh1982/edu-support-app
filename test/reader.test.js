@@ -10,7 +10,7 @@ import { uploadRecord } from '../server/storage/inbox.js';
 import { createMockAi } from '../server/ai/mock.js';
 import { READ_SYSTEM, MATCH_SYSTEM } from '../server/ai/reading.js';
 import {
-  readUpload, processBacklog, pendingImageUploads, startReader, createLimitCache, uploadPath, MAX_READ_TRIES,
+  readUpload, processBacklog, pendingImageUploads, pendingUploads, startReader, createLimitCache, uploadPath, MAX_READ_TRIES,
 } from '../server/reader.js';
 
 const MODELS = { light: 'demo-light', conversation: 'demo-conversation' };
@@ -135,7 +135,7 @@ test('a brief is read by the light model as a blob, corrected, anchored and matc
     // events and AI turn records hold ids and counts only
     assert.deepEqual(store.events.map((e) => e.type), ['upload.read']);
     assert.deepEqual(store.events[0].payload, {
-      uploadId: record.id, kind: 'brief', role: 'light', reread: false, chars: BRIEF_TEXT.length,
+      uploadId: record.id, kind: 'brief', method: 'image', role: 'light', reread: false, chars: BRIEF_TEXT.length,
       uncertain: 0, corrections: 1, anchors: 2, topics: 1,
     });
     const turnFolders = await readdir(path.join(store.dir, 'ai-turns'));
@@ -257,7 +257,7 @@ test('the daily AI ceiling pauses reading without touching the photo', async () 
   }
 });
 
-test('only waiting photos are picked up: documents wait for WP-107; done and failed are left alone', async () => {
+test('only waiting uploads are picked up: photos and (WP-107) documents; done and failed are left alone', async () => {
   const store = await tempStore();
   try {
     await addUpload(store, { clientId: 'fDemo0001', mimeType: 'application/pdf' });
@@ -266,6 +266,7 @@ test('only waiting photos are picked up: documents wait for WP-107; done and fai
     await addUpload(store, { clientId: 'pDemo0003' });
     await store.put('uploads/not-an-upload.json', { id: 'not-an-upload', status: 'processing', mimeType: 'image/jpeg' });
     assert.deepEqual((await pendingImageUploads(store)).map((r) => r.id), ['up_pDemo0003']);
+    assert.deepEqual((await pendingUploads(store)).map((r) => r.id).sort(), ['up_fDemo0001', 'up_pDemo0003']);
   } finally {
     await store.cleanup();
   }
