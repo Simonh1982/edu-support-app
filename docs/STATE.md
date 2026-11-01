@@ -1,6 +1,6 @@
-STATE version: 25
-Updated: 2026-11-01 10:05 (UK time)
-Last work package applied: WP-105
+STATE version: 26
+Updated: 2026-11-01 14:41 (UK time)
+Last work package applied: WP-106
 
 ## File tree
 ```
@@ -47,6 +47,7 @@ server/ai/mock.js
 server/ai/models.js
 server/ai/prompt.js
 server/ai/read-tools.js
+server/ai/reading.js
 server/ai/tools.js
 server/alerts.js
 server/api.js
@@ -60,6 +61,7 @@ server/domain/work.js
 server/index.js
 server/port.js
 server/rate-limits.js
+server/reader.js
 server/storage/git.js
 server/storage/inbox.js
 server/storage/index.js
@@ -90,6 +92,8 @@ test/items.test.js
 test/port.test.js
 test/prompt.test.js
 test/read-tools.test.js
+test/reader.test.js
+test/reading.test.js
 test/server.test.js
 test/snapshot.test.js
 test/stamp-versions.test.js
@@ -134,6 +138,8 @@ web/shared/wake.js
 - `server/domain/tasks.js`: `TASK_KINDS`, `WORK_TYPES`, `STAGES`, `FINISHED_STAGES`, `ANCHOR_TYPES`, `ANCHOR_AUTHORS`, `TASK_LIMITS`, `TASK_FIELDS`, `taskPath(id)`, `newAnchor(body, { createdBy?, now? })`, `newTask(body, { curriculum?, createdBy?, now? })`, `applyTaskChanges(task, body, { curriculum?, now? })` → `{ task, changed, stage }`, `withTaskLock(id, fn)`, `readTask(store, id)`, `listTasks(store, { open? })`, `createTask(store, body, opts?)`, `updateTask(store, id, body, opts?)`, `addAnchor(store, taskId, body, opts?)`, `updateAnchor(store, taskId, anchorId, body, opts?)`, `removeAnchor(store, taskId, anchorId, opts?)`
 - `server/domain/work.js`: `SUPPORT_TYPES` (`hint, breakdown, pointer, explanation`), `SUPPORT_OUTCOMES` (`tried-again, solved, gave-up`), `CHECK_RESULTS` (`passed, regenerated, fallback`), `WORK_LIMITS`, `attemptPath(id)`, `aiTurnPath(id)`, `newAttempt(body, { curriculum?, now? })`, `recordAttempt(store, body, opts?)`, `readAttempt(store, id)`, `logSupport(store, { type, route, attemptId, taskId?, topicId? })`, `logSupportOutcome(store, { supportEventId, outcome })`, `newAiTurn(fields, { now? })`, `saveAiTurn(store, fields, { now? })`. Imports `ROUTES` (prompt.js) and `ROLES` (models.js), both side-effect free.
 - `server/rate-limits.js`: `RATE_WINDOW_MS` (60000), `MAX_TRACKED_PASSES` (200), `RATE_LIMIT_MESSAGE`, `AI_CEILING_MESSAGE`, `passKey(pass)`, `createRateLimiter({ limit, windowMs?, now?, maxKeys? })` → `{ take(key) → { ok, remaining } | { ok: false, retryAfterS }, size() }`, `createAiCeiling({ limit, now? })` → `{ take() → { ok, used, limit, message? }, status() → { day, used, limit } }` (resets at UK midnight)
+- `server/ai/reading.js`: `READ_RETRY_BELOW` (0.7), `TOPIC_UNSURE_BELOW` (0.5), `READ_LIMITS`, `READ_ANCHOR_TYPES`, `PROPOSAL_FIELDS`, `READ_SYSTEM`, `MATCH_SYSTEM`, `qualificationsFor`, `readPrompt({ kind, today, qualifications })`, `uncertainPassages`, `editDistance`, `isUsSpelling`, `locateWord`, `filterCorrections(list, text, uncertain)`, `applyCorrections(text, corrections, { offset })`, `correctQuestion`, `normaliseReading(reply, { kind })`, `proposalAnchors`, `buildProposal(reading, { qualifications })`, `topicCandidates(curriculum, qualificationId)`, `matchPrompt({ candidates, proposal })`, `parseMatch`
+- `server/reader.js`: `READER_POLL_MS` (10000), `READER_BACKOFF_MS` (60000), `READ_TIMEOUT_MS` (90000), `MAX_READ_TRIES` (3), `READS_PER_CYCLE` (3), `READ_FAILURE_REASONS`, `uploadPath(id)`, `isImageUpload`, `pendingImageUploads(store)`, `createLimitCache(loadLimits)`, `readUpload(...)` → `{ status: done|failed|again|waiting|error, reason? }`, `processBacklog(...)`, `startReader({ getStore, getAi, getCurriculum, isReady, aiCeiling, ... })` → `{ runOnce, stop }`. Started by `server/index.js` after listening; runs only when storage is ready, the curriculum has been tried and the AI mode is `copilot`; stopped on shutdown.
 - `server/api.js`: `API_ROUTES`, `API_MESSAGES`, `matchApiRoute(method, pathname)` → route match, `{ status: 405, allow }` or null, `handleApi({ match, pass, store, body?, query?, getCurriculum? })` → `{ status, body }`
 - `server/ai/models.js`: `ROLES` (frozen array of 6 roles), `MODELS_URL` (URL), `validateModels(raw: unknown)` → `{ models, errors }`, `loadModels(url = MODELS_URL): Promise<{ models, errors }>` (never throws)
 - `server/ai/copilot.js`: `SDK_PACKAGE`, `DEFAULT_WORK_DIR`, `redact(text): string`, `errorSummary(err, max = 300): string`, `loadSdk(importer?): Promise<{ sdk, error }>`, `builtInToolNames(value): string[]`, `sdkTools(sdk, customTools, { onToolCall }?)` → SDK tools (via `defineTool(name, config)` when exported), `createCopilotAi({ sdk, token, workDir?, log? })` → `{ mode: 'copilot', ask({ model, system, prompt, attachments?, tools?, customTools?, allowPermission?, onPermission?, onEvent?, onToolCall?, unsafeAllToolsForTest?, timeoutMs? }), listModels(), listBuiltInTools(), stop(), features: { defineTool } }`. Shell, write, read and MCP permission requests are always refused; the app's own tools (`customTools`) are approved by name only and added to `availableTools`, which otherwise defaults to `[]`; no `tools` key when there are none.
@@ -207,6 +213,13 @@ web/shared/wake.js
 - Task stages: `not-started`, `researching`, `planning`, `drafting`, `reviewing`, `submitted`, `done`. `completedAt` is set the first time the stage becomes `submitted` or `done` and never cleared (retention clock, WP-123). A typed task starts `confirmed: true`. Learner anchors start confirmed; source anchors don't.
 - Events (ids, field names, types and stages only, never text): `task.created`, `task.updated`, `task.stage`, `anchor.added`, `anchor.updated`, `anchor.removed`, `attempt.recorded`, `support.requested`, `support.outcome`.
 - AI turns at wellbeing level 2–3 keep no text (`textRemoved: true`).
+
+### Uploads after reading (WP-106)
+- `status: 'done'` adds `extractedText { value, author }` (`source` for briefs, `learner` for own writing), `truncated`, `uncertain [{ text, start, end }]`, `spellingCorrections [{ original, corrected, position, undone }]` (briefs only), `readBy { role, model }`, `reread`, `readAt`, `readTries`.
+- Briefs also get `proposal { title, subject, qualificationId, kind, workType, question { verbatim, corrected }, deadline, marks, wordCount, anchors (newAnchor() shape, author source, unconfirmed), topicIds, uncertainFields }`. WP-108 turns it into a Task once the learner confirms it.
+- Failures: `failureReason` is one of `too-large`, `unsupported-type`, `no-vision`, `file-missing`, `unreadable`.
+- Events: `upload.read` (ids and counts only) and `upload.failed` with `stage: 'reading'`. AI turn records with features `read-upload` and `match-topics` (no text).
+- The reader runs only when the AI mode is `copilot`; with `AI_MOCK=1` uploads are never read. The snapshot still shows uploads as Photo/File with `status` only; `uploads/` keeps the local side on a sync clash (`prefer-local`).
 
 ## Sync clashes (WP-014a-fix)
 When `git pull --rebase` clashes, `syncLocked()` settles server-made files itself: event logs (`events/*.jsonl`) are merged by line (both sides kept once); `index/snapshot.json` takes the remote side and is rebuilt in the next batch; `inbox/` prefers the remote (Worker) copy; `uploads/` prefers the local (server) copy. Anything else aborts the rebase, keeps local commits, sets `storage.detail` to `needs attention: sync clash in <paths> …` (paths only) and stops pulling until restart; saving continues locally. Manual fix: inspect and resolve in `/workspaces/storage`, then `npm run server`.
@@ -282,7 +295,10 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
-- The rate limit and AI ceiling are in memory and reset on restart. Nothing calls `aiCeiling.take()`, `saveAiTurn` or `logSupport` until WP-111.
+- Word and PDF uploads stay `processing` until WP-107.
+- The capture screen still shows "Received – it'll be read once reading is switched on." for `processing`, and the too-large message for every `failed` reason. There's also no route yet to open an upload's reading or draft task. All three are for WP-108.
+- The AI ceiling is counted per AI call: one photo uses 1–3 calls.
+- The rate limit and AI ceiling are in memory and reset on restart. The reader (WP-106) uses `aiCeiling.take()` and `saveAiTurn`; nothing calls `logSupport` until WP-111.
 - The loader reads a top-level `optionalGroups`; the private qualification records keep either/or groups at `structure.optionalGroups`. No effect today (every unit has `type`); a fallback is planned for WP-120.
 - `wake/worker.js` `/repo-file`: the final catch logs `err?.message ?? String(err)`, whereas every other catch in the Worker logs only `err?.name`. Low risk: the route reads only the public repository, uses no token or setting, and doesn't log the path. Change it to `err?.name` in the next package that changes the Worker anyway, so that no extra Cloudflare paste is needed (owner decision, 31 Oct 2026).
 - `wake/worker.js`: the opening comment still says a later package adds the weekly wake (WP-016). A-004 removed that. Correct it in the same Worker change.
