@@ -1,4 +1,4 @@
-// HTTP server: routing, CORS, body limits, /api/health and /api/item. No framework.
+// HTTP server: routing, CORS, body limits, /api/health, /api/item and the work routes. No framework.
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -12,6 +12,8 @@ import { passSettings, passFromHeader, verifyPass } from './auth.js';
 import { itemResponse } from './storage/items.js';
 import { loadImageLimits } from './ai/limits.js';
 import { startCurriculum } from './curriculum.js';
+import { matchApiRoute, handleApi } from './api.js';
+import { createRateLimiter, createAiCeiling, passKey, RATE_LIMIT_MESSAGE } from './rate-limits.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -118,7 +120,18 @@ export async function checkPass(req, authSettings, log = console) {
  * authSettings: from passSettings(env), or null if sign-in isn't configured.
  * getStore: returns the storage store once it's ready, otherwise null.
  */
-export function createHandler({ config, state, log = console, authSettings = null, getStore = () => null }) {
+export function createHandler({
+  config, state, log = console, authSettings = null, getStore = () => null, getCurriculum = () => null, rateLimiter = null,
+}) {
+  // one limiter per server: requests per pass per minute (blueprint §3.5)
+  const limiter = rateLimiter ?? createRateLimiter({ limit: config.rateLimitPerMin ?? 120 });
+  const overLimit = (res, pass) => {
+    const result = limiter.take(passKey(pass));
+    if (result.ok) return false;
+    res.setHeader('Retry-After', String(result.retryAfterS));
+    sendJson(res, 429, { error: RATE_LIMIT_MESSAGE });
+    return true;
+  };
   return async function handle(req, res) {
     try {
       const allowed = applyCors(req, res, config);
@@ -140,9 +153,25 @@ export function createHandler({ config, state, log = console, authSettings = nul
         // the pass is checked first, so nothing about storage is revealed without one
         const auth = await checkPass(req, authSettings, log);
         if (!auth.pass) return sendJson(res, auth.status, auth.body);
+        if (overLimit(res, auth.pass)) return undefined;
         const store = getStore();
         if (!store || !store.status().ready) return sendJson(res, 503, { error: "Saved items aren't available yet." });
         const result = await itemResponse({ store, pass: auth.pass, query: url.searchParams });
+        return sendJson(res, result.status, result.body);
+      }
+
+      // work routes (WP-105): unknown paths stay 404 without a pass; known ones need a pass and the role
+      const match = matchApiRoute(req.method, url.pathname);
+      if (match?.status === 405) {
+        res.setHeader('Allow', match.allow.join(', '));
+        return sendJson(res, 405, { error: 'Method not allowed' });
+      }
+      if (match) {
+        const auth = await checkPass(req, authSettings, log);
+        if (!auth.pass) return sendJson(res, auth.status, auth.body);
+        if (overLimit(res, auth.pass)) return undefined;
+        const body = req.method === 'POST' || req.method === 'PATCH' ? await readJson(req, config.jsonBodyLimit) : null;
+        const result = await handleApi({ match, pass: auth.pass, store: getStore(), body, query: url.searchParams, getCurriculum });
         return sendJson(res, result.status, result.body);
       }
 
@@ -193,14 +222,18 @@ async function main() {
   let storeHandle = null;
   // the light model's image limits, read once the AI has started (A-002); null until then
   let imageLimits = null;
-  // curriculum outlines from the storage clone (WP-103); the AI routes use it from WP-104/111
+  // curriculum outlines from the storage clone (WP-103); the work routes check topic IDs against it
   let curriculum = null;
+  // daily AI request ceiling (blueprint §7.12); the AI routes call aiCeiling.take() from WP-111
+  const aiCeiling = createAiCeiling({ limit: config.aiDailyCeiling });
   // setting names and problems only, never values (blueprint §12)
   const auth = passSettings(process.env);
   const { server, state } = createServer(config, undefined, console, {
     authSettings: auth.settings,
     getStore: () => storeHandle,
+    getCurriculum: () => curriculum,
   });
+  console.log(`[limits] ${config.rateLimitPerMin} requests a minute per pass; ${aiCeiling.status().limit} AI requests a day`);
   console.log(`${new Date().toISOString()} starting: pid ${process.pid}; started by: ${processChain(process.ppid)}`);
   if (!auth.settings) console.log(`[auth] off: ${auth.errors.join('; ')}`);
   // a closing terminal sends SIGHUP; the server must survive it (blueprint §3.2)

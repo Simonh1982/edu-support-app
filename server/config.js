@@ -5,6 +5,8 @@ export const PAGES_ORIGIN = 'https://simonh1982.github.io';
 
 const DEFAULT_PORT = 3000;
 const DEFAULT_IDLE_TIMEOUT_MIN = 30; // must match the GitHub Codespaces idle-timeout setting
+const DEFAULT_RATE_LIMIT_PER_MIN = 120;
+const DEFAULT_AI_DAILY_CEILING = 300;
 
 function positiveInt(value, fallback) {
   const n = Number(value);
@@ -26,6 +28,9 @@ export function loadConfig(env = process.env) {
     devOrigins: env.DEV_ORIGINS === '1',
     jsonBodyLimit: 256 * 1024,
     uploadBodyLimit: 8 * 1024 * 1024,
+    // safety nets (blueprint §3.5, §7.12): requests per pass per minute, and AI requests per UK day
+    rateLimitPerMin: positiveInt(env.RATE_LIMIT_PER_MIN, DEFAULT_RATE_LIMIT_PER_MIN),
+    aiDailyCeiling: positiveInt(env.AI_DAILY_CEILING, DEFAULT_AI_DAILY_CEILING),
     codespaceName,
     publicUrl: codespaceName && forwardingDomain
       ? `https://${codespaceName}-${port || DEFAULT_PORT}.${forwardingDomain}`

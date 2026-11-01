@@ -1,6 +1,6 @@
-STATE version: 24
-Updated: 2026-11-01 09:31 (UK time)
-Last work package applied: WP-104
+STATE version: 25
+Updated: 2026-11-01 10:05 (UK time)
+Last work package applied: WP-105
 
 ## File tree
 ```
@@ -49,12 +49,17 @@ server/ai/prompt.js
 server/ai/read-tools.js
 server/ai/tools.js
 server/alerts.js
+server/api.js
 server/auth.js
 server/config.js
 server/curriculum.js
 server/documents.js
+server/domain/fields.js
+server/domain/tasks.js
+server/domain/work.js
 server/index.js
 server/port.js
+server/rate-limits.js
 server/storage/git.js
 server/storage/inbox.js
 server/storage/index.js
@@ -92,6 +97,8 @@ test/storage-recovery.test.js
 test/storage.test.js
 test/web-shell.test.js
 test/web-tools.test.js
+test/work-api.test.js
+test/work-records.test.js
 test/worker-inbox.test.js
 test/worker-repo-file.test.js
 test/worker.test.js
@@ -121,8 +128,13 @@ web/shared/wake.js
 - `web/capture.js`: `resizeImage(file)`, `createCaptureScreen({ workerUrl, onSignedOut, doc? })` → `{ start(token), stop() }` or null
 - `web/config.js`: `config` (frozen object: `{ workerUrl: string }`)
 - `scripts/make-icons.js`: `renderIcon(size: number): Buffer`, `encodePng(size: number, raw?: Buffer): Buffer`
-- `server/config.js`: `PAGES_ORIGIN` (string), `loadConfig(env = process.env)` → frozen `{ port, host, idleTimeoutMin, devOrigins, jsonBodyLimit, uploadBodyLimit, codespaceName, publicUrl }`, `isAllowedOrigin(origin: string | undefined, config: { devOrigins: boolean }): boolean`
-- `server/index.js`: `class HttpError(status, message)`, `createState(config, now = new Date())` → `{ startedAt, restsAt, ai, storage, port }`, `healthBody(state)`, `readJson(req, limit): Promise<unknown>`, `createHandler({ config, state, log = console, authSettings = null, getStore = () => null })`, `checkPass`, `createServer(config, state?, log?, options?)` with `options = { authSettings, getStore }` → `{ server, state }`, `processChain(pid, { depth?, read? }): string`
+- `server/config.js`: `PAGES_ORIGIN` (string), `loadConfig(env = process.env)` → frozen `{ port, host, idleTimeoutMin, devOrigins, jsonBodyLimit, uploadBodyLimit, rateLimitPerMin, aiDailyCeiling, codespaceName, publicUrl }`, `isAllowedOrigin(origin: string | undefined, config: { devOrigins: boolean }): boolean`
+- `server/index.js`: `class HttpError(status, message)`, `createState(config, now = new Date())` → `{ startedAt, restsAt, ai, storage, port }`, `healthBody(state)`, `readJson(req, limit): Promise<unknown>`, `createHandler({ config, state, log = console, authSettings = null, getStore = () => null, getCurriculum = () => null, rateLimiter = null })`, `checkPass`, `createServer(config, state?, log?, options?)` with `options = { authSettings, getStore, getCurriculum, rateLimiter }` → `{ server, state }`, `processChain(pid, { depth?, read? }): string`
+- `server/domain/fields.js`: `class DomainError(status, message)`, `bad(message)` (400), `notFound(what)` (404), `TEXT_AUTHORS`, `TOPIC_ID_FALLBACK`, `QUAL_ID_FALLBACK`, `plainObject`, `onlyKeys`, `shortString(value, name, { max, required? })`, `textField(value, name, { max, authors?, defaultAuthor, required? })` → `{ value, author }`, `oneOf(value, name, allowed, { required? })`, `ukDate`, `wholeNumber`, `flag`, `recordId`, `topicId(value, name, curriculum)`, `topicIds(value, name, curriculum, { max })`, `qualificationId(value, name, curriculum)`, `idDate(id)`. Error messages name fields only, never learner text.
+- `server/domain/tasks.js`: `TASK_KINDS`, `WORK_TYPES`, `STAGES`, `FINISHED_STAGES`, `ANCHOR_TYPES`, `ANCHOR_AUTHORS`, `TASK_LIMITS`, `TASK_FIELDS`, `taskPath(id)`, `newAnchor(body, { createdBy?, now? })`, `newTask(body, { curriculum?, createdBy?, now? })`, `applyTaskChanges(task, body, { curriculum?, now? })` → `{ task, changed, stage }`, `withTaskLock(id, fn)`, `readTask(store, id)`, `listTasks(store, { open? })`, `createTask(store, body, opts?)`, `updateTask(store, id, body, opts?)`, `addAnchor(store, taskId, body, opts?)`, `updateAnchor(store, taskId, anchorId, body, opts?)`, `removeAnchor(store, taskId, anchorId, opts?)`
+- `server/domain/work.js`: `SUPPORT_TYPES` (`hint, breakdown, pointer, explanation`), `SUPPORT_OUTCOMES` (`tried-again, solved, gave-up`), `CHECK_RESULTS` (`passed, regenerated, fallback`), `WORK_LIMITS`, `attemptPath(id)`, `aiTurnPath(id)`, `newAttempt(body, { curriculum?, now? })`, `recordAttempt(store, body, opts?)`, `readAttempt(store, id)`, `logSupport(store, { type, route, attemptId, taskId?, topicId? })`, `logSupportOutcome(store, { supportEventId, outcome })`, `newAiTurn(fields, { now? })`, `saveAiTurn(store, fields, { now? })`. Imports `ROUTES` (prompt.js) and `ROLES` (models.js), both side-effect free.
+- `server/rate-limits.js`: `RATE_WINDOW_MS` (60000), `MAX_TRACKED_PASSES` (200), `RATE_LIMIT_MESSAGE`, `AI_CEILING_MESSAGE`, `passKey(pass)`, `createRateLimiter({ limit, windowMs?, now?, maxKeys? })` → `{ take(key) → { ok, remaining } | { ok: false, retryAfterS }, size() }`, `createAiCeiling({ limit, now? })` → `{ take() → { ok, used, limit, message? }, status() → { day, used, limit } }` (resets at UK midnight)
+- `server/api.js`: `API_ROUTES`, `API_MESSAGES`, `matchApiRoute(method, pathname)` → route match, `{ status: 405, allow }` or null, `handleApi({ match, pass, store, body?, query?, getCurriculum? })` → `{ status, body }`
 - `server/ai/models.js`: `ROLES` (frozen array of 6 roles), `MODELS_URL` (URL), `validateModels(raw: unknown)` → `{ models, errors }`, `loadModels(url = MODELS_URL): Promise<{ models, errors }>` (never throws)
 - `server/ai/copilot.js`: `SDK_PACKAGE`, `DEFAULT_WORK_DIR`, `redact(text): string`, `errorSummary(err, max = 300): string`, `loadSdk(importer?): Promise<{ sdk, error }>`, `builtInToolNames(value): string[]`, `sdkTools(sdk, customTools, { onToolCall }?)` → SDK tools (via `defineTool(name, config)` when exported), `createCopilotAi({ sdk, token, workDir?, log? })` → `{ mode: 'copilot', ask({ model, system, prompt, attachments?, tools?, customTools?, allowPermission?, onPermission?, onEvent?, onToolCall?, unsafeAllToolsForTest?, timeoutMs? }), listModels(), listBuiltInTools(), stop(), features: { defineTool } }`. Shell, write, read and MCP permission requests are always refused; the app's own tools (`customTools`) are approved by name only and added to `availableTools`, which otherwise defaults to `[]`; no `tools` key when there are none.
 - `server/ai/mock.js`: `createMockAi({ replies?, failures?, models?, builtInTools?, permissionRequests?, events?, toolCalls? } = {})` → `{ mode: 'mock', ask, listModels, listBuiltInTools, stop, calls, features: { defineTool: false } }` (same `customTools`/`onToolCall` options as the adapter; tool results reach a reply function as `toolResults`)
@@ -184,9 +196,17 @@ web/shared/wake.js
 ## Routes
 - `GET /api/health` (no pass). Times are UK time (`+00:00`/`+01:00`), including `port.updatedAt`.
 - `GET /api/item?type=&id=&task=` (pass): learner opens all types; parent opens only notes, plans and drafts with `sharedWithParent` set; unshared and missing both return 404.
+- **Work routes (WP-105; pass required; learner only, parent gets 403):** `GET /api/tasks` (`?open=1` for open tasks only), `POST /api/tasks`, `GET /api/tasks/:id`, `PATCH /api/tasks/:id`, `POST /api/tasks/:id/anchors`, `PATCH /api/tasks/:id/anchors/:anchorId`, `DELETE /api/tasks/:id/anchors/:anchorId`, `POST /api/attempts`. Order: match → pass (401/503) → rate limit → body (256 KB, 413) → role (403) → storage ready (503) → handler. Unknown `/api/...` paths return 404 without a pass; a known path with the wrong method returns 405 with `Allow`. Validation errors (400) name fields only.
+- **Rate limit:** `RATE_LIMIT_PER_MIN` requests per pass per minute (default 120) on the work routes and `/api/item`; over the limit → 429 with `Retry-After`.
 - `/api/health` `ai` = `{ ready, roles, errors, mode }`; `mode` is `starting` | `off` | `mock` | `copilot`; each `roles` entry is `{ model, ok, ms | error }`. The AI start-up test runs after the server starts listening.
 - `/api/health` `port` = `{ visibility, detail, attempts, updatedAt }`; `visibility` is `unknown` | `n/a` | `pending` | `public` | `private`. The port manager starts after listening.
 - `/api/health` `storage` = `{ ok, ready, lastPull, lastPush, pending, detail }`. Storage starts after listening.
+
+## Work records (WP-105)
+- Paths: `tasks/<taskId>/task.json` (anchors inside the task), `attempts/<UK month>/<id>.json`, `ai-turns/<UK month>/<id>.json` (month from the time inside the id).
+- Task stages: `not-started`, `researching`, `planning`, `drafting`, `reviewing`, `submitted`, `done`. `completedAt` is set the first time the stage becomes `submitted` or `done` and never cleared (retention clock, WP-123). A typed task starts `confirmed: true`. Learner anchors start confirmed; source anchors don't.
+- Events (ids, field names, types and stages only, never text): `task.created`, `task.updated`, `task.stage`, `anchor.added`, `anchor.updated`, `anchor.removed`, `attempt.recorded`, `support.requested`, `support.outcome`.
+- AI turns at wellbeing level 2–3 keep no text (`textRemoved: true`).
 
 ## Sync clashes (WP-014a-fix)
 When `git pull --rebase` clashes, `syncLocked()` settles server-made files itself: event logs (`events/*.jsonl`) are merged by line (both sides kept once); `index/snapshot.json` takes the remote side and is rebuilt in the next batch; `inbox/` prefers the remote (Worker) copy; `uploads/` prefers the local (server) copy. Anything else aborts the rebase, keeps local commits, sets `storage.detail` to `needs attention: sync clash in <paths> …` (paths only) and stops pulling until restart; saving continues locally. Manual fix: inspect and resolve in `/workspaces/storage`, then `npm run server`.
@@ -227,6 +247,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 ## Settings and secrets expected
 - Server (optional, non-secret): `PORT`, `HOST`, `IDLE_TIMEOUT_MIN`, `DEV_ORIGINS`. Also read if present (set by Codespaces): `CODESPACE_NAME`, `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN`.
 - AI (optional, non-secret): `AI_MOCK=1` (use the mock AI), `COPILOT_WORK_DIR` (SDK work folder; default is under the OS temp folder).
+- Limits (optional, non-secret): `RATE_LIMIT_PER_MIN` (default 120), `AI_DAILY_CEILING` (default 300 AI requests per UK day). Logged at start-up as `[limits] …`.
 - `COPILOT_GITHUB_TOKEN`: read by `server/ai/index.js` only (passed to the Copilot adapter); never logged.
 - `GH_PORTS_TOKEN`: read by `server/port.js` only (passed to `gh` as `GH_TOKEN`); never logged.
 - `STORAGE_REPO`, `STORAGE_TOKEN`: read by `server/storage/index.js` and `server/alerts.js` (for alerts the token is sent only to `api.github.com` and never logged). The token is passed to git as an auth header in the environment and is never logged. Optional, non-secret: `STORAGE_DIR` (default `/workspaces/storage`; must be outside the app repository).
@@ -261,6 +282,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
+- The rate limit and AI ceiling are in memory and reset on restart. Nothing calls `aiCeiling.take()`, `saveAiTurn` or `logSupport` until WP-111.
 - The loader reads a top-level `optionalGroups`; the private qualification records keep either/or groups at `structure.optionalGroups`. No effect today (every unit has `type`); a fallback is planned for WP-120.
 - `wake/worker.js` `/repo-file`: the final catch logs `err?.message ?? String(err)`, whereas every other catch in the Worker logs only `err?.name`. Low risk: the route reads only the public repository, uses no token or setting, and doesn't log the path. Change it to `err?.name` in the next package that changes the Worker anyway, so that no extra Cloudflare paste is needed (owner decision, 31 Oct 2026).
 - `wake/worker.js`: the opening comment still says a later package adds the weekly wake (WP-016). A-004 removed that. Correct it in the same Worker change.
