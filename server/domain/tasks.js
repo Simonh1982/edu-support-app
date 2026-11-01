@@ -61,8 +61,11 @@ export function newAnchor(body, { createdBy = 'learner', now = new Date() } = {}
   return newRecord('anc', { type, text, confirmed }, { createdBy, now });
 }
 
-/** A new Task record. createdBy is 'learner' for typed tasks and 'ai' for tasks read from a brief. */
-export function newTask(body, { curriculum = null, createdBy = 'learner', now = new Date() } = {}) {
+/**
+ * A new Task record. createdBy is 'learner' for typed tasks and 'ai' for tasks read from a brief.
+ * sourceUploads: the uploads the task was read from (WP-108a).
+ */
+export function newTask(body, { curriculum = null, createdBy = 'learner', now = new Date(), sourceUploads = [] } = {}) {
   plainObject(body, 'task');
   onlyKeys(body, [...TASK_FIELDS, 'anchors'], 'task');
   const f = taskFields(body, { curriculum, partial: false });
@@ -73,7 +76,7 @@ export function newTask(body, { curriculum = null, createdBy = 'learner', now = 
   return newRecord('t', {
     ...f,
     anchors,
-    sourceUploads: [],
+    sourceUploads: [...sourceUploads],
     // the retention clock starts the first time the task is submitted or done (build spec §32.2)
     completedAt: FINISHED_STAGES.includes(f.stage) ? ukIso(now) : null,
   }, { createdBy, now });
@@ -125,8 +128,8 @@ export async function listTasks(store, { open = false } = {}) {
     || String(a.createdAt).localeCompare(String(b.createdAt)));
 }
 
-export async function createTask(store, body, { curriculum = null, createdBy = 'learner', now = new Date() } = {}) {
-  const task = newTask(body, { curriculum, createdBy, now });
+export async function createTask(store, body, { curriculum = null, createdBy = 'learner', now = new Date(), sourceUploads = [] } = {}) {
+  const task = newTask(body, { curriculum, createdBy, now, sourceUploads });
   await store.put(taskPath(task.id), task);
   await store.logEvent('task.created', {
     createdBy,

@@ -47,6 +47,13 @@ export function isDocumentUpload(record) {
   return DOCUMENT_TYPES.includes(record?.mimeType);
 }
 
+// Pasted text (WP-108a): no file; the text is saved on the record when it is pasted.
+export const PASTE_TYPE = 'text/plain';
+
+export function isTextUpload(record) {
+  return record?.mimeType === PASTE_TYPE && record?.origin === 'paste';
+}
+
 async function waitingUploads(store, accept) {
   const out = [];
   for (const name of await store.list('uploads')) {
@@ -69,9 +76,9 @@ export function pendingImageUploads(store) {
   return waitingUploads(store, isImageUpload);
 }
 
-/** Every upload still waiting to be read (photos, Word and PDF files), oldest first. */
+/** Every upload still waiting to be read (photos, Word and PDF files, pasted text), oldest first. */
 export function pendingUploads(store) {
-  return waitingUploads(store, (r) => isImageUpload(r) || isDocumentUpload(r));
+  return waitingUploads(store, (r) => isImageUpload(r) || isDocumentUpload(r) || isTextUpload(r));
 }
 
 /** Each model's image limits, read once from the model list (A-002). Null until known. */
@@ -250,26 +257,32 @@ async function readImage(ctx, { source = 'photo', bytes = null } = {}) {
   });
 }
 
-// A Word or PDF file: text from the server; a scan goes on to readImage (A-003).
+// A Word or PDF file: text from the server; a scan goes on to readImage (A-003). Pasted text (WP-108a)
+// is already exact, so it skips extraction and goes straight on to the draft task.
 async function readDocument(ctx) {
   const { store, record, curriculum, now, kind, ask, extract } = ctx;
-  const bytes = await readUploadBytes(store, record);
-  if (!bytes) return markFailed(store, record, 'file-missing', now);
   let result;
-  try {
-    result = await extract({ bytes, mimeType: record.mimeType });
-  } catch {
-    result = { ok: false, reason: 'unreadable' };
+  if (isTextUpload(record)) {
+    const pasted = record.extractedText?.value;
+    result = { ok: true, text: typeof pasted === 'string' ? pasted : '', truncated: false, lowTextPages: [] };
+  } else {
+    const bytes = await readUploadBytes(store, record);
+    if (!bytes) return markFailed(store, record, 'file-missing', now);
+    try {
+      result = await extract({ bytes, mimeType: record.mimeType });
+    } catch {
+      result = { ok: false, reason: 'unreadable' };
+    }
+    if (!result?.ok) {
+      const reason = result?.reason;
+      // the libraries are missing (npm install not run): leave the file waiting and read the others
+      if (reason === 'not-installed') return { status: 'skipped', reason: 'extractor-missing' };
+      if (reason === 'timeout') return countTry(store, record, now);
+      if (['password', 'too-large', 'unsupported-type'].includes(reason)) return markFailed(store, record, reason, now);
+      return markFailed(store, record, 'unreadable', now);
+    }
+    if (result.scanned) return readImage(ctx, { source: 'scan', bytes });
   }
-  if (!result?.ok) {
-    const reason = result?.reason;
-    // the libraries are missing (npm install not run): leave the file waiting and read the others
-    if (reason === 'not-installed') return { status: 'skipped', reason: 'extractor-missing' };
-    if (reason === 'timeout') return countTry(store, record, now);
-    if (['password', 'too-large', 'unsupported-type'].includes(reason)) return markFailed(store, record, reason, now);
-    return markFailed(store, record, 'unreadable', now);
-  }
-  if (result.scanned) return readImage(ctx, { source: 'scan', bytes });
   const text = typeof result.text === 'string' ? result.text : '';
   if (!text.trim()) return markFailed(store, record, 'unreadable', now);
   const pages = pageUncertainty(result.lowTextPages);
@@ -327,7 +340,7 @@ export async function readUpload({
     kind: record.contentKind === 'brief' ? 'brief' : 'own',
     ask: makeAsk({ store, handle, aiCeiling, timeoutMs }),
   };
-  return isDocumentUpload(record) ? readDocument(ctx) : readImage(ctx);
+  return isDocumentUpload(record) || isTextUpload(record) ? readDocument(ctx) : readImage(ctx);
 }
 
 /**

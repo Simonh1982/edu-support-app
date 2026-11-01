@@ -1,8 +1,9 @@
-// Pass- and role-checked work routes (WP-105). server/index.js matches the route, checks the pass
-// and the rate limit, reads the body, then calls handleApi. Every route here is learner only.
+// Pass- and role-checked work routes (WP-105, WP-108a). server/index.js matches the route, checks the
+// pass and the rate limit, reads the body, then calls handleApi. Every route here is learner only.
 import { DomainError } from './domain/fields.js';
 import { listTasks, readTask, createTask, updateTask, addAnchor, updateAnchor, removeAnchor } from './domain/tasks.js';
 import { recordAttempt } from './domain/work.js';
+import { openUpload, uploadView, confirmUpload, addPastedBrief, UPLOAD_MESSAGES } from './domain/uploads.js';
 
 const ID = '([A-Za-z0-9][A-Za-z0-9_-]{0,99})';
 const LEARNER = Object.freeze(['learner']);
@@ -17,6 +18,10 @@ export const API_ROUTES = Object.freeze([
   route('PATCH', `/api/tasks/${ID}/anchors/${ID}`, 'updateAnchor'),
   route('DELETE', `/api/tasks/${ID}/anchors/${ID}`, 'removeAnchor'),
   route('POST', '/api/attempts', 'recordAttempt'),
+  // WP-108a: what was read from an upload, its confirmation, and pasted briefs
+  route('POST', '/api/uploads/paste', 'pasteBrief'),
+  route('GET', `/api/uploads/${ID}`, 'getUpload'),
+  route('POST', `/api/uploads/${ID}/confirm`, 'confirmUpload'),
 ]);
 
 export const API_MESSAGES = Object.freeze({
@@ -67,6 +72,21 @@ const HANDLERS = {
   },
   async recordAttempt({ store, body, curriculum }) {
     return { status: 201, body: { attempt: await recordAttempt(store, object(body), { curriculum }) } };
+  },
+  async pasteBrief({ store, body }) {
+    const { upload, duplicate } = await addPastedBrief(store, object(body));
+    return { status: duplicate ? 200 : 201, body: { upload: uploadView(upload), duplicate } };
+  },
+  async getUpload({ store, params: [id] }) {
+    const upload = await openUpload(store, id);
+    return upload
+      ? { status: 200, body: { upload: uploadView(upload) } }
+      : { status: 404, body: { error: UPLOAD_MESSAGES.notFound } };
+  },
+  async confirmUpload({ store, params: [id], body, curriculum }) {
+    const result = await confirmUpload(store, id, object(body), { curriculum });
+    if (result.alreadyTaskId) return { status: 409, body: { error: UPLOAD_MESSAGES.alreadyTask, taskId: result.alreadyTaskId } };
+    return { status: 201, body: { task: result.task, upload: uploadView(result.upload) } };
   },
 };
 

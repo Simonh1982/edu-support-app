@@ -17,6 +17,9 @@ const SETTING_MAX = 40;
 const DONE_STAGES = new Set(['submitted', 'done']);
 const LABELS = Object.freeze({ notebook: 'Note', plan: 'Plan', draft: 'Draft', feedback: 'Feedback' });
 const UPLOAD_STATUSES = new Set(['inbox', 'processing', 'done', 'failed']);
+const UPLOAD_LABELS = Object.freeze({ photo: 'Photo', paste: 'Pasted text' });
+// failure reasons are code words set by the server (never text), so the capture screen can say why
+const REASON_PATTERN = /^[a-z][a-z-]{0,29}$/;
 const RECORD_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'createdBy', 'schemaVersion']);
 
 function cleanText(value, max) {
@@ -88,7 +91,7 @@ async function collect(dir) {
   // Uploads get a plain label only: their extracted text never reaches the snapshot.
   for (const id of await jsonIds(dir, 'uploads')) {
     const record = await readJson(dir, `uploads/${id}.json`);
-    if (record) items.push({ type: 'upload', id, record, title: record.origin === 'photo' ? 'Photo' : 'File' });
+    if (record) items.push({ type: 'upload', id, record, title: Object.hasOwn(UPLOAD_LABELS, record.origin) ? UPLOAD_LABELS[record.origin] : 'File' });
   }
   const taskIds = (await names(dir, 'tasks', { folders: true })).filter((id) => ITEM_ID_PATTERN.test(id));
   for (const taskId of taskIds) {
@@ -107,6 +110,17 @@ async function collect(dir) {
     }
   }
   return { tasks, items };
+}
+
+// An upload's status, plus why it failed and the task it became, when there is one: code words and ids only.
+function uploadFacts(record) {
+  const status = UPLOAD_STATUSES.has(record.status) ? record.status : null;
+  const out = { status };
+  if (status === 'failed' && typeof record.failureReason === 'string' && REASON_PATTERN.test(record.failureReason)) {
+    out.failureReason = record.failureReason;
+  }
+  if (typeof record.taskId === 'string' && ITEM_ID_PATTERN.test(record.taskId)) out.taskId = record.taskId;
+  return out;
 }
 
 function itemRef(item, extra) {
@@ -142,7 +156,7 @@ export async function buildSnapshot({ dir, now = new Date() }) {
     .filter((item) => ['notebook', 'feedback', 'upload'].includes(item.type))
     .map((item) => itemRef(item, {
       updatedAt: cleanDate(item.record.updatedAt),
-      ...(item.type === 'upload' ? { status: UPLOAD_STATUSES.has(item.record.status) ? item.record.status : null } : {}),
+      ...(item.type === 'upload' ? uploadFacts(item.record) : {}),
     }))
     .sort(byNewest('updatedAt'))
     .slice(0, RECENT_LIMIT);
