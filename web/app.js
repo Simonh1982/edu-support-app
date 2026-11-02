@@ -14,6 +14,7 @@ import {
 import { createWaker, WAKE_MESSAGES } from "./shared/wake.js";
 import { createCaptureScreen } from "./capture.js";
 import { createTaskEntry } from "./check.js";
+import { createUpcoming } from "./upcoming.js";
 import { createApi } from "./shared/api.js";
 import { createAccessibility } from "./shared/accessibility.js";
 
@@ -75,11 +76,14 @@ function init() {
 
   // Pasting, typing and "Check the details" need the tutor itself, so they wait until it answers.
   const api = createApi({ getBackendUrl: () => backendUrl, getToken: () => token });
-  taskEntry = createTaskEntry({ api, capture, onSignedOut: signedOut });
+  // "Coming up" (WP-109): from the snapshot while the tutor wakes, from the tutor once it answers
+  const upcoming = createUpcoming({ workerUrl: config.workerUrl, api, onSignedOut: signedOut });
+  taskEntry = createTaskEntry({ api, capture, onSignedOut: signedOut, onTaskAdded: () => upcoming?.refresh() });
 
   function setTutor(state) {
     capture?.setTutor(state);
     taskEntry?.setTutor(state);
+    upcoming?.setTutor(state);
   }
 
   function stopWaking() {
@@ -91,6 +95,7 @@ function init() {
     stopWaking();
     capture?.stop();
     taskEntry?.stop();
+    upcoming?.stop();
     setTutor("waiting");
     token = null;
     backendUrl = null;
@@ -148,6 +153,7 @@ function init() {
     token = pass.token;
     startWaking(pass);
     capture?.start(pass.token);
+    upcoming?.start(pass.token);
   }
 
   els.form.addEventListener("submit", (event) => {

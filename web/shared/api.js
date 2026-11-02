@@ -66,7 +66,7 @@ export function apiErrorMessage(result) {
   return API_ERRORS.server;
 }
 
-/** The four calls this package needs, bound to the current address and pass. */
+/** The calls the learner page makes, bound to the current address and pass. */
 export function createApi({ getBackendUrl, getToken, fetchImpl = globalThis.fetch, timeoutMs = API_TIMEOUT_MS }) {
   const call = (path, { method = "GET", body } = {}) =>
     apiRequest({ backendUrl: getBackendUrl(), path, token: getToken(), method, body, fetchImpl, timeoutMs });
@@ -77,6 +77,9 @@ export function createApi({ getBackendUrl, getToken, fetchImpl = globalThis.fetc
     openUpload: (id) => call(uploadPath(id)),
     confirmUpload: (id, body) => call(`${uploadPath(id)}/confirm`, { method: "POST", body }),
     addTask: (body) => call("api/tasks", { method: "POST", body }),
+    // WP-109: the open tasks for "Coming up", and changing a task's stage or deadline
+    openTasks: () => call("api/tasks?open=1"),
+    updateTask: (id, body) => call(`api/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   };
 }
 
