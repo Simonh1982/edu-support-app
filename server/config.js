@@ -7,6 +7,8 @@ const DEFAULT_PORT = 3000;
 const DEFAULT_IDLE_TIMEOUT_MIN = 30; // must match the GitHub Codespaces idle-timeout setting
 const DEFAULT_RATE_LIMIT_PER_MIN = 120;
 const DEFAULT_AI_DAILY_CEILING = 300;
+// "idk"-style answers in one conversation before replies get shorter (build spec §34; a setting)
+const DEFAULT_DISENGAGE_AFTER = 3;
 
 function positiveInt(value, fallback) {
   const n = Number(value);
@@ -31,6 +33,7 @@ export function loadConfig(env = process.env) {
     // safety nets (blueprint §3.5, §7.12): requests per pass per minute, and AI requests per UK day
     rateLimitPerMin: positiveInt(env.RATE_LIMIT_PER_MIN, DEFAULT_RATE_LIMIT_PER_MIN),
     aiDailyCeiling: positiveInt(env.AI_DAILY_CEILING, DEFAULT_AI_DAILY_CEILING),
+    disengageAfter: positiveInt(env.DISENGAGE_AFTER, DEFAULT_DISENGAGE_AFTER),
     codespaceName,
     publicUrl: codespaceName && forwardingDomain
       ? `https://${codespaceName}-${port || DEFAULT_PORT}.${forwardingDomain}`
