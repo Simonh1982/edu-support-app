@@ -840,6 +840,33 @@ button.vote[aria-pressed="true"]::after {
   margin-top: 0.5rem;
 }
 
+/* Level-3 helplines (WP-112). Uses the theme's own colours, so contrast holds in every theme. */
+.care {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--warn);
+  border-radius: 0.5rem;
+}
+
+.care-heading {
+  margin: 0.25rem 0 0.25rem;
+  font-weight: 700;
+}
+
+.care ul {
+  margin: 0 0 0.25rem;
+  padding-left: 1.25rem;
+}
+
+.care a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--fg);
+  font-weight: 700;
+  text-underline-offset: 0.2em;
+}
+
 /* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
 @media (prefers-reduced-motion: reduce) {
   *,

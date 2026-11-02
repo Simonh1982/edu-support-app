@@ -6,6 +6,7 @@
 import { apiErrorMessage } from "./shared/api.js";
 import { dueText, ukToday } from "./shared/upcoming.js";
 import {
+  HELPLINES,
   ROUTE_LABELS,
   TALK_MESSAGES,
   TASK_BUTTONS,
@@ -18,6 +19,7 @@ import {
   promptFor,
   routeChoices,
   shownVote,
+  showsCare,
   supportHeading,
   supportLabel,
   talkErrorMessage,
@@ -149,6 +151,7 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
       return;
     }
     let route = "research";
+    let sendNow = false;
     if (ready) {
       busy = true;
       setText(els.helpStatus, "Finding the best place to start…");
@@ -157,12 +160,15 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
       if (!active) return;
       if (result.kind === "auth") return signedOut(result.reason);
       if (result.kind === "ok" && isWorkRoute(result.body?.route)) route = result.body.route;
+      sendNow = result.kind === "ok" && result.body?.sendNow === true;
     }
     setText(els.helpStatus, "");
     els.helpText.value = "";
     els.helpForm.hidden = true;
     els.helpOther.setAttribute("aria-expanded", "false");
     openTalk({ taskId: null, title: null, route, draft: checked.text });
+    // a personal message goes straight to the tutor, which replies with care (blueprint §7.10)
+    if (sendNow) await sendText(checked.text);
   });
 
   // ---------- the conversation view ----------
@@ -201,6 +207,21 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     return group;
   }
 
+  // Level 3: the UK helplines, always shown beside the reply (build spec §32.1). Real links, so a tap
+  // rings or texts straight away.
+  function careBox() {
+    const box = make(doc, "div", { className: "care" });
+    box.append(make(doc, "p", { className: "care-heading", text: TALK_MESSAGES.careHeading }));
+    const list = make(doc, "ul");
+    for (const line of HELPLINES) {
+      const item = make(doc, "li");
+      item.append(make(doc, "strong", { text: `${line.name}: ` }), make(doc, "a", { text: line.how, attrs: { href: line.href } }));
+      list.append(item);
+    }
+    box.append(list);
+    return box;
+  }
+
   function turnItem(turn) {
     const item = make(doc, "li", { className: "turn" });
     const said = learnerLine(turn, session.route);
@@ -211,11 +232,10 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     }
     const tutor = make(doc, "div", { className: "turn-tutor", attrs: { id: `turn-${turn.id}`, tabindex: "-1" } });
     tutor.append(make(doc, "p", { className: "turn-who", text: "Tutor" }));
-    if (turn.reply) {
-      tutor.append(make(doc, "p", { className: "turn-text", text: turn.reply }), voteButtons(turn));
-    } else {
-      tutor.append(make(doc, "p", { className: "hint", text: TALK_MESSAGES.noReply }));
-    }
+    if (turn.reply) tutor.append(make(doc, "p", { className: "turn-text", text: turn.reply }));
+    else tutor.append(make(doc, "p", { className: "hint", text: TALK_MESSAGES.noReply }));
+    if (showsCare(turn)) tutor.append(careBox());
+    if (turn.reply) tutor.append(voteButtons(turn));
     item.append(tutor);
     return item;
   }
@@ -295,15 +315,21 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     return true;
   }
 
-  els.form.addEventListener("submit", async (event) => {
+  els.form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!session || busy || !ready) return;
+    if (!session || busy || !ready) return undefined;
     const checked = checkMessage(els.text.value);
     if (checked.error) {
       setText(els.error, checked.error);
       els.text.focus();
-      return;
+      return undefined;
     }
+    return sendText(checked.text);
+  });
+
+  /** Sends what he wrote. The writing box clears only once the tutor has answered. */
+  async function sendText(text) {
+    if (!session || busy || !ready) return;
     const mine = session;
     setText(els.error, "");
     setBusy(true);
@@ -311,17 +337,17 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
       if (session === mine) setBusy(false);
       return;
     }
-    const result = await api.sendMessage(mine.conversationId, { text: checked.text });
+    const result = await api.sendMessage(mine.conversationId, { text });
     if (session !== mine) return;
     setBusy(false);
     if (result.kind !== "ok") return failed(result);
     mine.view = result.body?.conversation ?? mine.view;
-    const turn = turnFromReply(result.body?.turn, { learnerText: checked.text });
+    const turn = turnFromReply(result.body?.turn, { learnerText: text });
     if (turn) mine.turns.push(turn);
     els.text.value = "";
     render();
     if (turn) focusTurn(turn.id);
-  });
+  }
 
   // "I don't know where to start": Break it down only (build spec §21.1). No tutor call.
   els.escape.addEventListener("click", async () => {

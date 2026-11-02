@@ -129,17 +129,18 @@ const HANDLERS = {
  * out-of-order support (409), the AI ceiling (429) and AI problems (502/503) become answers;
  * anything else is thrown for the server's 500 handler.
  * getAi: () => { ai, models } once the AI has started, else null. aiCeiling: the daily AI limit.
- * settings: { disengageAfter }.
+ * settings: { disengageAfter }. wellbeing: createWellbeing() (server/wellbeing.js), which alerts the
+ * owner at levels 2–3; null records the event but sends no alert (tests never send real alerts).
  */
 export async function handleApi({
   match, pass, store, body = null, query = new URLSearchParams(), getCurriculum = () => null,
-  getAi = () => null, aiCeiling = null, settings = {}, log = console,
+  getAi = () => null, aiCeiling = null, settings = {}, wellbeing = null, log = console,
 }) {
   const { route: r, params } = match;
   if (!r.roles.includes(pass?.role)) return { status: 403, body: { error: API_MESSAGES.notAllowed } };
   if (!store || !store.status().ready) return { status: 503, body: { error: API_MESSAGES.notReady } };
   const curriculum = getCurriculum() ?? null;
-  const ctx = { getAi, aiCeiling, curriculum, disengageAfter: settings.disengageAfter, log };
+  const ctx = { getAi, aiCeiling, curriculum, disengageAfter: settings.disengageAfter, wellbeing, log };
   try {
     return await HANDLERS[r.name]({ store, params, body, query, curriculum, ctx });
   } catch (err) {

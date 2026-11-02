@@ -15,6 +15,13 @@ export const SUPPORT_TYPES = Object.freeze(["hint", "breakdown", "pointer", "exp
 export const FIRST_PAIR = Object.freeze(["hint", "breakdown"]);
 export const VOTES = Object.freeze(["up", "down", "removed"]);
 export const MESSAGE_MAX_CHARS = 4000;
+// Copy of HELPLINES in server/wellbeing.js (checked by test/wellbeing.test.js). Shown beside level-3 replies.
+export const HELPLINES = Object.freeze([
+  Object.freeze({ name: "Childline", how: "call 0800 1111", href: "tel:08001111" }),
+  Object.freeze({ name: "Shout", how: "text 85258", href: "sms:85258" }),
+  Object.freeze({ name: "Samaritans", how: "call 116 123", href: "tel:116123" }),
+  Object.freeze({ name: "In immediate danger", how: "call 999", href: "tel:999" }),
+]);
 
 // Each send can take up to two tutor calls of 60 s, so the browser waits longer than for other calls.
 export const CONVERSATION_TIMEOUT_MS = 150_000;
@@ -72,6 +79,7 @@ export const TALK_MESSAGES = Object.freeze({
   unreachable: "Can't reach the tutor. It may be resting. Your words are still here.",
   resumed: "Picked up where you left off.",
   voteFailed: "That didn't save. Please try again.",
+  careHeading: "If you need to talk to someone now:",
   noTasks: "No tasks yet. Add one below, or choose Something else.",
   whatHelp: "What do you need help with?",
   noTask: "Not linked to a task.",
@@ -172,6 +180,7 @@ export function turnFromReply(turn, { learnerText = null } = {}) {
     type: turn.type ?? null,
     learnerText: turn.action === "support" ? null : learnerText,
     reply: typeof turn.reply === "string" ? turn.reply : null,
+    wellbeingLevel: Number.isInteger(turn.wellbeingLevel) ? turn.wellbeingLevel : null,
   };
 }
 
@@ -186,7 +195,13 @@ export function turnsFromServer(conversation) {
       type: t.type ?? null,
       learnerText: typeof t.learnerText === "string" ? t.learnerText : null,
       reply: typeof t.reply === "string" ? t.reply : null,
+      wellbeingLevel: Number.isInteger(t.wellbeingLevel) ? t.wellbeingLevel : null,
     }));
+}
+
+/** Level 3: the helplines are shown beside the reply, whatever it says (build spec §32.1). */
+export function showsCare(turn) {
+  return turn?.wellbeingLevel === 3;
 }
 
 /** What the learner side of a turn says: his words, or the help he asked for. */
