@@ -1,6 +1,6 @@
-STATE version: 32
-Updated: 2026-11-02 15:48 (UK time)
-Last work package applied: WP-111a
+STATE version: 33
+Updated: 2026-11-02 16:43 (UK time)
+Last work package applied: WP-111a-fix
 
 ## File tree
 ```
@@ -273,6 +273,7 @@ When `git pull --rebase` clashes, `syncLocked()` settles server-made files itsel
 
 ## Evals
 Case files are JSON arrays in `evals/cases/`, generic and invented only. Each case has `id`, `category`, `role`, `turns` (1–6), optional `task` `{ question, anchors }`, optional `presentation` (the four §30 choices), optional `instruction` (background jobs only) and `expect` `{ behaviour, notes, wellbeingLevel?, wellbeingMax?, mustMention?, json?, jsonContains?, mustSuggest? }`. Background jobs (`behaviour: "json"`) are checked in code only; everything else is also judged by the `judge` role. The tutor runs on `skills/core/SKILL.md` (generic tone examples, default labels) and the presentation wordings from `server/ai/prompt.js` (WP-104); `evals/system-placeholder.md` is only a fallback. Cases don't yet name a route, so route skill files aren't exercised by the evals (WP-125). `--mock` checks the runner only: its canned reply can't satisfy the `background` cases' JSON expectations, so a full mock run gives 25/34 (9 `background` cases fail with `json-mismatch`; same before WP-104). Private spelling samples (`<STORAGE_DIR>/evals-private/`) are counted only, never read, until phase 1.
+- WP-111a run 32/34; WP-111a-fix rewords the core skill's good-faith line, the scope of attempt-first and tone example 4.
 
 ## Pages
 - Learner `/`: sign-in, signed-in screen, waking (polls `/api/health` every 5 s for up to 5 min; `/status` every third poll; rings again if still `Shutdown`; port hint after 90 s `Available`). Pass in `localStorage` on own devices, `sessionStorage` only on a shared computer.
@@ -345,6 +346,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - WP-110 live check passed 2 Nov 2026 (steps 6–19): home screen, Back and the browser back button; 'Learn or revise: coming soon'; with the Codespace stopped the saved view appeared at once; a queued typed task showed the waiting line, changed Recommended next, survived a reload and saved once the tutor was ready; on the phone no sideways scrolling and easy tap targets.
 
 ## Deviations in effect
+- `test/prompt.test.js` (WP-111a-fix): the "private tone examples replace the generic ones" check now looks for the reworded generic example 4 (`Tutor: I can't write it for you`) instead of the removed `Tutor: Nice try`, so it still proves the generic block is replaced. Expected text only.
 - `test/conversation.test.js` (WP-111a): the fake `curriculum` is given the shape `loadCurriculum()` produces (qualification with `id`, `title`, `units`, `aos`, `commandWords`; topic with `id`, `qualId`, `unitId`, `title`, `record`). As written it was `{}` / `{ title }`, which matched the sandbox stub but not the real `topicExtract()`, so 4 tests failed with "Cannot read properties of undefined (reading 'units')". Test data only; no app code changed.
 - `package.json` (owner-approved hotfix, 31 Oct 2026, not from a work package): `"overrides": { "zod": "4.6.7" }` added after `dependencies`; lockfile regenerated. Reason: `npm audit` flagged 2 high (GHSA-mrhx-c7xc-m3w5, memory exhaustion) in `zod` 4.3.6, which `@github/copilot-sdk` 1.0.22 pins exactly (1.0.28 pins the same). Nothing in the app or the SDK imports `zod` at run time (SDK uses it in type definitions only). After the override: `npm audit` 0 vulnerabilities; `npm ci`, `npm test` (361/361) and `npm run spike:docs` pass; the SDK still loads (`defineTool` present). Future packages that edit `package.json` must keep the `overrides` block; remove it only once the SDK pins `zod` >=4.6.6.
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
