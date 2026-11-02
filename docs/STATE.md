@@ -1,6 +1,6 @@
-STATE version: 30
-Updated: 2026-11-02 12:50 (UK time)
-Last work package applied: WP-109
+STATE version: 31
+Updated: 2026-11-02 13:57 (UK time)
+Last work package applied: WP-110
 
 ## File tree
 ```
@@ -87,6 +87,7 @@ test/custom-tools.test.js
 test/documents.test.js
 test/evals.test.js
 test/front-end.test.js
+test/home.test.js
 test/image-input.test.js
 test/inbox-check.test.js
 test/inbox.test.js
@@ -119,6 +120,8 @@ web/app.js
 web/capture.js
 web/check.js
 web/config.js
+web/device-store.js
+web/home.js
 web/icons/icon-192.png
 web/icons/icon-512.png
 web/index.html
@@ -129,6 +132,8 @@ web/shared/accessibility.js
 web/shared/api.js
 web/shared/auth.js
 web/shared/capture.js
+web/shared/offline.js
+web/shared/recommend.js
 web/shared/task-check.js
 web/shared/upcoming.js
 web/shared/wake.js
@@ -144,10 +149,14 @@ web/upcoming.js
 - `web/capture.js`: `resizeImage(file)`, `createCaptureScreen({ workerUrl, onSignedOut, onCheck, doc? })` → `{ start(token), stop(), setTutor, addPasted, markAdded }` or null
 - `web/shared/task-check.js` (WP-108b): copies `TASK_KINDS`, `WORK_TYPES`, `READ_ANCHOR_TYPES`, `TASK_LIMITS` (subset), `PASTE_MAX_CHARS`; `KIND_LABELS`, `WORK_TYPE_LABELS`, `ANCHOR_LABELS`, `CHECK_FIELDS`, `FIELD_PROMPTS`, `CHECK_MESSAGES`; correction copies `locateWord`, `applyCorrections`, `correctQuestion`; `correctionsOf`, `initialUndone`, `withUndone`, `previewQuestion`, `checkPlan`, `textSegments`, `readNotes`, `initialChips`, `chipText`, `editChip`, `removeChip`, `addChip`, `anchorsBody`, `checkValues`, `confirmationBody`, `typedTaskBody`, `pasteCheck`, `formatDeadline`
 - `web/shared/api.js` (WP-108b): `API_TIMEOUT_MS` (20000), `READ_POLL` (`{ stepMs: 3000, limitMs: 90000 }`), `API_ERRORS`, `apiUrl(backendUrl, path)`, `apiRequest({ backendUrl, path, token, method?, body?, fetchImpl?, timeoutMs? })`, `apiErrorMessage(result)`, `createApi({ getBackendUrl, getToken, fetchImpl?, timeoutMs? })` → `{ call, pasteBrief, openUpload, confirmUpload, addTask, openTasks, updateTask }` (last two WP-109), `waitForReading(...)` → `{ kind: ok|timeout|stopped|… }`
-- `web/check.js` (WP-108b): `createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc? })` → `{ setTutor, open, stop }` (`onTaskAdded` WP-109: called after a typed task or a confirmed brief)
+- `web/check.js` (WP-108b): `createTaskEntry({ api, capture, onSignedOut, onTaskAdded, queueTask?, doc? })` → `{ setTutor, open, start, stop }` (`onTaskAdded` WP-109: called after a typed task or a confirmed brief; WP-110: `queueTask(body)` → `{ kind: "queued", message } | { kind: "queue-error", message }` lets a typed task be added while the tutor wakes; `start()` marks signed in)
 - `web/shared/upcoming.js` (WP-109; no imports, browser and Node): `UK_TIME_ZONE`, `STAGES`, `FINISHED_STAGES`, `TASK_KINDS` (copies), `STAGE_LABELS`, `GROUPS` (`today, soon, later`), `GROUP_LABELS`, `SOON_DAYS` (7), `UPCOMING_MESSAGES`, `ukToday(now?)`, `validDate(value)`, `addDays(date, days)`, `daysBetween(from, to)`, `longDateText(date)`, `dueText(deadline, today)`, `stageLabel(stage)`, `upcomingItem(raw)`, `fromTask(task)`, `fromSnapshot(body)`, `groupUpcoming(items, { today? })` → `{ today, soon, later, count, date }`, `groupTasks(tasks, options)`, `updateBody(item, { stage?, deadline? })` → `{ body, leaves } | { unchanged } | { error, field }`, `movedOffMessage(title, stage)`
 - `server/derived/upcoming.js` (WP-109): re-exports `UK_TIME_ZONE`, `STAGE_LABELS`, `GROUPS`, `GROUP_LABELS`, `SOON_DAYS`, `ukToday`, `validDate`, `addDays`, `daysBetween`, `dueText`, `stageLabel`, `upcomingItem`, `fromTask`, `fromSnapshot`, `groupUpcoming`, `groupTasks` from `web/shared/upcoming.js`. Not used by the running server yet.
-- `web/upcoming.js` (WP-109): `createUpcoming({ workerUrl, api, onSignedOut, doc?, now? })` → `{ start(token), setTutor(state), refresh(), stop() }` or null
+- `web/upcoming.js` (WP-109, replaced WP-110): `createUpcoming({ workerUrl, api, offline?, onSignedOut, onList?, doc?, now? })` → `{ start, setTutor, refresh, focusTask, stop }` or null
+- `web/shared/recommend.js` (WP-110): `RECOMMEND_RULES` (`overdue, dueSoon, makeStart, next, noDeadline`), `STAGE_STEPS`, `stageStep(stage)`, `recommendNext(items, { today? })`
+- `web/shared/offline.js` (WP-110): `OFFLINE_DB` (`edu-support.learner`), `OFFLINE_KEYS` (`view`, `queue`), `QUEUE_LIMIT` (50), `VIEW_LIMIT` (50), `ADD_MAX_CHARS` (16000), `OFFLINE_MESSAGES`, `queueNote(count, { shared? })`, `droppedMessage(count)`, `signOutMessage(count)`, `memoryKeyValue()`, `cleanView(raw)`, `newEditId(nowMs?, random?)`, `cleanEdit(raw)`, `mergeEdit(edits, edit, { skipId? })`, `overlayEdits(items, edits)`, `editOutcome(result)`, `createOffline({ now?, random?, log? })` → `{ start, stop, clear, add, flush, loadView, saveView, edits, count, active, isShared, onChange }`
+- `web/device-store.js` (WP-110; the only file in `web/` that touches IndexedDB): `DEVICE_STORE` (`kv`), `openDeviceStore({ name?, idb? })` → `{ get, set, delete, clear }` or null
+- `web/home.js` (WP-110): `VIEWS` (`home, work, upcoming, learn, more`), `createHome({ doc?, win?, onRecommend, onShow })` → `{ show, back, reset, setRecommendation, setAppName, setQueueNote, current }`
 - `web/config.js`: `config` (frozen object: `{ workerUrl: string }`)
 - `scripts/make-icons.js`: `renderIcon(size: number): Buffer`, `encodePng(size: number, raw?: Buffer): Buffer`
 - `server/config.js`: `PAGES_ORIGIN` (string), `loadConfig(env = process.env)` → frozen `{ port, host, idleTimeoutMin, devOrigins, jsonBodyLimit, uploadBodyLimit, rateLimitPerMin, aiDailyCeiling, codespaceName, publicUrl }`, `isAllowedOrigin(origin: string | undefined, config: { devOrigins: boolean }): boolean`
@@ -258,7 +267,11 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - Learner `/`: sign-in, signed-in screen, waking (polls `/api/health` every 5 s for up to 5 min; `/status` every third poll; rings again if still `Shutdown`; port hint after 90 s `Available`). Pass in `localStorage` on own devices, `sessionStorage` only on a shared computer.
   - Capture section (camera, gallery, file). Images are resized on the device to JPEG ≤ 1,600 px and ≤ ~700 KB; PDF and Word go unchanged up to 8 MB. Captures go to the Worker `POST /inbox` as `kind=brief`, one at a time, with a device client ID (`p…` photo, `f…` file); Try again reuses the ID. The "Your photos and files" list merges this device's captures, `GET /inbox` (waiting) and the snapshot's upload entries, checked every 15 s while anything is pending, for up to 15 minutes after the last activity. Nothing is kept in browser storage.
   - "What are you working on?" (WP-108b): paste and type forms, and the "Check the details" screen (asks only the server's `ask` fields; one-tap undo per spelling correction; anchor chips edit/remove/add; kind and type of work; deadline shown as a UK date). These call the server directly with the pass (address from the waker's `backendUrl`) and are greyed out until the tutor answers. The "Your photos and files" list shows a message per failure reason, "Reading…" only while the tutor can read, and "Added to your tasks." once confirmed.
-  - "Coming up" (WP-109), above "What are you working on?": **Today** = due today or overdue ("Overdue" label); **Coming soon** = the 7 days from tomorrow plus tasks with no deadline ("No deadline yet"); **Later** = after that; submitted/done leave the list (owner decision 2 Nov 2026, a clarification of §17, no amendment). Groups are worked out on the device in UK dates each time the list is shown. Before the tutor answers: the Worker snapshot, view only ("This is your saved list…"). Tutor ready: live list from `GET /api/tasks?open=1`, each task with a stage and deadline panel (`PATCH /api/tasks/:id`; `deadline: null` clears it), and Undo after Handed in or Done. Nothing is stored in the browser; `stop()` clears the list at sign-out. The edit queue is still WP-110.
+  - "Coming up" (WP-109), above "What are you working on?": **Today** = due today or overdue ("Overdue" label); **Coming soon** = the 7 days from tomorrow plus tasks with no deadline ("No deadline yet"); **Later** = after that; submitted/done leave the list (owner decision 2 Nov 2026, a clarification of §17, no amendment). Groups are worked out on the device in UK dates each time the list is shown. Before the tutor answers: the Worker snapshot, view only ("This is your saved list…"). Tutor ready: live list from `GET /api/tasks?open=1`, each task with a stage and deadline panel (`PATCH /api/tasks/:id`; `deadline: null` clears it), and Undo after Handed in or Done. `stop()` clears the list at sign-out.
+  - Home screen (WP-110; owner decision 2 Nov 2026, layout 2A): the status line, a waiting line ("N changes will save when the tutor's ready."), **Recommended next**, three large actions (Help me with some work, Learn or revise, See what's coming up) and a smaller **More** ("Your photos and files", Sign out). Each action opens its own view with Back (and the phone's back gesture). "Learn or revise" says coming soon until WP-119.
+  - Saved view (WP-110; own devices only): IndexedDB database `edu-support.learner`, store `kv`, keys `view` (the last "Coming up" list fields and the app name; never question text) and `queue`. Shown at once on reload, before the tutor answers.
+  - Edit queue (WP-110): stage/deadline changes and typed tasks made while the tutor wakes show at once, marked "Will save when the tutor's ready", and are sent in order when it answers; 400/404/409 are dropped with a message; network/503/429 wait. Memory only on a shared computer. Cleared at sign-out and when the Worker or tutor rejects the pass; kept when the pass has simply expired.
+  - Recommended next (owner decision 2 Nov 2026, option 1A; first match wins; no AI): 1 overdue → "“T” was due Thursday. Spend 15 minutes on it, or change the deadline."; 2 due today/tomorrow → "“T” is due tomorrow. Spend 20 minutes <stage step>."; 3 due within 7 days and not started → "Make a start on “T”: 15 minutes working out what the question asks."; 4 next dated task → "“T” is due Fri 20 Nov. Spend <n> minutes <stage step>."; 5 no deadline → "Add a deadline to “T”."; 6 nothing open → no line. Ties: soonest, then assessments, then list order. Stage steps: not started 15 min working out what the question asks; researching 15 min on research; planning 20 min planning your answer; drafting 20 min writing; reviewing 15 min checking it over.
   - Accessibility settings from the snapshot's `settings.accessibility`, applied as CSS custom properties (`--text-scale`, `--line-height`, `--paragraph-gap`, `--font`, `--letter-spacing`, `--word-spacing`) and `data-theme` / `data-contrast` / `data-motion` on `<html>`; read at sign-in and again when the tutor is ready; kept in `localStorage` on own devices only; reset and forgotten at sign-out. Vocabulary (first value is the default; anything else is ignored):
 
     | Key | Values |
@@ -316,6 +329,8 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - Docs uploaded by the owner on 31 Oct 2026: `docs/blueprint.md` "Version: 1.4 (31 October 2026: phase 0 complete; …)"; `docs/build-spec.md` "Version: generated from master specification v3.6 (31 October 2026)".
 - Build spec updated by the owner (before WP-104): `docs/build-spec.md` now reads "**Version:** generated from master specification v3.7 (31 October 2026)."
 - WP-106 live check (1 Nov 2026, Codespace, invented handwritten brief, photographed twice): question, deadline and 'Strech → Stretch' read correctly both times; 'Imaginary Bay' left uncorrected; the crossing-out was left out of the question; topics matched. The location anchor was missing and the qualification was left blank; both were fixed in WP-107.
+- WP-108b live check passed 2 Nov 2026 (laptop, Chrome): paste → read → "Check the details", deadline prompt, correction undo, anchor chips, add task, the type-it-in form and older uploads; first direct page-to-server call with the pass.
+- WP-109 live check passed 2 Nov 2026: saved list view only while the tutor woke; live list once ready; a task with no deadline in Coming soon; changing the deadline moved it to Coming soon, Later, then Today with "Overdue"; Handed in took it off the list and Undo brought it back; set to Done. On the phone the section fits with no sideways scrolling.
 
 ## Deviations in effect
 - `package.json` (owner-approved hotfix, 31 Oct 2026, not from a work package): `"overrides": { "zod": "4.6.7" }` added after `dependencies`; lockfile regenerated. Reason: `npm audit` flagged 2 high (GHSA-mrhx-c7xc-m3w5, memory exhaustion) in `zod` 4.3.6, which `@github/copilot-sdk` 1.0.22 pins exactly (1.0.28 pins the same). Nothing in the app or the SDK imports `zod` at run time (SDK uses it in type definitions only). After the override: `npm audit` 0 vulnerabilities; `npm ci`, `npm test` (361/361) and `npm run spike:docs` pass; the SDK still loads (`defineTool` present). Future packages that edit `package.json` must keep the `overrides` block; remove it only once the SDK pins `zod` >=4.6.6.
@@ -327,7 +342,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 ## Known issues
 - If `npm install` hasn't been run after a rebuild, documents wait and the log says `[reader] paused: extractor-missing` (photos are still read).
 - Topics and qualification can't be changed on the check screen (no topic list route yet).
-- "Coming up" can't be changed while the tutor wakes (queue in WP-110); no "Recommended" line yet (WP-110).
+- A typed task queued while waking could, rarely, be added twice if the tutor saves it but the answer is lost on the way back (no client ID on `POST /api/tasks`). Delete the copy once deletion exists (WP-122).
 - The AI ceiling is counted per AI call: one photo uses 1–3 calls.
 - The rate limit and AI ceiling are in memory and reset on restart. The reader (WP-106) uses `aiCeiling.take()` and `saveAiTurn`; nothing calls `logSupport` until WP-111.
 - The loader reads a top-level `optionalGroups`; the private qualification records keep either/or groups at `structure.optionalGroups`. No effect today (every unit has `type`); a fallback is planned for WP-120.

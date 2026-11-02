@@ -46,9 +46,11 @@ const short = (text, max = 40) => (text.length > max ? `${text.slice(0, max - 1)
 
 /**
  * Wires up the paste and type forms and the "Check the details" screen. Returns
- * { setTutor(state), open(uploadId), stop() }, or null if the page doesn't have them.
+ * { setTutor(state), open(uploadId), start(), stop() }, or null if the page doesn't have them.
+ * WP-110: with queueTask(body) → { kind: "queued", message } | { kind: "queue-error", message }, a typed
+ * task can be added while the tutor wakes; it waits in the edit queue on the device.
  */
-export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc = document }) {
+export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, queueTask = null, doc = document }) {
   const byId = (id) => doc.getElementById(id);
   const els = {
     capture: byId("capture"),
@@ -93,6 +95,7 @@ export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc = 
   if (CHECK_FIELDS.some((name) => Object.values(field(name)).some((el) => !el))) return null;
 
   let ready = false;
+  let active = false; // signed in (WP-110)
   let openId = 0; // the latest open(); older replies are ignored
   let current = null; // { view, undone, chips, questionEdited, editing }
   let chipCount = 0;
@@ -118,15 +121,16 @@ export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc = 
     opener.setAttribute("aria-expanded", "false");
   }
 
+  // WP-110: typing a task works while the tutor wakes, because it is queued on the device.
+  const canType = () => ready || (active && typeof queueTask === "function");
+
   function setTutor(state) {
     ready = state === "ready" || state === "readyNoAi";
     els.pasteOpen.disabled = !ready;
-    els.typeOpen.disabled = !ready;
+    els.typeOpen.disabled = !canType();
     els.tutorNeeded.hidden = ready;
-    if (!ready) {
-      hideForm(els.pasteForm, els.pasteOpen);
-      hideForm(els.typeForm, els.typeOpen);
-    }
+    if (!ready) hideForm(els.pasteForm, els.pasteOpen);
+    if (!canType()) hideForm(els.typeForm, els.typeOpen);
   }
 
   els.pasteOpen.addEventListener("click", () => (els.pasteForm.hidden ? showForm(els.pasteForm, els.pasteOpen) : hideForm(els.pasteForm, els.pasteOpen)));
@@ -171,7 +175,7 @@ export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc = 
 
   els.typeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (busy || !ready) return;
+    if (busy || !canType()) return;
     const built = typedTaskBody({ title: els.typeTitle.value, deadline: els.typeDeadline.value, question: els.typeQuestion.value });
     if (built.errors) {
       const [first] = built.errors;
@@ -181,17 +185,18 @@ export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc = 
     }
     busy = true;
     setText(els.entryStatus, CHECK_MESSAGES.saving);
-    const result = await api.addTask(built.body);
+    // WP-110: while the tutor wakes, the task waits in the edit queue on this device
+    const result = ready ? await api.addTask(built.body) : await queueTask(built.body);
     busy = false;
     if (result.kind === "auth") return signedOut(result.reason);
-    if (result.kind !== "ok") {
-      setText(els.entryStatus, apiErrorMessage(result));
+    if (result.kind !== "ok" && result.kind !== "queued") {
+      setText(els.entryStatus, result.kind === "queue-error" ? result.message : apiErrorMessage(result));
       return;
     }
     els.typeForm.reset();
     setText(els.typeDeadlineUk, "");
     hideForm(els.typeForm, els.typeOpen);
-    setText(els.entryStatus, CHECK_MESSAGES.added);
+    setText(els.entryStatus, result.kind === "queued" ? result.message : CHECK_MESSAGES.added);
     els.typeOpen.focus();
     onTaskAdded?.(); // WP-109: "Coming up" shows the new task
   });
@@ -440,7 +445,13 @@ export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc = 
     onTaskAdded?.();
   });
 
+  function start() {
+    active = true;
+    setTutor(ready ? "ready" : "waiting");
+  }
+
   function stop() {
+    active = false;
     if (!els.check.hidden) closeCheck({ focus: false });
     openId += 1;
     current = null;
@@ -454,5 +465,5 @@ export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc = 
   }
 
   setTutor("waiting");
-  return { setTutor, open, stop };
+  return { setTutor, open, start, stop };
 }

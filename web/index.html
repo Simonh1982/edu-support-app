@@ -35,7 +35,7 @@
       </section>
 
       <section id="home-screen" aria-labelledby="home-heading" hidden>
-        <h1 id="home-heading" tabindex="-1">You're signed in</h1>
+        <h1 id="home-heading" tabindex="-1">Home</h1>
         <p id="shared-note" class="hint" hidden>
           You're on a shared computer. Nothing is saved here, and you'll be signed out
           after 4 hours or when you close this tab.
@@ -47,188 +47,244 @@
           <button type="button" id="wake-retry" class="primary" hidden>Try again</button>
         </div>
 
-        <section id="upcoming" class="upcoming" aria-labelledby="upcoming-heading">
-          <h2 id="upcoming-heading" tabindex="-1">Coming up</h2>
-          <p id="upcoming-source" class="hint" hidden></p>
-          <p id="upcoming-status" class="status" role="status" aria-live="polite"></p>
-          <div class="actions">
-            <button type="button" id="upcoming-undo" class="secondary" hidden>Undo</button>
-          </div>
-          <div id="upcoming-groups"></div>
-        </section>
+        <p id="queue-note" class="queue-note" role="status" aria-live="polite" hidden></p>
 
-        <section id="capture" class="capture" aria-labelledby="capture-heading">
-          <h2 id="capture-heading">What are you working on?</h2>
-          <p class="hint" id="capture-hint">
-            Take a photo of the task, or add a photo, PDF or Word file. You don't need to wait
-            for the tutor.
-          </p>
-          <div class="actions">
-            <button type="button" id="capture-camera" class="primary" aria-describedby="capture-hint">Take a photo</button>
-            <button type="button" id="capture-gallery" class="secondary">Choose a photo</button>
-            <button type="button" id="capture-file" class="secondary">Add a file</button>
-          </div>
-          <input type="file" id="capture-camera-input" accept="image/*" capture="environment" hidden>
-          <input type="file" id="capture-gallery-input" accept="image/*" multiple hidden>
-          <input type="file" id="capture-file-input" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+        <!-- WP-110: the home view, with one view per main action (build spec §6, §6.1) -->
+        <div id="view-home" class="view">
+          <section id="recommend" class="recommend" aria-labelledby="recommend-heading" hidden>
+            <h2 id="recommend-heading">Recommended next</h2>
+            <p id="recommend-text"></p>
+            <button type="button" id="recommend-open" class="secondary">See it in your list</button>
+          </section>
 
-          <p id="capture-status" class="status" role="status" aria-live="polite"></p>
+          <nav class="main-actions" aria-label="Main actions">
+            <button type="button" id="go-work" class="big">Help me with some work</button>
+            <button type="button" id="go-learn" class="big">Learn or revise</button>
+            <button type="button" id="go-upcoming" class="big">See what's coming up</button>
+          </nav>
 
-          <div class="actions">
-            <button type="button" id="paste-open" class="secondary" aria-controls="paste-form" aria-expanded="false" disabled>Paste the task</button>
-            <button type="button" id="type-open" class="secondary" aria-controls="type-form" aria-expanded="false" disabled>Type it in</button>
-          </div>
-          <p id="tutor-needed" class="hint">Pasting and typing work once the tutor's ready.</p>
+          <button type="button" id="go-more" class="link">More</button>
+        </div>
 
-          <form id="paste-form" class="panel" aria-labelledby="paste-heading" novalidate hidden>
-            <h3 id="paste-heading">Paste the task</h3>
-            <label for="paste-text">The task or question</label>
-            <textarea id="paste-text" rows="8" maxlength="20000"></textarea>
+        <div id="view-work" class="view" hidden>
+          <button type="button" class="back" data-back>Back</button>
+
+          <section id="capture" class="capture" aria-labelledby="capture-heading">
+            <h2 id="capture-heading">What are you working on?</h2>
+            <p class="hint" id="capture-hint">
+              Take a photo of the task, or add a photo, PDF or Word file. You don't need to wait
+              for the tutor.
+            </p>
             <div class="actions">
-              <button type="submit" class="primary">Read this</button>
-              <button type="button" id="paste-cancel" class="secondary">Cancel</button>
+              <button type="button" id="capture-camera" class="primary" aria-describedby="capture-hint">Take a photo</button>
+              <button type="button" id="capture-gallery" class="secondary">Choose a photo</button>
+              <button type="button" id="capture-file" class="secondary">Add a file</button>
             </div>
-          </form>
+            <input type="file" id="capture-camera-input" accept="image/*" capture="environment" hidden>
+            <input type="file" id="capture-gallery-input" accept="image/*" multiple hidden>
+            <input type="file" id="capture-file-input" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
 
-          <form id="type-form" class="panel" aria-labelledby="type-heading" novalidate hidden>
-            <h3 id="type-heading">Type it in</h3>
-            <label for="type-title">What's it called?</label>
-            <input type="text" id="type-title" maxlength="120" autocomplete="off">
-            <label for="type-deadline">When is it due?</label>
-            <p class="hint" id="type-deadline-hint">Leave it blank if you don't know yet.</p>
-            <input type="date" id="type-deadline" aria-describedby="type-deadline-hint type-deadline-uk">
-            <p class="hint" id="type-deadline-uk"></p>
-            <label for="type-question">The question, if you have it</label>
-            <textarea id="type-question" rows="4" maxlength="4000"></textarea>
+            <p id="capture-status" class="status" role="status" aria-live="polite"></p>
+
             <div class="actions">
-              <button type="submit" class="primary">Add this task</button>
-              <button type="button" id="type-cancel" class="secondary">Cancel</button>
+              <button type="button" id="paste-open" class="secondary" aria-controls="paste-form" aria-expanded="false" disabled>Paste the task</button>
+              <button type="button" id="type-open" class="secondary" aria-controls="type-form" aria-expanded="false" disabled>Type it in</button>
             </div>
-          </form>
+            <p id="tutor-needed" class="hint">Pasting works once the tutor's ready. You can type a task in now.</p>
 
-          <p id="entry-status" class="status" role="status" aria-live="polite"></p>
+            <form id="paste-form" class="panel" aria-labelledby="paste-heading" novalidate hidden>
+              <h3 id="paste-heading">Paste the task</h3>
+              <label for="paste-text">The task or question</label>
+              <textarea id="paste-text" rows="8" maxlength="20000"></textarea>
+              <div class="actions">
+                <button type="submit" class="primary">Read this</button>
+                <button type="button" id="paste-cancel" class="secondary">Cancel</button>
+              </div>
+            </form>
 
-          <h2 id="captures-heading" tabindex="-1">Your photos and files</h2>
-          <p id="captures-empty" class="hint">Nothing added yet.</p>
-          <ul id="captures-list" class="captures" aria-labelledby="captures-heading"></ul>
-          <button type="button" id="captures-refresh" class="secondary">Check again</button>
-        </section>
+            <form id="type-form" class="panel" aria-labelledby="type-heading" novalidate hidden>
+              <h3 id="type-heading">Type it in</h3>
+              <label for="type-title">What's it called?</label>
+              <input type="text" id="type-title" maxlength="120" autocomplete="off">
+              <label for="type-deadline">When is it due?</label>
+              <p class="hint" id="type-deadline-hint">Leave it blank if you don't know yet.</p>
+              <input type="date" id="type-deadline" aria-describedby="type-deadline-hint type-deadline-uk">
+              <p class="hint" id="type-deadline-uk"></p>
+              <label for="type-question">The question, if you have it</label>
+              <textarea id="type-question" rows="4" maxlength="4000"></textarea>
+              <div class="actions">
+                <button type="submit" class="primary">Add this task</button>
+                <button type="button" id="type-cancel" class="secondary">Cancel</button>
+              </div>
+            </form>
 
-        <section id="check-screen" class="check-screen" aria-labelledby="check-heading" hidden>
-          <h2 id="check-heading" tabindex="-1">Check the details</h2>
-          <p id="check-status" class="status" role="status" aria-live="polite"></p>
+            <p id="entry-status" class="status" role="status" aria-live="polite"></p>
 
-          <form id="check-form" novalidate hidden>
-            <p id="check-intro"></p>
-            <div id="check-ask"></div>
+            <h2 id="captures-heading" tabindex="-1">Your photos and files</h2>
+            <p id="captures-empty" class="hint">Nothing added yet.</p>
+            <ul id="captures-list" class="captures" aria-labelledby="captures-heading"></ul>
+            <button type="button" id="captures-refresh" class="secondary">Check again</button>
+          </section>
 
-            <section id="check-corrections" aria-labelledby="corrections-heading" hidden>
-              <h3 id="corrections-heading">Spelling I corrected</h3>
-              <p class="hint">Tap Undo to keep the spelling as it was.</p>
-              <ul id="corrections-list" class="plain-list"></ul>
-            </section>
+          <section id="check-screen" class="check-screen" aria-labelledby="check-heading" hidden>
+            <h2 id="check-heading" tabindex="-1">Check the details</h2>
+            <p id="check-status" class="status" role="status" aria-live="polite"></p>
 
-            <section aria-labelledby="chips-heading">
-              <h3 id="chips-heading" tabindex="-1">What this task is about</h3>
-              <p class="hint">The tutor keeps to these. Edit or remove any that are wrong.</p>
-              <ul id="chips-list" class="chips"></ul>
-              <details class="more">
-                <summary>Add one</summary>
-                <label for="chip-type">What is it?</label>
-                <select id="chip-type">
-                  <option value="question">Question</option>
-                  <option value="location" selected>Place or case study</option>
-                  <option value="text">Set text or extract</option>
-                  <option value="track">Track</option>
-                </select>
-                <label for="chip-new">Words</label>
-                <input type="text" id="chip-new" maxlength="1000" autocomplete="off">
-                <div class="actions">
-                  <button type="button" id="chip-add" class="secondary">Add</button>
+            <form id="check-form" novalidate hidden>
+              <p id="check-intro"></p>
+              <div id="check-ask"></div>
+
+              <section id="check-corrections" aria-labelledby="corrections-heading" hidden>
+                <h3 id="corrections-heading">Spelling I corrected</h3>
+                <p class="hint">Tap Undo to keep the spelling as it was.</p>
+                <ul id="corrections-list" class="plain-list"></ul>
+              </section>
+
+              <section aria-labelledby="chips-heading">
+                <h3 id="chips-heading" tabindex="-1">What this task is about</h3>
+                <p class="hint">The tutor keeps to these. Edit or remove any that are wrong.</p>
+                <ul id="chips-list" class="chips"></ul>
+                <details class="more">
+                  <summary>Add one</summary>
+                  <label for="chip-type">What is it?</label>
+                  <select id="chip-type">
+                    <option value="question">Question</option>
+                    <option value="location" selected>Place or case study</option>
+                    <option value="text">Set text or extract</option>
+                    <option value="track">Track</option>
+                  </select>
+                  <label for="chip-new">Words</label>
+                  <input type="text" id="chip-new" maxlength="1000" autocomplete="off">
+                  <div class="actions">
+                    <button type="button" id="chip-add" class="secondary">Add</button>
+                  </div>
+                </details>
+                <p id="chip-error" class="error" role="alert"></p>
+              </section>
+
+              <details id="check-more" class="more">
+                <summary>Other details</summary>
+                <div id="check-other">
+                  <div class="field" id="check-field-title">
+                    <label for="check-title">Title</label>
+                    <p class="prompt" id="check-prompt-title" hidden></p>
+                    <input type="text" id="check-title" maxlength="120" autocomplete="off">
+                  </div>
+                  <div class="field" id="check-field-subject">
+                    <label for="check-subject">Subject</label>
+                    <p class="prompt" id="check-prompt-subject" hidden></p>
+                    <input type="text" id="check-subject" maxlength="40" autocomplete="off">
+                  </div>
+                  <div class="field" id="check-field-deadline">
+                    <label for="check-deadline">Deadline</label>
+                    <p class="prompt" id="check-prompt-deadline" hidden></p>
+                    <input type="date" id="check-deadline" aria-describedby="check-deadline-uk">
+                    <p class="hint" id="check-deadline-uk"></p>
+                  </div>
+                  <div class="field" id="check-field-question">
+                    <label for="check-question">Question</label>
+                    <p class="prompt" id="check-prompt-question" hidden></p>
+                    <textarea id="check-question" rows="5" maxlength="4000"></textarea>
+                  </div>
+                  <div class="field" id="check-field-kind">
+                    <label for="check-kind">Kind of task</label>
+                    <p class="prompt" id="check-prompt-kind" hidden></p>
+                    <select id="check-kind">
+                      <option value="">Not sure</option>
+                      <option value="assignment">Assignment</option>
+                      <option value="homework">Homework</option>
+                      <option value="assessment">Assessment</option>
+                    </select>
+                  </div>
+                  <div class="field" id="check-field-workType">
+                    <label for="check-workType">Kind of work</label>
+                    <p class="prompt" id="check-prompt-workType" hidden></p>
+                    <select id="check-workType">
+                      <option value="">Not sure</option>
+                      <option value="essay">Essay</option>
+                      <option value="worksheet">Worksheet</option>
+                      <option value="project">Project</option>
+                      <option value="production">Production</option>
+                      <option value="other">Something else</option>
+                    </select>
+                  </div>
+                  <div class="field" id="check-field-marks">
+                    <label for="check-marks">Marks</label>
+                    <p class="prompt" id="check-prompt-marks" hidden></p>
+                    <input type="text" id="check-marks" inputmode="numeric" maxlength="4" autocomplete="off">
+                  </div>
+                  <div class="field" id="check-field-wordCount">
+                    <label for="check-wordCount">Word count</label>
+                    <p class="prompt" id="check-prompt-wordCount" hidden></p>
+                    <input type="text" id="check-wordCount" inputmode="numeric" maxlength="6" autocomplete="off">
+                  </div>
                 </div>
               </details>
-              <p id="chip-error" class="error" role="alert"></p>
-            </section>
 
-            <details id="check-more" class="more">
-              <summary>Other details</summary>
-              <div id="check-other">
-                <div class="field" id="check-field-title">
-                  <label for="check-title">Title</label>
-                  <p class="prompt" id="check-prompt-title" hidden></p>
-                  <input type="text" id="check-title" maxlength="120" autocomplete="off">
-                </div>
-                <div class="field" id="check-field-subject">
-                  <label for="check-subject">Subject</label>
-                  <p class="prompt" id="check-prompt-subject" hidden></p>
-                  <input type="text" id="check-subject" maxlength="40" autocomplete="off">
-                </div>
-                <div class="field" id="check-field-deadline">
-                  <label for="check-deadline">Deadline</label>
-                  <p class="prompt" id="check-prompt-deadline" hidden></p>
-                  <input type="date" id="check-deadline" aria-describedby="check-deadline-uk">
-                  <p class="hint" id="check-deadline-uk"></p>
-                </div>
-                <div class="field" id="check-field-question">
-                  <label for="check-question">Question</label>
-                  <p class="prompt" id="check-prompt-question" hidden></p>
-                  <textarea id="check-question" rows="5" maxlength="4000"></textarea>
-                </div>
-                <div class="field" id="check-field-kind">
-                  <label for="check-kind">Kind of task</label>
-                  <p class="prompt" id="check-prompt-kind" hidden></p>
-                  <select id="check-kind">
-                    <option value="">Not sure</option>
-                    <option value="assignment">Assignment</option>
-                    <option value="homework">Homework</option>
-                    <option value="assessment">Assessment</option>
-                  </select>
-                </div>
-                <div class="field" id="check-field-workType">
-                  <label for="check-workType">Kind of work</label>
-                  <p class="prompt" id="check-prompt-workType" hidden></p>
-                  <select id="check-workType">
-                    <option value="">Not sure</option>
-                    <option value="essay">Essay</option>
-                    <option value="worksheet">Worksheet</option>
-                    <option value="project">Project</option>
-                    <option value="production">Production</option>
-                    <option value="other">Something else</option>
-                  </select>
-                </div>
-                <div class="field" id="check-field-marks">
-                  <label for="check-marks">Marks</label>
-                  <p class="prompt" id="check-prompt-marks" hidden></p>
-                  <input type="text" id="check-marks" inputmode="numeric" maxlength="4" autocomplete="off">
-                </div>
-                <div class="field" id="check-field-wordCount">
-                  <label for="check-wordCount">Word count</label>
-                  <p class="prompt" id="check-prompt-wordCount" hidden></p>
-                  <input type="text" id="check-wordCount" inputmode="numeric" maxlength="6" autocomplete="off">
-                </div>
+              <details class="more">
+                <summary>What I read</summary>
+                <p id="check-read-note" class="hint"></p>
+                <div id="check-read-text" class="read-text"></div>
+              </details>
+
+              <p id="check-error" class="error" role="alert"></p>
+              <div class="actions">
+                <button type="submit" class="primary">Add this task</button>
               </div>
-            </details>
+            </form>
 
-            <details class="more">
-              <summary>What I read</summary>
-              <p id="check-read-note" class="hint"></p>
-              <div id="check-read-text" class="read-text"></div>
-            </details>
-
-            <p id="check-error" class="error" role="alert"></p>
             <div class="actions">
-              <button type="submit" class="primary">Add this task</button>
+              <button type="button" id="check-back" class="secondary">Back</button>
             </div>
-          </form>
-
-          <div class="actions">
-            <button type="button" id="check-back" class="secondary">Back</button>
-          </div>
-        </section>
-
-        <div class="actions">
-          <button type="button" id="sign-out" class="secondary">Sign out</button>
+          </section>
         </div>
+
+        <div id="view-upcoming" class="view" hidden>
+          <button type="button" class="back" data-back>Back</button>
+
+          <section id="upcoming" class="upcoming" aria-labelledby="upcoming-heading">
+            <h2 id="upcoming-heading" tabindex="-1">Coming up</h2>
+            <p id="upcoming-source" class="hint" hidden></p>
+            <p id="upcoming-status" class="status" role="status" aria-live="polite"></p>
+            <div class="actions">
+              <button type="button" id="upcoming-undo" class="secondary" hidden>Undo</button>
+            </div>
+            <div id="upcoming-groups"></div>
+          </section>
+        </div>
+
+        <div id="view-learn" class="view" hidden>
+          <button type="button" class="back" data-back>Back</button>
+
+          <section aria-labelledby="learn-heading">
+            <h2 id="learn-heading" tabindex="-1">Learn or revise</h2>
+            <p>This is coming soon. For now, use "Help me with some work" for anything you've been set.</p>
+          </section>
+        </div>
+
+        <div id="view-more" class="view" hidden>
+          <button type="button" class="back" data-back>Back</button>
+
+          <section aria-labelledby="more-heading">
+            <h2 id="more-heading" tabindex="-1">More</h2>
+            <div class="actions">
+              <button type="button" id="more-photos" class="secondary">Your photos and files</button>
+            </div>
+            <p class="hint">Settings will be here soon.</p>
+            <div class="actions">
+              <button type="button" id="sign-out" class="secondary">Sign out</button>
+            </div>
+          </section>
+        </div>
+
+        <dialog id="sign-out-dialog" aria-labelledby="sign-out-heading" aria-describedby="sign-out-text">
+          <h2 id="sign-out-heading">Sign out now?</h2>
+          <p id="sign-out-text"></p>
+          <div class="actions">
+            <button type="button" id="sign-out-cancel" class="primary">Stay signed in</button>
+            <button type="button" id="sign-out-confirm" class="secondary">Sign out anyway</button>
+          </div>
+        </dialog>
       </section>
 
       <noscript>

@@ -530,6 +530,101 @@ mark.unsure {
   cursor: not-allowed;
 }
 
+/* ---------- home screen, views and the edit queue (WP-110) ---------- */
+.main-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+/* The three main actions: large, full width, easy to tap (build spec §6). */
+button.big {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--tap) * 1.5);
+  padding: 1rem 1.25rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-size: 1.15em;
+  font-weight: 700;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.link,
+button.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0.5rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.recommend {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: var(--border-width) solid var(--muted);
+  border-left: 4px solid var(--accent);
+  border-radius: 0.5rem;
+}
+
+.recommend h2 {
+  font-size: 1em;
+  margin: 0 0 0.25rem;
+}
+
+.recommend p {
+  margin: 0 0 0.5rem;
+}
+
+.queue-note {
+  margin: 1rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 4px solid var(--focus);
+  font-weight: 600;
+}
+
+/* Waiting changes are also said in words, so the dashed edge is never the only signal. */
+.task[data-pending="true"] {
+  border-left-style: dashed;
+}
+
+.task-pending {
+  font-weight: 600;
+}
+
+dialog {
+  max-width: min(30rem, calc(100vw - 2rem));
+  padding: 1.25rem;
+  border: var(--border-width) solid var(--muted);
+  border-radius: 0.75rem;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+dialog h2 {
+  margin-top: 0;
+}
+
 /* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
 @media (prefers-reduced-motion: reduce) {
   *,
