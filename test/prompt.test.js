@@ -141,7 +141,7 @@ test('loadProfileSettings reads only presentation, labels and tone examples', as
     });
     const system = await buildSystem({ settings });
     assert.match(system, /Tutor: invented reply/);
-    assert.doesNotMatch(system, /Invented Name|invented-private-detail|Tutor: Nice try/);
+    assert.doesNotMatch(system, /Invented Name|invented-private-detail|Tutor: I can't write it for you/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
