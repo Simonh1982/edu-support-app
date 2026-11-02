@@ -99,7 +99,8 @@ export function createWaker({
     if (result.kind === "network") return finish("worker");
     return finish("wakeFailed", { status: result.status ?? null });
   };
-  const ready = (h) => finish(h.aiReady ? "ready" : "readyNoAi", { restsAt: h.restsAt });
+  // backendUrl goes back to the page, which calls the tutor directly once it's ready (WP-108b)
+  const ready = (h, backendUrl) => finish(h.aiReady ? "ready" : "readyNoAi", { restsAt: h.restsAt, backendUrl });
   const fatal = (result) => result.kind === "auth" || result.kind === "not-configured";
 
   async function run() {
@@ -116,7 +117,7 @@ export function createWaker({
     if (codespace === "Available") {
       const h = await health(backendUrl);
       if (stopped) return STOPPED;
-      if (h.kind === "ok") return ready(h);
+      if (h.kind === "ok") return ready(h, backendUrl);
     }
 
     const startedAt = now();
@@ -154,7 +155,7 @@ export function createWaker({
 
       const h = await health(backendUrl);
       if (stopped) return STOPPED;
-      if (h.kind === "ok") return ready(h);
+      if (h.kind === "ok") return ready(h, backendUrl);
 
       if (checks % settings.statusEvery === 0) {
         const status = await worker("status", "GET");

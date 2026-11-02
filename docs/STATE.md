@@ -1,6 +1,6 @@
-STATE version: 28
-Updated: 2026-11-01 21:48 (UK time)
-Last work package applied: WP-108a
+STATE version: 29
+Updated: 2026-11-02 08:11 (UK time)
+Last work package applied: WP-108b
 
 ## File tree
 ```
@@ -99,6 +99,7 @@ test/reading.test.js
 test/server.test.js
 test/snapshot.test.js
 test/stamp-versions.test.js
+test/task-check.test.js
 test/upload-paste.test.js
 test/upload-routes.test.js
 test/storage-recovery.test.js
@@ -114,6 +115,7 @@ wake/worker.js
 web/app.css
 web/app.js
 web/capture.js
+web/check.js
 web/config.js
 web/icons/icon-192.png
 web/icons/icon-512.png
@@ -122,18 +124,23 @@ web/manifest.webmanifest
 web/parent/index.html
 web/parent/parent.js
 web/shared/accessibility.js
+web/shared/api.js
 web/shared/auth.js
 web/shared/capture.js
+web/shared/task-check.js
 web/shared/wake.js
 ```
 
 ## Exports
 - `web/app.js`: `loginUrl` (re-exported from `web/shared/auth.js`); runs the page when a DOM exists
 - `web/shared/auth.js`: `PASS_ROLES`, `PASS_KEY_PREFIX`, `REQUEST_TIMEOUT_MS`, `SIGN_IN_MESSAGES`, `signInMessage`, `workerEndpoint`, `loginUrl`, `readFragment`, `decodePass`, `passIsCurrent`, `checkNewPass`, `memoryStorage`, `usableStorage`, `storageKey`, `savePass`, `loadPass`, `clearPass`, `readJsonBody`, `timeoutSignal`, `workerRequest`
-- `web/shared/wake.js`: `WAKE_SETTINGS`, `WAKE_MESSAGES`, `probeHealth`, `createWaker`
+- `web/shared/wake.js`: `WAKE_SETTINGS`, `WAKE_MESSAGES`, `probeHealth`, `createWaker` (the ready result now has `backendUrl`, WP-108b)
 - `web/shared/accessibility.js`: `ACCESSIBILITY_OPTIONS`, `ACCESSIBILITY_DEFAULTS`, `DYSLEXIA_FONT_STACK`, `ACCESSIBILITY_PROPERTIES`, `ACCESSIBILITY_ATTRIBUTES`, `ACCESSIBILITY_STORAGE_KEY` (`edu-support.settings.accessibility`), `normaliseAccessibility(raw)`, `readAccessibility(body)`, `accessibilityStyle(settings)` → `{ properties, attributes }`, `applyAccessibility(root, settings)`, `resetAccessibility(root)`, `loadAccessibility(store)`, `saveAccessibility(store, settings, { shared? })`, `clearAccessibility(store)`, `createAccessibility({ workerUrl, root, local?, fetchImpl? })` → `{ start({ token, shared }), refresh(), stop() }`
-- `web/shared/capture.js`: `INBOX_MAX_BYTES`, `CLIENT_ID_PATTERN`, `INBOX_TYPES`, `INBOX_SOURCES`, `INBOX_KINDS`, `IMAGE_TOO_LARGE_MESSAGE` (copies; tested against the server), `uploadIdFor`, `RESIZE`, `UPLOAD_TIMEOUT_MS`, `POLL_MS`, `POLL_LIMIT_MS`, `MAX_FILES_AT_ONCE`, `MAX_ROWS`, `FILE_ACCEPT`, `CAPTURE_MESSAGES`, `newClientId`, `titleForClientId`, `formatBytes`, `shortTime`, `classifyFile`, `fitWithin`, `encodeWithinLimits`, `bytesToBase64`, `prepareCapture`, `sendCapture`, `inboxItems`, `snapshotUploads`, `mergeCaptures`, `needsPolling`, `createCaptureQueue` → `{ add, retry, refresh, start, stop, rows, idle }`
-- `web/capture.js`: `resizeImage(file)`, `createCaptureScreen({ workerUrl, onSignedOut, doc? })` → `{ start(token), stop() }` or null
+- `web/shared/capture.js`: `INBOX_MAX_BYTES`, `CLIENT_ID_PATTERN`, `INBOX_TYPES`, `INBOX_SOURCES`, `INBOX_KINDS`, `IMAGE_TOO_LARGE_MESSAGE` (copies; tested against the server), `uploadIdFor`, `RESIZE`, `UPLOAD_TIMEOUT_MS`, `POLL_MS`, `POLL_LIMIT_MS`, `MAX_FILES_AT_ONCE`, `MAX_ROWS`, `FILE_ACCEPT`, `CAPTURE_MESSAGES`, `newClientId`, `titleForClientId`, `formatBytes`, `shortTime`, `classifyFile`, `fitWithin`, `encodeWithinLimits`, `bytesToBase64`, `prepareCapture`, `sendCapture`, `inboxItems`, `snapshotUploads`, `mergeCaptures`, `needsPolling`, `createCaptureQueue` → `{ add, retry, refresh, start, stop, rows, idle, setTutor, addPasted, markAdded }`; WP-108b: `FAILURE_MESSAGES` (one per failure reason, including the A-003 wording), `failureMessage(reason)`, `routeFromBytes`, `TUTOR_STATES`, `rowMessage`
+- `web/capture.js`: `resizeImage(file)`, `createCaptureScreen({ workerUrl, onSignedOut, onCheck, doc? })` → `{ start(token), stop(), setTutor, addPasted, markAdded }` or null
+- `web/shared/task-check.js` (WP-108b): copies `TASK_KINDS`, `WORK_TYPES`, `READ_ANCHOR_TYPES`, `TASK_LIMITS` (subset), `PASTE_MAX_CHARS`; `KIND_LABELS`, `WORK_TYPE_LABELS`, `ANCHOR_LABELS`, `CHECK_FIELDS`, `FIELD_PROMPTS`, `CHECK_MESSAGES`; correction copies `locateWord`, `applyCorrections`, `correctQuestion`; `correctionsOf`, `initialUndone`, `withUndone`, `previewQuestion`, `checkPlan`, `textSegments`, `readNotes`, `initialChips`, `chipText`, `editChip`, `removeChip`, `addChip`, `anchorsBody`, `checkValues`, `confirmationBody`, `typedTaskBody`, `pasteCheck`, `formatDeadline`
+- `web/shared/api.js` (WP-108b): `API_TIMEOUT_MS` (20000), `READ_POLL` (`{ stepMs: 3000, limitMs: 90000 }`), `API_ERRORS`, `apiUrl(backendUrl, path)`, `apiRequest({ backendUrl, path, token, method?, body?, fetchImpl?, timeoutMs? })`, `apiErrorMessage(result)`, `createApi({ getBackendUrl, getToken, fetchImpl?, timeoutMs? })` → `{ call, pasteBrief, openUpload, confirmUpload, addTask }`, `waitForReading(...)` → `{ kind: ok|timeout|stopped|… }`
+- `web/check.js` (WP-108b): `createTaskEntry({ api, capture, onSignedOut, doc? })` → `{ setTutor, open, stop }`
 - `web/config.js`: `config` (frozen object: `{ workerUrl: string }`)
 - `scripts/make-icons.js`: `renderIcon(size: number): Buffer`, `encodePng(size: number, raw?: Buffer): Buffer`
 - `server/config.js`: `PAGES_ORIGIN` (string), `loadConfig(env = process.env)` → frozen `{ port, host, idleTimeoutMin, devOrigins, jsonBodyLimit, uploadBodyLimit, rateLimitPerMin, aiDailyCeiling, codespaceName, publicUrl }`, `isAllowedOrigin(origin: string | undefined, config: { devOrigins: boolean }): boolean`
@@ -190,7 +197,7 @@ web/shared/wake.js
 - `wake/worker.js`: `default { fetch(request, env, ctx) }` only (Cloudflare module Worker; contains the pass, item and inbox blocks). The default export answers `/repo-file` first (REPO FILE ROUTE block) and passes everything else to `mainWorker` (the existing routes, unchanged).
 - `scripts/worker-check.js`: `USAGE`, `normaliseWorkerUrl(text)`, `expectedBackendUrl(env?)`, `runCheck({ workerUrl, env?, fetchImpl?, out? }): Promise<boolean>`
 - **Shared code rule:** the block between the `PASS BLOCK` markers in `server/auth.js` (WP-011) and the block between the `ITEM BLOCK` markers in `server/storage/items.js` (WP-013) and the block between the `INBOX BLOCK` markers in `server/storage/inbox.js` (WP-014a) are each copied verbatim into `wake/worker.js`. Change both copies together; tests check they are identical.
-- **Front-end copies rule:** the copies in `web/shared/capture.js` (`CLIENT_ID_PATTERN`, `INBOX_TYPES`, `INBOX_MAX_BYTES`, `INBOX_SOURCES`, `INBOX_KINDS`, `uploadIdFor`, `IMAGE_TOO_LARGE_MESSAGE`) are checked against `server/storage/inbox.js` and `server/ai/limits.js` by `test/capture.test.js`; a change to either server value must be copied there too.
+- **Front-end copies rule:** the copies in `web/shared/capture.js` (`CLIENT_ID_PATTERN`, `INBOX_TYPES`, `INBOX_MAX_BYTES`, `INBOX_SOURCES`, `INBOX_KINDS`, `uploadIdFor`, `IMAGE_TOO_LARGE_MESSAGE`) are checked against `server/storage/inbox.js` and `server/ai/limits.js` by `test/capture.test.js`; a change to either server value must be copied there too. The copies in `web/shared/task-check.js` (`TASK_KINDS`, `WORK_TYPES`, `READ_ANCHOR_TYPES`, `TASK_LIMITS` subset, `PASTE_MAX_CHARS`, the correction functions) are checked against `server/domain/tasks.js`, `server/domain/uploads.js` and `server/ai/reading.js` by `test/task-check.test.js` (WP-108b).
 - **Item paths:** lookup is `type` + `id` (+ `task` for items in a task folder): `notebook/<id>.json`, `sources/<id>.json`, `tasks/<id>/task.json`, `tasks/<task>/plan.json` (id checked, not used), `tasks/<task>/drafts/<id>.json` (id `v<n>`), `tasks/<task>/feedback/<id>.json`. IDs match `^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$`.
 - **Snapshot (`index/snapshot.json`):** titles, dates and counts only (titles from a record's own `title` or its task's title, else a plain label); learner and parent sections; settings keep short strings, numbers and booleans; app name from `profile/app.json` (`displayName`, then `name`), null if absent; `planStatus` and `nextSession` null for now. Uploads appear in `learner.recent` as `type: 'upload'`, title Photo/File/"Pasted text", with `status`, plus `failureReason` (failed only; a code word) and `taskId` (when confirmed) (WP-108a) (never extracted text; never in the parent section). Written by the store's `beforeCommit` step, so the first batch after start-up refreshes it.
 
@@ -243,6 +250,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 ## Pages
 - Learner `/`: sign-in, signed-in screen, waking (polls `/api/health` every 5 s for up to 5 min; `/status` every third poll; rings again if still `Shutdown`; port hint after 90 s `Available`). Pass in `localStorage` on own devices, `sessionStorage` only on a shared computer.
   - Capture section (camera, gallery, file). Images are resized on the device to JPEG ≤ 1,600 px and ≤ ~700 KB; PDF and Word go unchanged up to 8 MB. Captures go to the Worker `POST /inbox` as `kind=brief`, one at a time, with a device client ID (`p…` photo, `f…` file); Try again reuses the ID. The "Your photos and files" list merges this device's captures, `GET /inbox` (waiting) and the snapshot's upload entries, checked every 15 s while anything is pending, for up to 15 minutes after the last activity. Nothing is kept in browser storage.
+  - "What are you working on?" (WP-108b): paste and type forms, and the "Check the details" screen (asks only the server's `ask` fields; one-tap undo per spelling correction; anchor chips edit/remove/add; kind and type of work; deadline shown as a UK date). These call the server directly with the pass (address from the waker's `backendUrl`) and are greyed out until the tutor answers. The "Your photos and files" list shows a message per failure reason, "Reading…" only while the tutor can read, and "Added to your tasks." once confirmed.
   - Accessibility settings from the snapshot's `settings.accessibility`, applied as CSS custom properties (`--text-scale`, `--line-height`, `--paragraph-gap`, `--font`, `--letter-spacing`, `--word-spacing`) and `data-theme` / `data-contrast` / `data-motion` on `<html>`; read at sign-in and again when the tutor is ready; kept in `localStorage` on own devices only; reset and forgotten at sign-out. Vocabulary (first value is the default; anything else is ignored):
 
     | Key | Values |
@@ -310,7 +318,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 
 ## Known issues
 - If `npm install` hasn't been run after a rebuild, documents wait and the log says `[reader] paused: extractor-missing` (photos are still read).
-- The upload route now exists (WP-108a). The capture screen still shows the old messages until WP-108b (it must show the right message for each `failureReason`, including `password` and `scanned-pdf`, the A-003 wording).
+- Topics and qualification can't be changed on the check screen (no topic list route yet).
 - The AI ceiling is counted per AI call: one photo uses 1–3 calls.
 - The rate limit and AI ceiling are in memory and reset on restart. The reader (WP-106) uses `aiCeiling.take()` and `saveAiTurn`; nothing calls `logSupport` until WP-111.
 - The loader reads a top-level `optionalGroups`; the private qualification records keep either/or groups at `structure.optionalGroups`. No effect today (every unit has `type`); a fallback is planned for WP-120.

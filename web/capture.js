@@ -1,4 +1,4 @@
-// Learner page: the capture screen (WP-014b). Camera, gallery and file picker; every image is
+// Learner page: the capture screen (WP-014b, WP-108b). Camera, gallery and file picker; every image is
 // shrunk on a canvas before it's sent (A-002). The logic lives in shared/capture.js; this file only
 // does the parts that need the browser (canvas, file inputs, the list on screen).
 import {
@@ -80,7 +80,7 @@ export async function resizeImage(file) {
   }
 }
 
-function rowElement(row, onRetry) {
+function rowElement(row, onRetry, onCheck) {
   const item = document.createElement("li");
   item.className = "capture-item";
   item.dataset.state = row.state;
@@ -106,6 +106,15 @@ function rowElement(row, onRetry) {
     item.append(detail);
   }
 
+  if (row.canCheck) {
+    const check = document.createElement("button");
+    check.type = "button";
+    check.className = "primary";
+    check.textContent = "Check the details";
+    check.addEventListener("click", () => onCheck(row.uploadId));
+    item.append(check);
+  }
+
   if (row.canRetry) {
     const button = document.createElement("button");
     button.type = "button";
@@ -118,10 +127,11 @@ function rowElement(row, onRetry) {
 }
 
 /**
- * Wires up the capture section. Returns { start(token), stop() }, or null if the page doesn't
- * have the capture section.
+ * Wires up the capture section. Returns { start(token), stop(), setTutor(state), addPasted(entry),
+ * markAdded(uploadId, taskId) }, or null if the page doesn't have the capture section.
+ * onCheck(uploadId) opens "Check the details" for a read brief.
  */
-export function createCaptureScreen({ workerUrl, onSignedOut, doc = document }) {
+export function createCaptureScreen({ workerUrl, onSignedOut, onCheck, doc = document }) {
   const byId = (id) => doc.getElementById(id);
   const els = {
     camera: byId("capture-camera"),
@@ -138,6 +148,7 @@ export function createCaptureScreen({ workerUrl, onSignedOut, doc = document }) 
   if (Object.values(els).some((el) => !el)) return null;
 
   let queue = null;
+  let tutor = "waiting";
   const status = (text) => setText(els.status, text);
 
   function render(rows) {
@@ -145,7 +156,7 @@ export function createCaptureScreen({ workerUrl, onSignedOut, doc = document }) 
       const clientId = uploadId.replace(/^up_/, "");
       queue?.retry(clientId);
     };
-    els.list.replaceChildren(...rows.map((row) => rowElement(row, retry)));
+    els.list.replaceChildren(...rows.map((row) => rowElement(row, retry, (uploadId) => onCheck?.(uploadId))));
     els.empty.hidden = rows.length > 0;
   }
 
@@ -209,8 +220,20 @@ export function createCaptureScreen({ workerUrl, onSignedOut, doc = document }) 
         onSignedOut?.(reason);
       },
     });
+    queue.setTutor(tutor);
     queue.start();
   }
 
-  return { start, stop };
+  function setTutor(state) {
+    tutor = state;
+    queue?.setTutor(state);
+  }
+
+  return {
+    start,
+    stop,
+    setTutor,
+    addPasted: (entry) => queue?.addPasted(entry) ?? null,
+    markAdded: (uploadId, taskId) => queue?.markAdded(uploadId, taskId),
+  };
 }

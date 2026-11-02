@@ -49,8 +49,12 @@ export const CAPTURE_MESSAGES = Object.freeze({
   sending: "Sending…",
   sent: "Sent.",
   waiting: "Received – waiting to be read.",
-  received: "Received – it'll be read once reading is switched on.",
+  reading: "Reading…",
+  read: "Read – check the details to add it to your tasks.",
+  readLater: "Read – you can check the details once the tutor's ready.",
+  added: "Added to your tasks.",
   failed: IMAGE_TOO_LARGE_MESSAGE,
+  couldNotRead: "This couldn't be read. Please try again, or paste or type the task instead.",
   saved: "Saved.",
   retry: "Couldn't send. Check your connection, then tap Try again.",
   rejected: "That photo or file couldn't be accepted.",
@@ -62,12 +66,31 @@ export const CAPTURE_MESSAGES = Object.freeze({
   tooMany: `Only ${MAX_FILES_AT_ONCE} can be added at once. The first ${MAX_FILES_AT_ONCE} are being sent.`,
 });
 
+// What the learner sees for each reason the server gives for a failed upload (server/reader.js
+// READ_FAILURE_REASONS; A-002 and A-003 wording). test/task-check.test.js checks every reason has one.
+export const FAILURE_MESSAGES = Object.freeze({
+  "too-large": IMAGE_TOO_LARGE_MESSAGE,
+  "unsupported-type": "This kind of file can't be read. Please add a photo, a PDF or a Word (.docx) file.",
+  "no-vision": "Photos can't be read at the moment. Please paste or type the task instead.",
+  "file-missing": "This didn't arrive properly. Please add it again.",
+  unreadable: "This couldn't be read. Please try a clearer photo, or paste or type the task instead.",
+  password: "This PDF is password-protected. Please take photos of the pages instead.",
+  "scanned-pdf": "This PDF can't be read as it is. Please take photos of the pages instead.",
+});
+
+export function failureMessage(reason) {
+  return typeof reason === "string" && Object.hasOwn(FAILURE_MESSAGES, reason) ? FAILURE_MESSAGES[reason] : CAPTURE_MESSAGES.couldNotRead;
+}
+
 // ---------- IDs and labels ----------
 
+// p photo, f file, t pasted text (WP-108b): the first letter labels items that have no record yet.
+const CLIENT_ID_PREFIXES = Object.freeze({ camera: "p", gallery: "p", file: "f", paste: "t" });
+
 /**
- * A new client ID, made on the device. A retry reuses it, so the Worker overwrites the same
- * inbox files instead of adding a duplicate. The first letter records photo (p) or file (f),
- * so other devices can label inbox items that have no record yet.
+ * A new client ID, made on the device. A retry reuses it, so the Worker (or the paste route)
+ * overwrites the same upload instead of adding a duplicate. The first letter records photo (p),
+ * file (f) or pasted text (t), so other devices can label inbox items that have no record yet.
  */
 export function newClientId({
   source,
@@ -76,13 +99,14 @@ export function newClientId({
 } = {}) {
   const bytes = randomValues(new Uint8Array(9));
   const random = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  return `${source === "file" ? "f" : "p"}${Math.floor(nowMs).toString(36)}-${random}`;
+  return `${CLIENT_ID_PREFIXES[source] ?? "p"}${Math.floor(nowMs).toString(36)}-${random}`;
 }
 
 export function titleForClientId(clientId) {
   if (typeof clientId !== "string") return "Photo or file";
   if (clientId.startsWith("p")) return "Photo";
   if (clientId.startsWith("f")) return "File";
+  if (clientId.startsWith("t")) return "Pasted text";
   return "Photo or file";
 }
 
@@ -143,6 +167,30 @@ export function classifyFile({ name, type } = {}) {
   return null;
 }
 
+/**
+ * The route for a file classifyFile couldn't place (no type and no known extension, as with some
+ * Google Drive downloads), from its first bytes. Null if they don't match an allowed type. A ZIP
+ * file is taken to be Word; the server rejects it later if it isn't.
+ */
+export function routeFromBytes(head) {
+  const b = head instanceof Uint8Array ? head : new Uint8Array(0);
+  const starts = (...sig) => sig.every((v, i) => b[i] === v);
+  if (starts(0x25, 0x50, 0x44, 0x46, 0x2d)) return { route: "file", mimeType: "application/pdf" }; // %PDF-
+  if (starts(0x50, 0x4b, 0x03, 0x04)) return { route: "file", mimeType: EXT_ROUTES.docx }; // PK zip
+  if (starts(0xff, 0xd8, 0xff) || starts(0x89, 0x50, 0x4e, 0x47) || starts(0x47, 0x49, 0x46, 0x38)) return { route: "image" };
+  if (starts(0x52, 0x49, 0x46, 0x46) && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return { route: "image" };
+  return null;
+}
+
+async function sniffFile(file) {
+  if (typeof file?.slice !== "function") return null;
+  try {
+    return routeFromBytes(new Uint8Array(await file.slice(0, 12).arrayBuffer()));
+  } catch {
+    return null;
+  }
+}
+
 /** Size that fits inside maxEdge on the longest side, never enlarged. Null if not a real size. */
 export function fitWithin(width, height, maxEdge = RESIZE.maxEdge) {
   if (!(width > 0) || !(height > 0) || !Number.isFinite(width) || !Number.isFinite(height)) return null;
@@ -195,7 +243,7 @@ export function bytesToBase64(bytes) {
  *   error is a CAPTURE_MESSAGES key: wrongType | unreadable | failed | tooBig.
  */
 export async function prepareCapture({ file, resizeImage }) {
-  const route = classifyFile(file);
+  const route = classifyFile(file) ?? (await sniffFile(file));
   if (!route) return { error: "wrongType" };
   let blob = file;
   let mimeType = route.mimeType;
@@ -263,14 +311,34 @@ export async function sendCapture({
 
 // ---------- the list of captures ----------
 
-const STATE_MESSAGES = Object.freeze({
-  sending: CAPTURE_MESSAGES.sending,
-  sent: CAPTURE_MESSAGES.waiting,
-  waiting: CAPTURE_MESSAGES.waiting,
-  received: CAPTURE_MESSAGES.received,
-  failed: CAPTURE_MESSAGES.failed,
-  saved: CAPTURE_MESSAGES.saved,
-});
+// The tutor's state, from the waker: "waiting" (asleep or waking), "ready", or "readyNoAi" (the
+// server answers but can't read). Reading needs "ready"; checking the details needs the server.
+export const TUTOR_STATES = Object.freeze(["waiting", "ready", "readyNoAi"]);
+const serverUp = (tutor) => tutor === "ready" || tutor === "readyNoAi";
+const UPLOAD_TITLES = Object.freeze(["Photo", "File", "Pasted text"]);
+const REASON_PATTERN = /^[a-z][a-z-]{0,39}$/;
+
+/** The status line for a row, from its state, the tutor's state and the server's failure reason. */
+export function rowMessage(row, tutor = "waiting") {
+  switch (row.state) {
+    case "queued":
+    case "sending":
+      return CAPTURE_MESSAGES.sending;
+    case "sent":
+    case "waiting":
+      return CAPTURE_MESSAGES.waiting;
+    case "reading":
+      return tutor === "ready" ? CAPTURE_MESSAGES.reading : CAPTURE_MESSAGES.waiting;
+    case "read":
+      return serverUp(tutor) ? CAPTURE_MESSAGES.read : CAPTURE_MESSAGES.readLater;
+    case "added":
+      return CAPTURE_MESSAGES.added;
+    case "failed":
+      return failureMessage(row.failureReason);
+    default:
+      return CAPTURE_MESSAGES.saved;
+  }
+}
 
 /** Pending inbox items from GET /inbox, keeping only well-formed entries. */
 export function inboxItems(body) {
@@ -280,30 +348,34 @@ export function inboxItems(body) {
     .map((item) => ({ clientId: item.clientId, uploadId: uploadIdFor(item.clientId), bytes: Number(item.bytes) || 0 }));
 }
 
-/** Upload entries from the learner snapshot's recent list (status only, never text). */
+/** Upload entries from the learner snapshot's recent list (status, failure reason and task id; never text). */
 export function snapshotUploads(body) {
   const recent = Array.isArray(body?.recent) ? body.recent : Array.isArray(body?.learner?.recent) ? body.learner.recent : [];
   return recent
     .filter((entry) => entry?.type === "upload" && typeof entry.id === "string" && entry.id.startsWith("up_"))
     .map((entry) => ({
       uploadId: entry.id,
-      title: entry.title === "File" ? "File" : entry.title === "Photo" ? "Photo" : "Photo or file",
+      title: UPLOAD_TITLES.includes(entry.title) ? entry.title : "Photo or file",
       status: typeof entry.status === "string" ? entry.status : "",
+      failureReason: typeof entry.failureReason === "string" && REASON_PATTERN.test(entry.failureReason) ? entry.failureReason : null,
+      taskId: typeof entry.taskId === "string" && entry.taskId ? entry.taskId : null,
       updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : null,
     }));
 }
 
-function remoteState(status) {
-  if (status === "processing") return "received";
-  if (status === "failed") return "failed";
+function remoteState(item) {
+  if (item.status === "processing") return "reading";
+  if (item.status === "failed") return "failed";
+  if (item.status === "done") return item.taskId ? "added" : "read";
   return "saved";
 }
 
 /**
  * One list from this device's captures, the inbox and the snapshot, keyed on uploadId so a capture
- * never appears twice. The server's view wins: snapshot over inbox over this device.
+ * never appears twice. The server's view wins: snapshot over inbox over this device. added maps
+ * uploadId → taskId for briefs confirmed on this device that the snapshot doesn't show yet.
  */
-export function mergeCaptures({ local = [], inbox = [], uploads = [], maxRows = MAX_ROWS }) {
+export function mergeCaptures({ local = [], inbox = [], uploads = [], maxRows = MAX_ROWS, tutor = "waiting", added = new Map() }) {
   const rows = [];
   const byId = new Map();
   const add = (row) => {
@@ -329,18 +401,23 @@ export function mergeCaptures({ local = [], inbox = [], uploads = [], maxRows = 
     else add({ uploadId: item.uploadId, title: titleForClientId(item.clientId), time: null, state: "waiting", bytes: item.bytes, canRetry: false });
   }
   for (const item of uploads) {
-    const state = remoteState(item.status);
+    const extra = {
+      state: remoteState(item), failureReason: item.failureReason ?? null, taskId: item.taskId ?? null, canRetry: false, message: null,
+    };
     const row = byId.get(item.uploadId);
-    if (row) Object.assign(row, { state, canRetry: false, message: null, time: row.time ?? item.updatedAt });
-    else add({ uploadId: item.uploadId, title: item.title, time: item.updatedAt, state, bytes: null, canRetry: false });
+    if (row) Object.assign(row, extra, { time: row.time ?? item.updatedAt });
+    else add({ uploadId: item.uploadId, title: item.title, time: item.updatedAt, bytes: null, ...extra });
   }
-  return rows.slice(0, maxRows).map((row) => ({
-    ...row,
-    message: row.message ?? STATE_MESSAGES[row.state] ?? CAPTURE_MESSAGES.saved,
-  }));
+  return rows.slice(0, maxRows).map((row) => {
+    const taskId = row.taskId ?? added.get(row.uploadId) ?? null;
+    const state = taskId && row.state !== "failed" ? "added" : row.state;
+    const out = { ...row, state, taskId };
+    // checking the details needs the server, so the button appears only once it answers
+    return { ...out, canCheck: state === "read" && serverUp(tutor), message: row.message ?? rowMessage(out, tutor) };
+  });
 }
 
-const PENDING_STATES = new Set(["sending", "sent", "waiting"]);
+const PENDING_STATES = new Set(["sending", "sent", "waiting", "reading"]);
 
 /** True while something on the list is still on its way to the server. */
 export function needsPolling(rows) {
@@ -382,8 +459,10 @@ export function createCaptureQueue({
   let timer = null;
   let refreshing = null;
   let lastActivity = now();
+  let tutor = "waiting";
+  const added = new Map();
 
-  const rows = () => mergeCaptures({ local, inbox: remote.inbox, uploads: remote.uploads });
+  const rows = () => mergeCaptures({ local, inbox: remote.inbox, uploads: remote.uploads, tutor, added });
   const changed = () => onChange(rows());
 
   function schedulePoll() {
@@ -489,6 +568,38 @@ export function createCaptureQueue({
     return enqueue(item);
   }
 
+  /** The tutor's state from the waker. Reading starts when it's ready, so keep checking for a while. */
+  function setTutor(state) {
+    const next = TUTOR_STATES.includes(state) ? state : "waiting";
+    if (next === tutor) return;
+    tutor = next;
+    lastActivity = now();
+    changed();
+    schedulePoll();
+  }
+
+  /** A pasted brief the server already has (WP-108b), shown until the snapshot lists it. */
+  function addPasted({ clientId, capturedAt = new Date(now()).toISOString() }) {
+    const uploadId = uploadIdFor(clientId);
+    if (!local.some((item) => item.uploadId === uploadId)) {
+      local.unshift({
+        clientId, uploadId, title: "Pasted text", source: "paste", contentKind: "brief", capturedAt,
+        mimeType: "text/plain", bytes: null, width: null, height: null, base64: null, state: "sent", message: null,
+      });
+    }
+    lastActivity = now();
+    changed();
+    schedulePoll();
+    return uploadId;
+  }
+
+  /** A brief confirmed on this device: shown as added at once, before the snapshot catches up. */
+  function markAdded(uploadId, taskId) {
+    if (typeof uploadId !== "string" || typeof taskId !== "string" || !taskId) return;
+    added.set(uploadId, taskId);
+    changed();
+  }
+
   async function refreshOnce() {
     const mine = generation;
     const token = getToken();
@@ -539,6 +650,8 @@ export function createCaptureQueue({
     timer = null;
     local = [];
     remote = { inbox: [], uploads: [] };
+    added.clear();
+    tutor = "waiting";
     chain = Promise.resolve();
     refreshing = null;
     onChange = () => {};
@@ -546,5 +659,5 @@ export function createCaptureQueue({
     onSignedOut = () => {};
   }
 
-  return { add, retry, refresh, start, stop, rows, idle: () => chain };
+  return { add, retry, refresh, start, stop, rows, idle: () => chain, setTutor, addPasted, markAdded };
 }

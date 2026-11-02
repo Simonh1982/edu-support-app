@@ -61,9 +61,11 @@ test("front-end constants match the server's INBOX BLOCK and image message", () 
   }
 });
 
-test("the phase 0 status messages use the agreed wording", () => {
-  assert.equal(CAPTURE_MESSAGES.received, "Received – it'll be read once reading is switched on.");
+test("the capture status messages use the agreed wording", () => {
+  assert.equal(CAPTURE_MESSAGES.waiting, "Received – waiting to be read.");
+  assert.equal(CAPTURE_MESSAGES.reading, "Reading…");
   assert.equal(CAPTURE_MESSAGES.failed, "This photo is too large to read. Please take it again.");
+  assert.equal(CAPTURE_MESSAGES.received, undefined, "reading is switched on now (WP-106), so the phase 0 wording has gone");
 });
 
 // ---------- IDs and labels ----------
@@ -321,7 +323,7 @@ test("mergeCaptures shows each capture once, with the server's status winning", 
     ],
     uploads: [
       { uploadId: "up_pB-22222222", title: "Photo", status: "processing", updatedAt: "2026-10-29T14:06:00+00:00" },
-      { uploadId: "up_pD-44444444", title: "Photo", status: "failed", updatedAt: "2026-10-29T13:00:00+00:00" },
+      { uploadId: "up_pD-44444444", title: "Photo", status: "failed", failureReason: "too-large", updatedAt: "2026-10-29T13:00:00+00:00" },
     ],
   });
   assert.equal(rows.length, 4, "no duplicates");
@@ -329,7 +331,7 @@ test("mergeCaptures shows each capture once, with the server's status winning", 
   assert.equal(byId["up_pA-11111111"].state, "waiting");
   assert.equal(byId["up_pA-11111111"].canRetry, false, "no Try again once the Worker has it");
   assert.equal(byId["up_pA-11111111"].message, CAPTURE_MESSAGES.waiting);
-  assert.equal(byId["up_pB-22222222"].message, CAPTURE_MESSAGES.received);
+  assert.equal(byId["up_pB-22222222"].message, CAPTURE_MESSAGES.waiting, "not 'Reading…' while the tutor sleeps");
   assert.equal(byId["up_fC-33333333"].title, "File");
   assert.equal(byId["up_pD-44444444"].message, IMAGE_TOO_LARGE_MESSAGE);
   assert.equal(needsPolling(rows), true);
@@ -454,7 +456,7 @@ test("refresh merges the inbox and snapshot, and clears a retry the Worker alrea
   assert.equal(rows.length, 2);
   assert.equal(rows[0].state, "waiting");
   assert.equal(rows[0].canRetry, false);
-  assert.equal(rows[1].message, CAPTURE_MESSAGES.received);
+  assert.equal(rows[1].message, CAPTURE_MESSAGES.waiting);
   assert.equal(queue.retry(clientId), null);
 });
 
