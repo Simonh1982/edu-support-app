@@ -550,7 +550,7 @@ test("learner page has the paste and type forms and the check screen, every cont
   const controls = [...html.matchAll(/<(input|textarea|select)\b[^>]*\bid="([^"]+)"/g)]
     .filter(([tag]) => !/type="file"/.test(tag))
     .map((m) => m[2]);
-  for (const id of controls) assert.match(html, new RegExp(`<label for="${id}">`), `label for ${id}`);
+  for (const id of controls) assert.match(html, new RegExp(`<label\\b[^>]*\\bfor="${id}"`), `label for ${id}`);
 });
 
 test("deploy stamping covers the new modules", () => {

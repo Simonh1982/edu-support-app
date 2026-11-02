@@ -1,6 +1,7 @@
 // Learner page: sign-in, pass handling, waking the tutor (WP-012), capture (WP-014b), the
 // learner's accessibility settings (WP-017), pasting, typing and checking tasks (WP-108b), "Coming up"
-// (WP-109), and the home screen, the saved view and the edit queue (WP-110).
+// (WP-109), the home screen, the saved view and the edit queue (WP-110), and getting help with a
+// task in a conversation, with the coloured tutor status panel (WP-111b).
 import { config } from "./config.js";
 import {
   checkNewPass,
@@ -12,11 +13,12 @@ import {
   signInMessage,
   usableStorage,
 } from "./shared/auth.js";
-import { createWaker, WAKE_MESSAGES } from "./shared/wake.js";
+import { createWaker, tutorPanel, WAKE_MESSAGES } from "./shared/wake.js";
 import { createCaptureScreen } from "./capture.js";
 import { createTaskEntry } from "./check.js";
 import { createUpcoming } from "./upcoming.js";
 import { createHome } from "./home.js";
+import { createConversation } from "./conversation.js";
 import { openDeviceStore } from "./device-store.js";
 import { createApi } from "./shared/api.js";
 import { createAccessibility } from "./shared/accessibility.js";
@@ -68,6 +70,10 @@ function init() {
   let taskEntry = null;
   let upcoming = null;
   let sharedComputer = false;
+  // WP-111b: the conversation, the entries "Coming up" last showed, and the tutor's latest state
+  let conversation = null;
+  let latestItems = [];
+  let tutorState = "waiting";
 
   // Text size, spacing, theme and contrast from the snapshot (blueprint §10.6). Read through the
   // Worker, so they apply while the tutor is still waking.
@@ -80,7 +86,12 @@ function init() {
   // WP-110: the saved view and the edit queue. IndexedDB on own devices; memory only on a shared
   // computer (blueprint §10.3).
   const offline = createOffline();
-  const home = createHome({ onRecommend: (taskId) => upcoming?.focusTask(taskId) });
+  const home = createHome({
+    onRecommend: (taskId) => upcoming?.focusTask(taskId),
+    onShow: (view) => {
+      if (view === "work") conversation?.refreshTasks();
+    },
+  });
   offline.onChange((count) => home?.setQueueNote(queueNote(count, { shared: sharedComputer })));
 
   // Captures go to the Worker's inbox, so they work while the tutor is still waking (blueprint §4.4).
@@ -105,6 +116,8 @@ function init() {
     offline,
     onSignedOut: signedOut,
     onList: ({ items, appName }) => {
+      latestItems = items;
+      conversation?.refreshTasks();
       home?.setRecommendation(recommendNext(items, { today: ukToday() }));
       if (appName !== undefined) home?.setAppName(appName);
     },
@@ -117,7 +130,25 @@ function init() {
   }
   taskEntry = createTaskEntry({ api, capture, onSignedOut: signedOut, onTaskAdded: () => upcoming?.refresh(), queueTask });
 
+  // WP-111b: "Get help with a task" and the conversation. A call that can't reach the tutor wakes it
+  // again, and the conversation carries on from the saved turns once it answers (blueprint §9.2).
+  conversation = createConversation({
+    api,
+    home,
+    getTasks: () => latestItems,
+    onSignedOut: signedOut,
+    onUnreachable: wakeAgain,
+  });
+
+  function wakeAgain() {
+    if (!READY_STATES.has(tutorState)) return;
+    const pass = loadPass({ role: ROLE, local, session });
+    if (pass?.token) startWaking(pass);
+  }
+
   function setTutor(state) {
+    tutorState = state;
+    conversation?.setTutor(state);
     capture?.setTutor(state);
     taskEntry?.setTutor(state);
     upcoming?.setTutor(state);
@@ -135,6 +166,9 @@ function init() {
     capture?.stop();
     taskEntry?.stop();
     upcoming?.stop();
+    conversation?.stop();
+    latestItems = [];
+    els.wakeStatus.removeAttribute("data-tutor");
     setTutor("waiting");
     token = null;
     backendUrl = null;
@@ -160,7 +194,11 @@ function init() {
     const current = createWaker({
       workerUrl: config.workerUrl,
       token: pass.token,
-      onUpdate: ({ message }) => setText(els.wakeStatus, message),
+      onUpdate: ({ state, message }) => {
+        setText(els.wakeStatus, message);
+        // red, amber or green, always with the words (WP-111b)
+        els.wakeStatus.dataset.tutor = tutorPanel(state);
+      },
     });
     waker = current;
     current
@@ -184,6 +222,7 @@ function init() {
       .catch((err) => {
         console.error("[wake] unexpected error:", err?.message ?? String(err));
         setText(els.wakeStatus, WAKE_MESSAGES.wakeFailed);
+        els.wakeStatus.dataset.tutor = tutorPanel("wakeFailed");
         els.retry.hidden = false;
       });
   }
@@ -207,6 +246,7 @@ function init() {
     capture?.start(pass.token);
     taskEntry?.start();
     upcoming?.start(pass.token);
+    conversation?.start();
   }
 
   els.form.addEventListener("submit", (event) => {
