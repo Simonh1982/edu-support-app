@@ -462,6 +462,74 @@ mark.unsure {
   display: none;
 }
 
+/* ---------- "Coming up" (WP-109) ---------- */
+.upcoming {
+  margin-top: 1.5rem;
+}
+
+.tasks {
+  list-style: none;
+  margin: 0 0 var(--paragraph-gap);
+  padding: 0;
+}
+
+.task {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem 0.25rem;
+  border: var(--border-width) solid var(--muted);
+  border-left: 4px solid var(--accent);
+  border-radius: 0.5rem;
+}
+
+/* Overdue tasks also say "Overdue" in words, so colour is never the only signal. */
+.task[data-overdue="true"] {
+  border-left-color: var(--warn);
+}
+
+.task p {
+  margin: 0 0 0.25rem;
+}
+
+.task-title {
+  font-weight: 600;
+}
+
+.task-meta strong {
+  color: var(--warn);
+}
+
+.task-stage {
+  color: var(--muted);
+  font-size: 0.95em;
+}
+
+.task-edit label {
+  display: block;
+  font-weight: 600;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.task-edit select,
+.task-edit input {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 2px solid var(--muted);
+  border-radius: 0.5rem;
+}
+
+.task-edit select[disabled],
+.task-edit input[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
 @media (prefers-reduced-motion: reduce) {
   *,

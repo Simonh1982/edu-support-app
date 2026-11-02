@@ -48,7 +48,7 @@ const short = (text, max = 40) => (text.length > max ? `${text.slice(0, max - 1)
  * Wires up the paste and type forms and the "Check the details" screen. Returns
  * { setTutor(state), open(uploadId), stop() }, or null if the page doesn't have them.
  */
-export function createTaskEntry({ api, capture, onSignedOut, doc = document }) {
+export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, doc = document }) {
   const byId = (id) => doc.getElementById(id);
   const els = {
     capture: byId("capture"),
@@ -193,6 +193,7 @@ export function createTaskEntry({ api, capture, onSignedOut, doc = document }) {
     hideForm(els.typeForm, els.typeOpen);
     setText(els.entryStatus, CHECK_MESSAGES.added);
     els.typeOpen.focus();
+    onTaskAdded?.(); // WP-109: "Coming up" shows the new task
   });
 
   // ---------- the check screen ----------
@@ -436,6 +437,7 @@ export function createTaskEntry({ api, capture, onSignedOut, doc = document }) {
     capture?.markAdded(id, taskId);
     closeCheck();
     setText(els.entryStatus, CHECK_MESSAGES.added);
+    onTaskAdded?.();
   });
 
   function stop() {

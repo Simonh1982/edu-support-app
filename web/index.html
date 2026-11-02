@@ -47,6 +47,16 @@
           <button type="button" id="wake-retry" class="primary" hidden>Try again</button>
         </div>
 
+        <section id="upcoming" class="upcoming" aria-labelledby="upcoming-heading">
+          <h2 id="upcoming-heading" tabindex="-1">Coming up</h2>
+          <p id="upcoming-source" class="hint" hidden></p>
+          <p id="upcoming-status" class="status" role="status" aria-live="polite"></p>
+          <div class="actions">
+            <button type="button" id="upcoming-undo" class="secondary" hidden>Undo</button>
+          </div>
+          <div id="upcoming-groups"></div>
+        </section>
+
         <section id="capture" class="capture" aria-labelledby="capture-heading">
           <h2 id="capture-heading">What are you working on?</h2>
           <p class="hint" id="capture-hint">
