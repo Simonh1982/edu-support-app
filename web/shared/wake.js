@@ -27,6 +27,29 @@ export const WAKE_MESSAGES = Object.freeze({
   signedOut: "Your sign-in is no longer valid. Please sign in again.",
 });
 
+// WP-111b: the coloured tutor status panel. Each wake state shows as one of three panels: offline
+// (red), waking (amber) or ready (green). The words are always shown too, so colour is never the only
+// signal. Connected but with no AI counts as offline, because the tutor can't help yet.
+export const TUTOR_PANELS = Object.freeze({
+  checking: "waking",
+  waking: "waking",
+  starting: "waking",
+  nearly: "waking",
+  port: "waking",
+  warning: "waking",
+  ready: "ready",
+  readyNoAi: "offline",
+  timeout: "offline",
+  worker: "offline",
+  wakeFailed: "offline",
+  notConfigured: "offline",
+  signedOut: "offline",
+});
+
+export function tutorPanel(state) {
+  return Object.hasOwn(TUTOR_PANELS, state ?? "") ? TUTOR_PANELS[state] : "waking";
+}
+
 /**
  * Asks the backend's /api/health whether it is ready. Sends Accept: application/json and
  * no custom headers, so the browser makes a simple request with no preflight.

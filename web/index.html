@@ -69,6 +69,26 @@
         <div id="view-work" class="view" hidden>
           <button type="button" class="back" data-back>Back</button>
 
+          <!-- WP-111b: start a conversation about a task (build spec §9, §10) -->
+          <section id="help-start" class="help-start" aria-labelledby="help-heading">
+            <h2 id="help-heading" tabindex="-1">Get help with a task</h2>
+            <p class="hint">Pick a task, or tell the tutor what you need.</p>
+            <ul id="help-tasks" class="plain-list help-tasks" aria-labelledby="help-heading"></ul>
+            <div class="actions">
+              <button type="button" id="help-all" class="secondary" hidden>Show all tasks</button>
+              <button type="button" id="help-other" class="secondary" aria-controls="help-other-form" aria-expanded="false">Something else</button>
+            </div>
+            <form id="help-other-form" class="panel" aria-labelledby="help-other-heading" novalidate hidden>
+              <h3 id="help-other-heading">Something else</h3>
+              <label for="help-other-text">What do you need help with?</label>
+              <textarea id="help-other-text" rows="3" maxlength="4000"></textarea>
+              <div class="actions">
+                <button type="submit" class="primary">Next</button>
+              </div>
+            </form>
+            <p id="help-status" class="status" role="status" aria-live="polite"></p>
+          </section>
+
           <section id="capture" class="capture" aria-labelledby="capture-heading">
             <h2 id="capture-heading">What are you working on?</h2>
             <p class="hint" id="capture-hint">
@@ -236,6 +256,41 @@
             <div class="actions">
               <button type="button" id="check-back" class="secondary">Back</button>
             </div>
+          </section>
+        </div>
+
+        <!-- WP-111b: the conversation, with attempt before help and the two support pairs (build spec §20–§23) -->
+        <div id="view-talk" class="view" hidden>
+          <button type="button" id="talk-back" class="back">Back</button>
+
+          <section id="talk" class="talk" aria-labelledby="talk-heading">
+            <h2 id="talk-heading" tabindex="-1">Understand and research it</h2>
+            <p id="talk-task" class="hint"></p>
+
+            <div id="talk-routes" class="route-switch" hidden>
+              <p class="hint">Not quite right? Start somewhere else:</p>
+              <div id="talk-route-buttons" class="actions"></div>
+            </div>
+
+            <ol id="talk-turns" class="turns" aria-label="Your conversation" hidden></ol>
+
+            <section id="talk-support" class="support" aria-labelledby="support-heading" hidden>
+              <h3 id="support-heading">Need some help?</h3>
+              <div id="talk-support-buttons" class="actions"></div>
+            </section>
+
+            <form id="talk-form" class="talk-form" novalidate>
+              <label id="talk-prompt-label" for="talk-text">What do you think the question is asking?</label>
+              <p id="talk-prompt-hint" class="hint">Anything counts, however rough. Spelling doesn't matter.</p>
+              <textarea id="talk-text" rows="4" maxlength="4000" aria-describedby="talk-prompt-hint"></textarea>
+              <div class="actions">
+                <button type="submit" id="talk-send" class="primary" disabled>Send</button>
+                <button type="button" id="talk-escape" class="secondary" disabled>I don't know where to start</button>
+              </div>
+            </form>
+
+            <p id="talk-status" class="status" role="status" aria-live="polite"></p>
+            <p id="talk-error" class="error" role="alert"></p>
           </section>
         </div>
 

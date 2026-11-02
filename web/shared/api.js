@@ -1,7 +1,9 @@
 // Calls from the learner page to the tutor's own server (WP-108b): pasting a brief, opening what was
 // read, confirming the draft task and adding a typed task. The address is the one the Worker's
 // /status gave the waker. No DOM-only or Node-only APIs: fetch and the clock are passed in for tests.
+// WP-111b: the conversation calls, which wait longer because a tutor reply can take a minute or two.
 import { readJsonBody, timeoutSignal } from "./auth.js";
+import { CONVERSATION_TIMEOUT_MS } from "./conversation.js";
 
 export const API_TIMEOUT_MS = 20_000;
 // Waiting for a pasted brief (or a photo still being read) before showing "Check the details".
@@ -67,10 +69,15 @@ export function apiErrorMessage(result) {
 }
 
 /** The calls the learner page makes, bound to the current address and pass. */
-export function createApi({ getBackendUrl, getToken, fetchImpl = globalThis.fetch, timeoutMs = API_TIMEOUT_MS }) {
-  const call = (path, { method = "GET", body } = {}) =>
-    apiRequest({ backendUrl: getBackendUrl(), path, token: getToken(), method, body, fetchImpl, timeoutMs });
+export function createApi({
+  getBackendUrl, getToken, fetchImpl = globalThis.fetch, timeoutMs = API_TIMEOUT_MS, talkTimeoutMs = CONVERSATION_TIMEOUT_MS,
+}) {
+  const call = (path, { method = "GET", body, timeout = timeoutMs } = {}) =>
+    apiRequest({ backendUrl: getBackendUrl(), path, token: getToken(), method, body, fetchImpl, timeoutMs: timeout });
   const uploadPath = (id) => `api/uploads/${encodeURIComponent(id)}`;
+  const conversationPath = (id) => `api/conversations/${encodeURIComponent(id)}`;
+  // calls that wait for a tutor reply
+  const talk = (path, body) => call(path, { method: "POST", body, timeout: talkTimeoutMs });
   return {
     call,
     pasteBrief: ({ clientId, text }) => call("api/uploads/paste", { method: "POST", body: { clientId, text } }),
@@ -80,6 +87,13 @@ export function createApi({ getBackendUrl, getToken, fetchImpl = globalThis.fetc
     // WP-109: the open tasks for "Coming up", and changing a task's stage or deadline
     openTasks: () => call("api/tasks?open=1"),
     updateTask: (id, body) => call(`api/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    // WP-111b: route choice, conversations, the support pairs and votes (server routes from WP-111a)
+    suggestRoute: (body) => talk("api/route", body),
+    startConversation: (body) => call("api/conversations", { method: "POST", body }),
+    openConversation: (id) => call(conversationPath(id)),
+    sendMessage: (id, body) => talk(`${conversationPath(id)}/messages`, body),
+    requestSupport: (id, type) => talk(`${conversationPath(id)}/support`, { type }),
+    vote: (turnId, vote) => call(`api/turns/${encodeURIComponent(turnId)}/vote`, { method: "POST", body: { vote } }),
   };
 }
 

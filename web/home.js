@@ -1,8 +1,11 @@
 // Learner page: the home screen and its views (WP-110; build spec §3.2, §6, §6.1). Home shows the
 // status line, "Recommended next", the three large actions and a smaller "More". Each action opens its
 // own view with a Back button, so there is one decision at a time. Views are added to the browser's
-// history, so the phone's own back gesture returns home too.
-export const VIEWS = Object.freeze(["home", "work", "upcoming", "learn", "more"]);
+// history, so the phone's own back gesture returns home too. WP-111b adds the conversation view
+// ("talk"), which is opened from "Help me with some work" rather than from a home button.
+export const VIEWS = Object.freeze(["home", "work", "upcoming", "learn", "more", "talk"]);
+// The views with their own button on the home view
+export const HOME_OPENERS = Object.freeze(["work", "upcoming", "learn", "more"]);
 const DEFAULT_HEADING = "Home";
 const DEFAULT_TITLE = "Study";
 const SIGNED_OUT_TITLE = "Sign in";
@@ -14,7 +17,7 @@ const SIGNED_OUT_TITLE = "Sign in";
 export function createHome({ doc = document, win = window, onRecommend, onShow } = {}) {
   const byId = (id) => doc.getElementById(id);
   const views = Object.fromEntries(VIEWS.map((name) => [name, byId(`view-${name}`)]));
-  const openers = Object.fromEntries(VIEWS.filter((name) => name !== "home").map((name) => [name, byId(`go-${name}`)]));
+  const openers = Object.fromEntries(HOME_OPENERS.map((name) => [name, byId(`go-${name}`)]));
   const els = {
     heading: byId("home-heading"),
     recommend: byId("recommend"),
@@ -45,7 +48,8 @@ export function createHome({ doc = document, win = window, onRecommend, onShow }
     const was = current;
     for (const [view, el] of Object.entries(views)) el.hidden = view !== next;
     current = next;
-    if (next !== "home") lastOpened = next;
+    // home focuses the button that opened the last view; the conversation view has no home button
+    if (next !== "home" && openers[next]) lastOpened = next;
     if (push && next !== "home") {
       // home → view adds a history entry; view → view replaces it, so Back still goes home
       if (was === "home") history?.pushState?.({ eduView: next }, "");

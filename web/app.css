@@ -557,8 +557,7 @@ button.big {
   cursor: pointer;
 }
 
-button.link,
-button.back {
+button.link {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
@@ -573,6 +572,36 @@ button.back {
   text-decoration: underline;
   text-underline-offset: 0.2em;
   cursor: pointer;
+}
+
+/* Back looks like a clear button (owner request, 2 Nov 2026): an outlined button with an arrow. The
+   arrow is decoration only, so screen readers just say "Back". */
+button.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--tap);
+  min-width: 7rem;
+  padding: 0.5rem 1.25rem 0.5rem 1rem;
+  border: 2px solid var(--accent);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button.back::before {
+  content: "\2190" / "";
+}
+
+button.back:hover {
+  background: var(--accent);
+  color: var(--accent-fg);
 }
 
 .recommend {
@@ -623,6 +652,192 @@ dialog::backdrop {
 
 dialog h2 {
   margin-top: 0;
+}
+
+/* ---------- tutor status panel (WP-111b; owner request, 2 Nov 2026) ----------
+   Red when offline, amber while waking, green when ready. The panel keeps its words, so colour is never
+   the only signal, and each pair meets WCAG AA (4.5:1) in every theme: the panel brings its own
+   background, and its border uses the theme's text colour so the edge shows on dark themes too. */
+:root {
+  --tutor-offline-bg: #b3261e;
+  --tutor-offline-fg: #ffffff;
+  --tutor-waking-bg: #f2b705;
+  --tutor-waking-fg: #000000;
+  --tutor-ready-bg: #1b6e3a;
+  --tutor-ready-fg: #ffffff;
+}
+
+:root[data-contrast="high"] {
+  --tutor-offline-bg: #7a0000;
+  --tutor-offline-fg: #ffffff;
+  --tutor-waking-bg: #ffd23f;
+  --tutor-waking-fg: #000000;
+  --tutor-ready-bg: #0a4a1f;
+  --tutor-ready-fg: #ffffff;
+}
+
+#wake-status[data-tutor] {
+  border: var(--border-width) solid var(--fg);
+  border-left-width: var(--border-width);
+  border-radius: 0.5rem;
+  font-weight: 700;
+}
+
+#wake-status[data-tutor="offline"] {
+  background: var(--tutor-offline-bg);
+  color: var(--tutor-offline-fg);
+}
+
+#wake-status[data-tutor="waking"] {
+  background: var(--tutor-waking-bg);
+  color: var(--tutor-waking-fg);
+}
+
+#wake-status[data-tutor="ready"] {
+  background: var(--tutor-ready-bg);
+  color: var(--tutor-ready-fg);
+}
+
+/* ---------- getting help and the conversation (WP-111b) ---------- */
+.help-start {
+  margin-top: 1.5rem;
+}
+
+.help-tasks li {
+  margin-bottom: 0.5rem;
+}
+
+button.task-choice {
+  text-align: left;
+}
+
+.task-choice-title,
+.task-choice-due {
+  display: block;
+}
+
+.task-choice-due {
+  color: var(--muted);
+  font-size: 0.9em;
+  font-weight: 400;
+}
+
+.talk {
+  margin-top: 1rem;
+}
+
+.turns {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+}
+
+.turn {
+  margin-bottom: 1rem;
+}
+
+.turn-you,
+.turn-tutor {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+}
+
+.turn-you {
+  margin: 0 0 0.5rem 1.5rem;
+  border: var(--border-width) solid var(--muted);
+}
+
+.turn-tutor {
+  border: var(--border-width) solid var(--muted);
+  border-left: 4px solid var(--accent);
+}
+
+.turn-tutor:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.turn-who {
+  margin: 0 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.9em;
+  font-weight: 700;
+}
+
+/* Replies keep their line breaks, so numbered steps and bullets stay readable. */
+.turn-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.votes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+button.vote {
+  flex: 1 1 9rem;
+  min-height: var(--tap);
+  padding: 0.5rem 0.75rem;
+  border: 2px solid var(--accent);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  cursor: pointer;
+}
+
+/* A chosen vote is filled and ticked, so it doesn't rely on colour alone. */
+button.vote[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 700;
+}
+
+button.vote[aria-pressed="true"]::after {
+  content: " \2713" / "";
+}
+
+.support {
+  margin: 1rem 0;
+  padding: 0.25rem 1rem;
+  border: var(--border-width) solid var(--muted);
+  border-radius: 0.5rem;
+}
+
+.support h3 {
+  margin-top: 0.75rem;
+}
+
+.talk-form label {
+  display: block;
+  font-weight: 600;
+  margin: 1rem 0 0.25rem;
+}
+
+.talk-form textarea,
+.help-start textarea {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--tap) * 2);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  line-height: var(--line-height);
+  color: var(--fg);
+  background: var(--bg);
+  border: 2px solid var(--muted);
+  border-radius: 0.5rem;
+  resize: vertical;
+}
+
+.help-start .panel label {
+  margin-top: 0.5rem;
 }
 
 /* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
