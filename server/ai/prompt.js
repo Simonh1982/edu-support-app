@@ -46,7 +46,7 @@ export const PRESENTATION_WORDINGS = Object.freeze({
     medium: 'Use paragraphs of medium length: about three to five sentences.',
   }),
   numberedSteps: Object.freeze({
-    on: 'Use numbered steps when you explain a process or a method; use ordinary sentences for everything else.',
+    on: 'Use numbered steps when you explain a process or a method. Bullet points suit a few key points; use ordinary sentences for everything else.',
     off: "Don't use numbered steps; explain processes in short paragraphs instead.",
   }),
   bullets: Object.freeze({

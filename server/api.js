@@ -1,9 +1,14 @@
-// Pass- and role-checked work routes (WP-105, WP-108a). server/index.js matches the route, checks the
-// pass and the rate limit, reads the body, then calls handleApi. Every route here is learner only.
+// Pass- and role-checked work routes (WP-105, WP-108a, WP-111a). server/index.js matches the route,
+// checks the pass and the rate limit, reads the body, then calls handleApi. Every route here is
+// learner only: the parent role never sees conversations, attempts or votes.
 import { DomainError } from './domain/fields.js';
 import { listTasks, readTask, createTask, updateTask, addAnchor, updateAnchor, removeAnchor } from './domain/tasks.js';
 import { recordAttempt } from './domain/work.js';
 import { openUpload, uploadView, confirmUpload, addPastedBrief, UPLOAD_MESSAGES } from './domain/uploads.js';
+import {
+  startConversation, openConversation, conversationView, sendMessage, requestSupport, voteOnTurn, suggestRoute,
+  STATE_MESSAGES,
+} from './domain/conversations.js';
 
 const ID = '([A-Za-z0-9][A-Za-z0-9_-]{0,99})';
 const LEARNER = Object.freeze(['learner']);
@@ -22,6 +27,13 @@ export const API_ROUTES = Object.freeze([
   route('POST', '/api/uploads/paste', 'pasteBrief'),
   route('GET', `/api/uploads/${ID}`, 'getUpload'),
   route('POST', `/api/uploads/${ID}/confirm`, 'confirmUpload'),
+  // WP-111a: route choice, conversations with the support pairs, and votes on replies
+  route('POST', '/api/route', 'suggestRoute'),
+  route('POST', '/api/conversations', 'startConversation'),
+  route('GET', `/api/conversations/${ID}`, 'getConversation'),
+  route('POST', `/api/conversations/${ID}/messages`, 'sendMessage'),
+  route('POST', `/api/conversations/${ID}/support`, 'requestSupport'),
+  route('POST', `/api/turns/${ID}/vote`, 'voteOnTurn'),
 ]);
 
 export const API_MESSAGES = Object.freeze({
@@ -88,18 +100,48 @@ const HANDLERS = {
     if (result.alreadyTaskId) return { status: 409, body: { error: UPLOAD_MESSAGES.alreadyTask, taskId: result.alreadyTaskId } };
     return { status: 201, body: { task: result.task, upload: uploadView(result.upload) } };
   },
+  async suggestRoute({ store, body, ctx }) {
+    return { status: 200, body: await suggestRoute(store, object(body), ctx) };
+  },
+  async startConversation({ store, body, curriculum, ctx }) {
+    const conv = await startConversation(store, object(body), { curriculum });
+    return { status: 201, body: { conversation: { ...conversationView(conv, ctx), turns: [] } } };
+  },
+  async getConversation({ store, params: [id], ctx }) {
+    const conversation = await openConversation(store, id, ctx);
+    return conversation
+      ? { status: 200, body: { conversation } }
+      : { status: 404, body: { error: STATE_MESSAGES.notFound } };
+  },
+  async sendMessage({ store, params: [id], body, ctx }) {
+    return { status: 201, body: await sendMessage(store, id, object(body), ctx) };
+  },
+  async requestSupport({ store, params: [id], body, ctx }) {
+    return { status: 201, body: await requestSupport(store, id, object(body), ctx) };
+  },
+  async voteOnTurn({ store, params: [id], body }) {
+    return { status: 200, body: await voteOnTurn(store, id, object(body)) };
+  },
 };
 
 /**
- * Run a matched route for a verified pass. Returns { status, body }. Validation and "not found"
- * become 4xx answers; anything else is thrown for the server's 500 handler.
+ * Run a matched route for a verified pass. Returns { status, body }. Validation, "not found",
+ * out-of-order support (409), the AI ceiling (429) and AI problems (502/503) become answers;
+ * anything else is thrown for the server's 500 handler.
+ * getAi: () => { ai, models } once the AI has started, else null. aiCeiling: the daily AI limit.
+ * settings: { disengageAfter }.
  */
-export async function handleApi({ match, pass, store, body = null, query = new URLSearchParams(), getCurriculum = () => null }) {
+export async function handleApi({
+  match, pass, store, body = null, query = new URLSearchParams(), getCurriculum = () => null,
+  getAi = () => null, aiCeiling = null, settings = {}, log = console,
+}) {
   const { route: r, params } = match;
   if (!r.roles.includes(pass?.role)) return { status: 403, body: { error: API_MESSAGES.notAllowed } };
   if (!store || !store.status().ready) return { status: 503, body: { error: API_MESSAGES.notReady } };
+  const curriculum = getCurriculum() ?? null;
+  const ctx = { getAi, aiCeiling, curriculum, disengageAfter: settings.disengageAfter, log };
   try {
-    return await HANDLERS[r.name]({ store, params, body, query, curriculum: getCurriculum() ?? null });
+    return await HANDLERS[r.name]({ store, params, body, query, curriculum, ctx });
   } catch (err) {
     if (err instanceof DomainError) return { status: err.status, body: { error: err.message } };
     throw err;

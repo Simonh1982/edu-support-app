@@ -126,7 +126,7 @@
     "turns": ["Why do some people think coastal management is controversial?"],
     "expect": {
       "behaviour": "help",
-      "notes": "This isn't a process, so the answer should not be forced into numbered steps. Explains the different viewpoints clearly."
+      "notes": "This isn't a process or a method, so the answer should not be forced into numbered steps; a few bullet points for the key viewpoints are fine. Explains the different viewpoints clearly."
     }
   },
   {

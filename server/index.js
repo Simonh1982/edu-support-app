@@ -123,6 +123,7 @@ export async function checkPass(req, authSettings, log = console) {
  */
 export function createHandler({
   config, state, log = console, authSettings = null, getStore = () => null, getCurriculum = () => null, rateLimiter = null,
+  getAi = () => null, aiCeiling = null,
 }) {
   // one limiter per server: requests per pass per minute (blueprint §3.5)
   const limiter = rateLimiter ?? createRateLimiter({ limit: config.rateLimitPerMin ?? 120 });
@@ -172,7 +173,10 @@ export function createHandler({
         if (!auth.pass) return sendJson(res, auth.status, auth.body);
         if (overLimit(res, auth.pass)) return undefined;
         const body = req.method === 'POST' || req.method === 'PATCH' ? await readJson(req, config.jsonBodyLimit) : null;
-        const result = await handleApi({ match, pass: auth.pass, store: getStore(), body, query: url.searchParams, getCurriculum });
+        const result = await handleApi({
+          match, pass: auth.pass, store: getStore(), body, query: url.searchParams, getCurriculum,
+          getAi, aiCeiling, settings: { disengageAfter: config.disengageAfter }, log,
+        });
         return sendJson(res, result.status, result.body);
       }
 
@@ -229,7 +233,7 @@ async function main() {
   let curriculumLoaded = false;
   // reads photos waiting as `processing` (WP-106)
   let readerHandle = null;
-  // daily AI request ceiling (blueprint §7.12); the AI routes call aiCeiling.take() from WP-111
+  // daily AI request ceiling (blueprint §7.12); the reader and the conversation routes (WP-111a) take from it
   const aiCeiling = createAiCeiling({ limit: config.aiDailyCeiling });
   // setting names and problems only, never values (blueprint §12)
   const auth = passSettings(process.env);
@@ -237,6 +241,8 @@ async function main() {
     authSettings: auth.settings,
     getStore: () => storeHandle,
     getCurriculum: () => curriculum,
+    getAi: () => aiHandle,
+    aiCeiling,
   });
   console.log(`[limits] ${config.rateLimitPerMin} requests a minute per pass; ${aiCeiling.status().limit} AI requests a day`);
   console.log(`${new Date().toISOString()} starting: pid ${process.pid}; started by: ${processChain(process.ppid)}`);

@@ -1,6 +1,6 @@
-STATE version: 31
-Updated: 2026-11-02 13:57 (UK time)
-Last work package applied: WP-110
+STATE version: 32
+Updated: 2026-11-02 15:48 (UK time)
+Last work package applied: WP-111a
 
 ## File tree
 ```
@@ -38,6 +38,7 @@ scripts/stamp-versions.sh
 scripts/start-server.sh
 scripts/storage-check.js
 scripts/worker-check.js
+server/ai/conversation.js
 server/ai/copilot.js
 server/ai/image-input.js
 server/ai/index.js
@@ -54,8 +55,11 @@ server/api.js
 server/auth.js
 server/config.js
 server/curriculum.js
+server/derived/engagement.js
+server/derived/route.js
 server/derived/upcoming.js
 server/documents.js
+server/domain/conversations.js
 server/domain/fields.js
 server/domain/tasks.js
 server/domain/uploads.js
@@ -83,6 +87,7 @@ test/auth.test.js
 test/capture.test.js
 test/curriculum.test.js
 test/codespace.test.js
+test/conversation.test.js
 test/custom-tools.test.js
 test/documents.test.js
 test/evals.test.js
@@ -159,8 +164,8 @@ web/upcoming.js
 - `web/home.js` (WP-110): `VIEWS` (`home, work, upcoming, learn, more`), `createHome({ doc?, win?, onRecommend, onShow })` → `{ show, back, reset, setRecommendation, setAppName, setQueueNote, current }`
 - `web/config.js`: `config` (frozen object: `{ workerUrl: string }`)
 - `scripts/make-icons.js`: `renderIcon(size: number): Buffer`, `encodePng(size: number, raw?: Buffer): Buffer`
-- `server/config.js`: `PAGES_ORIGIN` (string), `loadConfig(env = process.env)` → frozen `{ port, host, idleTimeoutMin, devOrigins, jsonBodyLimit, uploadBodyLimit, rateLimitPerMin, aiDailyCeiling, codespaceName, publicUrl }`, `isAllowedOrigin(origin: string | undefined, config: { devOrigins: boolean }): boolean`
-- `server/index.js`: `class HttpError(status, message)`, `createState(config, now = new Date())` → `{ startedAt, restsAt, ai, storage, port }`, `healthBody(state)`, `readJson(req, limit): Promise<unknown>`, `createHandler({ config, state, log = console, authSettings = null, getStore = () => null, getCurriculum = () => null, rateLimiter = null })`, `checkPass`, `createServer(config, state?, log?, options?)` with `options = { authSettings, getStore, getCurriculum, rateLimiter }` → `{ server, state }`, `processChain(pid, { depth?, read? }): string`
+- `server/config.js`: `PAGES_ORIGIN` (string), `loadConfig(env = process.env)` → frozen `{ port, host, idleTimeoutMin, devOrigins, jsonBodyLimit, uploadBodyLimit, rateLimitPerMin, aiDailyCeiling, disengageAfter, codespaceName, publicUrl }`, `isAllowedOrigin(origin: string | undefined, config: { devOrigins: boolean }): boolean`
+- `server/index.js`: `class HttpError(status, message)`, `createState(config, now = new Date())` → `{ startedAt, restsAt, ai, storage, port }`, `healthBody(state)`, `readJson(req, limit): Promise<unknown>`, `createHandler({ config, state, log = console, authSettings = null, getStore = () => null, getCurriculum = () => null, rateLimiter = null, getAi = () => null, aiCeiling = null })`, `checkPass`, `createServer(config, state?, log?, options?)` with `options = { authSettings, getStore, getCurriculum, rateLimiter, getAi, aiCeiling }` → `{ server, state }`, `processChain(pid, { depth?, read? }): string`
 - `server/domain/fields.js`: `class DomainError(status, message)`, `bad(message)` (400), `notFound(what)` (404), `TEXT_AUTHORS`, `TOPIC_ID_FALLBACK`, `QUAL_ID_FALLBACK`, `plainObject`, `onlyKeys`, `shortString(value, name, { max, required? })`, `textField(value, name, { max, authors?, defaultAuthor, required? })` → `{ value, author }`, `oneOf(value, name, allowed, { required? })`, `ukDate`, `wholeNumber`, `flag`, `recordId`, `topicId(value, name, curriculum)`, `topicIds(value, name, curriculum, { max })`, `qualificationId(value, name, curriculum)`, `idDate(id)`. Error messages name fields only, never learner text.
 - `server/domain/tasks.js`: `TASK_KINDS`, `WORK_TYPES`, `STAGES`, `FINISHED_STAGES`, `ANCHOR_TYPES`, `ANCHOR_AUTHORS`, `TASK_LIMITS`, `TASK_FIELDS`, `taskPath(id)`, `newAnchor(body, { createdBy?, now? })`, `newTask(body, { curriculum?, createdBy?, now? })`, `applyTaskChanges(task, body, { curriculum?, now? })` → `{ task, changed, stage }`, `withTaskLock(id, fn)`, `readTask(store, id)`, `listTasks(store, { open? })`, `createTask(store, body, opts?)`, `updateTask(store, id, body, opts?)`, `addAnchor(store, taskId, body, opts?)`, `updateAnchor(store, taskId, anchorId, body, opts?)`, `removeAnchor(store, taskId, anchorId, opts?)` `newTask` and `createTask` also take `sourceUploads` (WP-108a; default `[]`).
 - `server/domain/uploads.js` (WP-108a): `PASTE_MAX_CHARS`, `ESSENTIAL_FIELDS` (`title, subject, deadline, question`), `CONFIRM_FIELDS`, `UPLOAD_MESSAGES`, `fieldsToAsk(proposal)`, `uploadView(record)`, `openUpload(store, id)`, `confirmUpload(store, id, body, { curriculum?, now? })` → `{ task, upload } | { alreadyTaskId }`, `addPastedBrief(store, body, { now? })` → `{ upload, duplicate }`
@@ -168,7 +173,11 @@ web/upcoming.js
 - `server/rate-limits.js`: `RATE_WINDOW_MS` (60000), `MAX_TRACKED_PASSES` (200), `RATE_LIMIT_MESSAGE`, `AI_CEILING_MESSAGE`, `passKey(pass)`, `createRateLimiter({ limit, windowMs?, now?, maxKeys? })` → `{ take(key) → { ok, remaining } | { ok: false, retryAfterS }, size() }`, `createAiCeiling({ limit, now? })` → `{ take() → { ok, used, limit, message? }, status() → { day, used, limit } }` (resets at UK midnight)
 - `server/ai/reading.js`: `READ_RETRY_BELOW` (0.7), `TOPIC_UNSURE_BELOW` (0.5), `READ_LIMITS`, `READ_ANCHOR_TYPES`, `PROPOSAL_FIELDS`, `READ_SYSTEM`, `MATCH_SYSTEM`, `qualificationsFor`, `readPrompt({ kind, today, qualifications })`, `uncertainPassages`, `editDistance`, `isUsSpelling`, `locateWord`, `filterCorrections(list, text, uncertain)`, `applyCorrections(text, corrections, { offset })`, `correctQuestion`, `normaliseReading(reply, { kind })`, `proposalAnchors`, `buildProposal(reading, { qualifications })`, `topicCandidates(curriculum, qualificationId)`, `matchPrompt({ candidates, proposal })`, `parseMatch`. WP-107: `DOC_SYSTEM`, `DOC_PROMPT_CHARS` (12000), `documentPrompt({ today, qualifications, text })`, `normaliseDocumentBrief(replyText, text)`, `pageUncertainty(pages)`, `fillFromTopics(proposal, curriculum)`; `readPrompt` takes `source: 'photo' | 'scan'`.
 - `server/reader.js`: `READER_POLL_MS` (10000), `READER_BACKOFF_MS` (60000), `READ_TIMEOUT_MS` (90000), `MAX_READ_TRIES` (3), `READS_PER_CYCLE` (3), `READ_FAILURE_REASONS`, `uploadPath(id)`, `isImageUpload`, `pendingImageUploads(store)`, `createLimitCache(loadLimits)`, `readUpload(...)` → `{ status: done|failed|again|waiting|error, reason? }`, `processBacklog(...)`, `startReader({ getStore, getAi, getCurriculum, isReady, aiCeiling, ... })` → `{ runOnce, stop }`. Started by `server/index.js` after listening; runs only when storage is ready, the curriculum has been tried and the AI mode is `copilot`; stopped on shutdown. WP-107: new `isDocumentUpload`, `pendingUploads(store)` (photos, Word and PDF); `READ_FAILURE_REASONS` also has `password` and `scanned-pdf`; `readUpload`, `processBacklog` and `startReader` take an optional `extract` (default `extractDocument`); `readUpload` can return `skipped` (reason `extractor-missing`); `processBacklog`'s summary has `skipped` and `skipReason`, and skipped uploads don't count towards the per-cycle limit (one pass per cycle, no retry inside it). WP-108a: `PASTE_TYPE` (`text/plain`), `isTextUpload(record)`; `pendingUploads` now includes pasted text.
-- `server/api.js`: `API_ROUTES`, `API_MESSAGES`, `matchApiRoute(method, pathname)` → route match, `{ status: 405, allow }` or null, `handleApi({ match, pass, store, body?, query?, getCurriculum? })` → `{ status, body }`
+- `server/api.js`: `API_ROUTES`, `API_MESSAGES`, `matchApiRoute(method, pathname)` → route match, `{ status: 405, allow }` or null, `handleApi({ match, pass, store, body?, query?, getCurriculum?, getAi?, aiCeiling?, settings?: { disengageAfter }, log? })` → `{ status, body }` (last four WP-111a)
+- `server/derived/engagement.js` (WP-111a; pure, counts never stored): `DEFAULT_DISENGAGE_AFTER` (3), `IDK_PHRASES`, `normaliseAnswer(text)`, `isIdkStyle(text)` (whole answers only; the escape and "Nothing yet" never count), `idkCount(turns)`, `isDisengaged(turns, after?)`
+- `server/derived/route.js` (WP-111a): `WORK_ROUTES` (`research, plan, review`), `ROUTE_BY_STAGE`, `routeOptions(route, all?)`, `routeFromTask(task)`
+- `server/ai/conversation.js` (WP-111a): `TUTOR_TIMEOUT_MS` (60000), `ROUTE_TIMEOUT_MS` (30000), `MAX_TUTOR_TRIES` (2), `MAX_REPLY_CHARS` (20000), `CONVERSATION_MESSAGES`, `ACTION_INSTRUCTIONS`, `DISENGAGED_INSTRUCTION`, `ROUTE_SYSTEM`, `routePrompt(message)`, `parseRouteReply(text)`, `parseTutorReply(text)` (the model's `replyType` is ignored), `askTutor({ ai, model, system, prompt, customTools?, needLevel, ceiling?, timeoutMs?, log? })` (each call takes from the AI ceiling; asks once more if `wellbeingLevel` is missing; throws DomainError 429 or 502), `askRoute({ ai, model, message, ceiling?, timeoutMs?, log? })`
+- `server/domain/conversations.js` (WP-111a): `FIRST_PAIR` (`hint, breakdown`), `SECOND_PAIR` (`pointer, explanation`), `VOTES` (`up, down, removed`), `CONVERSATION_LIMITS`, `ROUTE_FEATURE` (`route-choice`), `STATE_MESSAGES`, `conversationPath(id)`, `offeredSupport(state)`, `advance(state, step)`, `newConversation(body, opts?)`, `conversationView(conv, { disengageAfter? })`, `readConversation(store, id)`, `startConversation(store, body, opts?)`, `openConversation(store, id, { disengageAfter? })`, `sendMessage(store, id, body, ctx?)`, `requestSupport(store, id, body, ctx?)`, `voteOnTurn(store, turnId, body)`, `suggestRoute(store, body, ctx?)`
 - `server/ai/models.js`: `ROLES` (frozen array of 6 roles), `MODELS_URL` (URL), `validateModels(raw: unknown)` → `{ models, errors }`, `loadModels(url = MODELS_URL): Promise<{ models, errors }>` (never throws)
 - `server/ai/copilot.js`: `SDK_PACKAGE`, `DEFAULT_WORK_DIR`, `redact(text): string`, `errorSummary(err, max = 300): string`, `loadSdk(importer?): Promise<{ sdk, error }>`, `builtInToolNames(value): string[]`, `sdkTools(sdk, customTools, { onToolCall }?)` → SDK tools (via `defineTool(name, config)` when exported), `createCopilotAi({ sdk, token, workDir?, log? })` → `{ mode: 'copilot', ask({ model, system, prompt, attachments?, tools?, customTools?, allowPermission?, onPermission?, onEvent?, onToolCall?, unsafeAllToolsForTest?, timeoutMs? }), listModels(), listBuiltInTools(), stop(), features: { defineTool } }`. Shell, write, read and MCP permission requests are always refused; the app's own tools (`customTools`) are approved by name only and added to `availableTools`, which otherwise defaults to `[]`; no `tools` key when there are none.
 - `server/ai/mock.js`: `createMockAi({ replies?, failures?, models?, builtInTools?, permissionRequests?, events?, toolCalls? } = {})` → `{ mode: 'mock', ask, listModels, listBuiltInTools, stop, calls, features: { defineTool: false } }` (same `customTools`/`onToolCall` options as the adapter; tool results reach a reply function as `toolResults`)
@@ -232,12 +241,14 @@ web/upcoming.js
 - `GET /api/item?type=&id=&task=` (pass): learner opens all types; parent opens only notes, plans and drafts with `sharedWithParent` set; unshared and missing both return 404.
 - **Work routes (WP-105; pass required; learner only, parent gets 403):** `GET /api/tasks` (`?open=1` for open tasks only), `POST /api/tasks`, `GET /api/tasks/:id`, `PATCH /api/tasks/:id`, `POST /api/tasks/:id/anchors`, `PATCH /api/tasks/:id/anchors/:anchorId`, `DELETE /api/tasks/:id/anchors/:anchorId`, `POST /api/attempts`. Order: match → pass (401/503) → rate limit → body (256 KB, 413) → role (403) → storage ready (503) → handler. Unknown `/api/...` paths return 404 without a pass; a known path with the wrong method returns 405 with `Allow`. Validation errors (400) name fields only.
 - **Upload routes (WP-108a; pass required; learner only):** `POST /api/uploads/paste` (`{ clientId, text }` → 201, or 200 `duplicate: true` on retry; 409 if the clientId belongs to another capture); `GET /api/uploads/:id` (the view: `status`, `failureReason`, `origin`, `contentKind`, `taskId`, `text` once done, `truncated`, `uncertain`, `spellingCorrections`, `proposal`, `ask`); `POST /api/uploads/:id/confirm` (body: any of `title, subject, qualificationId, topicIds, kind, workType, deadline, marks, wordCount, questionText, anchors, undoneCorrections` (positions); anything left out keeps the draft's value → 201 `{ task, upload }`; 409 `{ error, taskId }` if already a task; 409 if not read yet or not a brief).
+- **Conversation routes (WP-111a; pass required; learner only, parent 403):** `POST /api/route` (`{ taskId? | message? }` → `{ route, options, by: task|light|none }`); `POST /api/conversations` (`{ route, taskId?, topicId? }` → 201); `GET /api/conversations/:id` (state plus turn text, for resuming); `POST /api/conversations/:id/messages` (`{ text }` or `{ escape: true }`); `POST /api/conversations/:id/support` (`{ type }`; 409 if not on offer); `POST /api/turns/:id/vote` (`{ vote: up|down|removed }`). AI not ready 503; AI failure 502; daily ceiling 429; nothing is saved unless the AI answers. **Attempt before help in code:** no support until something is written; then the first pair (Hint, Break it down); the second pair (Point me to something useful, Explain the difficult bit) only after a fresh attempt; out of order → 409. The escape offers Break it down only (no AI call).
 - **Rate limit:** `RATE_LIMIT_PER_MIN` requests per pass per minute (default 120) on the work routes and `/api/item`; over the limit → 429 with `Retry-After`.
 - `/api/health` `ai` = `{ ready, roles, errors, mode }`; `mode` is `starting` | `off` | `mock` | `copilot`; each `roles` entry is `{ model, ok, ms | error }`. The AI start-up test runs after the server starts listening.
 - `/api/health` `port` = `{ visibility, detail, attempts, updatedAt }`; `visibility` is `unknown` | `n/a` | `pending` | `public` | `private`. The port manager starts after listening.
 - `/api/health` `storage` = `{ ok, ready, lastPull, lastPush, pending, detail }`. Storage starts after listening.
 
 ## Work records (WP-105)
+- Conversations (WP-111a): `conversations/<UK month>/<id>.json` (state and turn IDs only, no text). AI turns: feature = the route (or `route-choice`, role `light`, no text). Events: `conversation.started`, `conversation.disengaged` (route, count), `reply.feedback` (turn ID, route, vote; the latest counts).
 - Paths: `tasks/<taskId>/task.json` (anchors inside the task), `attempts/<UK month>/<id>.json`, `ai-turns/<UK month>/<id>.json` (month from the time inside the id).
 - Task stages: `not-started`, `researching`, `planning`, `drafting`, `reviewing`, `submitted`, `done`. `completedAt` is set the first time the stage becomes `submitted` or `done` and never cleared (retention clock, WP-123). A typed task starts `confirmed: true`. Learner anchors start confirmed; source anchors don't.
 - Events (ids, field names, types and stages only, never text): `task.created`, `task.updated`, `task.stage`, `anchor.added`, `anchor.updated`, `anchor.removed`, `attempt.recorded`, `support.requested`, `support.outcome`.
@@ -302,7 +313,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 ## Settings and secrets expected
 - Server (optional, non-secret): `PORT`, `HOST`, `IDLE_TIMEOUT_MIN`, `DEV_ORIGINS`. Also read if present (set by Codespaces): `CODESPACE_NAME`, `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN`.
 - AI (optional, non-secret): `AI_MOCK=1` (use the mock AI), `COPILOT_WORK_DIR` (SDK work folder; default is under the OS temp folder).
-- Limits (optional, non-secret): `RATE_LIMIT_PER_MIN` (default 120), `AI_DAILY_CEILING` (default 300 AI requests per UK day). Logged at start-up as `[limits] …`.
+- Limits (optional, non-secret): `RATE_LIMIT_PER_MIN` (default 120), `AI_DAILY_CEILING` (default 300 AI requests per UK day). Logged at start-up as `[limits] …`. `DISENGAGE_AFTER` (optional, default 3; "idk"-style answers in one conversation before replies get shorter, WP-111a).
 - `COPILOT_GITHUB_TOKEN`: read by `server/ai/index.js` only (passed to the Copilot adapter); never logged.
 - `GH_PORTS_TOKEN`: read by `server/port.js` only (passed to `gh` as `GH_TOKEN`); never logged.
 - `STORAGE_REPO`, `STORAGE_TOKEN`: read by `server/storage/index.js` and `server/alerts.js` (for alerts the token is sent only to `api.github.com` and never logged). The token is passed to git as an auth header in the environment and is never logged. Optional, non-secret: `STORAGE_DIR` (default `/workspaces/storage`; must be outside the app repository).
@@ -331,8 +342,10 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - WP-106 live check (1 Nov 2026, Codespace, invented handwritten brief, photographed twice): question, deadline and 'Strech → Stretch' read correctly both times; 'Imaginary Bay' left uncorrected; the crossing-out was left out of the question; topics matched. The location anchor was missing and the qualification was left blank; both were fixed in WP-107.
 - WP-108b live check passed 2 Nov 2026 (laptop, Chrome): paste → read → "Check the details", deadline prompt, correction undo, anchor chips, add task, the type-it-in form and older uploads; first direct page-to-server call with the pass.
 - WP-109 live check passed 2 Nov 2026: saved list view only while the tutor woke; live list once ready; a task with no deadline in Coming soon; changing the deadline moved it to Coming soon, Later, then Today with "Overdue"; Handed in took it off the list and Undo brought it back; set to Done. On the phone the section fits with no sideways scrolling.
+- WP-110 live check passed 2 Nov 2026 (steps 6–19): home screen, Back and the browser back button; 'Learn or revise: coming soon'; with the Codespace stopped the saved view appeared at once; a queued typed task showed the waiting line, changed Recommended next, survived a reload and saved once the tutor was ready; on the phone no sideways scrolling and easy tap targets.
 
 ## Deviations in effect
+- `test/conversation.test.js` (WP-111a): the fake `curriculum` is given the shape `loadCurriculum()` produces (qualification with `id`, `title`, `units`, `aos`, `commandWords`; topic with `id`, `qualId`, `unitId`, `title`, `record`). As written it was `{}` / `{ title }`, which matched the sandbox stub but not the real `topicExtract()`, so 4 tests failed with "Cannot read properties of undefined (reading 'units')". Test data only; no app code changed.
 - `package.json` (owner-approved hotfix, 31 Oct 2026, not from a work package): `"overrides": { "zod": "4.6.7" }` added after `dependencies`; lockfile regenerated. Reason: `npm audit` flagged 2 high (GHSA-mrhx-c7xc-m3w5, memory exhaustion) in `zod` 4.3.6, which `@github/copilot-sdk` 1.0.22 pins exactly (1.0.28 pins the same). Nothing in the app or the SDK imports `zod` at run time (SDK uses it in type definitions only). After the override: `npm audit` 0 vulnerabilities; `npm ci`, `npm test` (361/361) and `npm run spike:docs` pass; the SDK still loads (`defineTool` present). Future packages that edit `package.json` must keep the `overrides` block; remove it only once the SDK pins `zod` >=4.6.6.
 - `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
 - `test/storage.test.js` (WP-014a-fix): the fake git answers `ls-files` (no unmerged paths), and the "failed pull aborts the rebase" test expects `ls-files` then `rebase` after the failed pull, because `syncLocked` now checks for clashes first.
@@ -340,6 +353,10 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
+- Until WP-112, an attempt typed at wellbeing level 2–3 keeps its text (owner decision 4B, 2 Nov 2026; testing only, no real use before phase 1 ends).
+- WP-123 must also remove `conversations/` records with their turns.
+- A vote isn't returned when a conversation is reopened (the screen keeps it in memory).
+- Conversation calls can take up to about two minutes, so WP-111b needs a longer browser timeout than `API_TIMEOUT_MS`.
 - If `npm install` hasn't been run after a rebuild, documents wait and the log says `[reader] paused: extractor-missing` (photos are still read).
 - Topics and qualification can't be changed on the check screen (no topic list route yet).
 - A typed task queued while waking could, rarely, be added twice if the tutor saves it but the answer is lost on the way back (no client ID on `POST /api/tasks`). Delete the copy once deletion exists (WP-122).
