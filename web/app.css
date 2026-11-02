@@ -296,6 +296,172 @@ h2 {
   margin-top: 0.5rem;
 }
 
+/* ---------- paste, type and "Check the details" (WP-108b) ---------- */
+h2[tabindex="-1"]:focus,
+h3[tabindex="-1"]:focus {
+  outline: none;
+}
+
+h3 {
+  font-size: 1.1em;
+  line-height: 1.3;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.panel {
+  margin: 1rem 0;
+  padding: 0 1rem 0.25rem;
+  border: var(--border-width) solid var(--muted);
+  border-radius: 0.5rem;
+}
+
+.panel label,
+.check-screen label {
+  display: block;
+  font-weight: 600;
+  margin: 1rem 0 0.25rem;
+}
+
+.panel input,
+.panel textarea,
+.check-screen input,
+.check-screen select,
+.check-screen textarea {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  line-height: var(--line-height);
+  color: var(--fg);
+  background: var(--bg);
+  border: 2px solid var(--muted);
+  border-radius: 0.5rem;
+}
+
+.panel textarea,
+.check-screen textarea {
+  resize: vertical;
+}
+
+button.secondary[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.field.ask {
+  padding-left: 0.75rem;
+  border-left: 4px solid var(--accent);
+}
+
+.prompt {
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.chips,
+.plain-list {
+  list-style: none;
+  margin: 0 0 var(--paragraph-gap);
+  padding: 0;
+}
+
+.chip,
+.correction {
+  margin-bottom: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: var(--border-width) solid var(--muted);
+  border-radius: 0.5rem;
+}
+
+.correction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.correction span {
+  flex: 1 1 10rem;
+}
+
+.chip-type,
+.chip-text {
+  display: block;
+}
+
+.chip-type {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.chip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.chip-actions button,
+.correction button {
+  flex: 1 1 8rem;
+  width: auto;
+}
+
+details.more {
+  margin: 1rem 0;
+}
+
+details.more > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.read-text {
+  white-space: pre-wrap;
+  padding: 0.75rem 1rem;
+  border: var(--border-width) solid var(--muted);
+  border-radius: 0.5rem;
+}
+
+/* Unclear and corrected words are marked by underlines, not colour alone. */
+mark.unsure {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline wavy var(--warn);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+
+.corrected {
+  text-decoration: underline var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.error {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.error:empty {
+  display: none;
+}
+
 /* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
 @media (prefers-reduced-motion: reduce) {
   *,

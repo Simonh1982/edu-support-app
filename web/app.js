@@ -1,5 +1,5 @@
-// Learner page: sign-in, pass handling, waking the tutor (WP-012), capture (WP-014b) and the
-// learner's accessibility settings (WP-017).
+// Learner page: sign-in, pass handling, waking the tutor (WP-012), capture (WP-014b), the
+// learner's accessibility settings (WP-017), and pasting, typing and checking tasks (WP-108b).
 import { config } from "./config.js";
 import {
   checkNewPass,
@@ -13,6 +13,8 @@ import {
 } from "./shared/auth.js";
 import { createWaker, WAKE_MESSAGES } from "./shared/wake.js";
 import { createCaptureScreen } from "./capture.js";
+import { createTaskEntry } from "./check.js";
+import { createApi } from "./shared/api.js";
 import { createAccessibility } from "./shared/accessibility.js";
 
 // Kept as an export of this file so existing tests and callers still work.
@@ -47,6 +49,10 @@ function init() {
   const local = usableStorage(() => window.localStorage);
   const session = usableStorage(() => window.sessionStorage);
   let waker = null;
+  // the pass and the tutor's address, for the calls that go straight to the tutor (WP-108b)
+  let token = null;
+  let backendUrl = null;
+  let taskEntry = null;
 
   // Text size, spacing, theme and contrast from the snapshot (blueprint §10.6). Read through the
   // Worker, so they apply while the tutor is still waking.
@@ -57,13 +63,24 @@ function init() {
   });
 
   // Captures go to the Worker's inbox, so they work while the tutor is still waking (blueprint §4.4).
+  const signedOut = () => {
+    clearPass({ role: ROLE, local, session });
+    showSignIn("revoked", { focus: true });
+  };
   const capture = createCaptureScreen({
     workerUrl: config.workerUrl,
-    onSignedOut: () => {
-      clearPass({ role: ROLE, local, session });
-      showSignIn("revoked", { focus: true });
-    },
+    onSignedOut: signedOut,
+    onCheck: (uploadId) => taskEntry?.open(uploadId),
   });
+
+  // Pasting, typing and "Check the details" need the tutor itself, so they wait until it answers.
+  const api = createApi({ getBackendUrl: () => backendUrl, getToken: () => token });
+  taskEntry = createTaskEntry({ api, capture, onSignedOut: signedOut });
+
+  function setTutor(state) {
+    capture?.setTutor(state);
+    taskEntry?.setTutor(state);
+  }
 
   function stopWaking() {
     waker?.stop();
@@ -73,6 +90,10 @@ function init() {
   function showSignIn(code, { focus = false } = {}) {
     stopWaking();
     capture?.stop();
+    taskEntry?.stop();
+    setTutor("waiting");
+    token = null;
+    backendUrl = null;
     accessibility.stop();
     els.home.hidden = true;
     els.signIn.hidden = false;
@@ -83,6 +104,7 @@ function init() {
 
   function startWaking(pass) {
     stopWaking();
+    setTutor("waiting");
     els.retry.hidden = true;
     const current = createWaker({
       workerUrl: config.workerUrl,
@@ -100,6 +122,8 @@ function init() {
         } else if (RETRY_STATES.has(result.state)) {
           els.retry.hidden = false;
         } else if (READY_STATES.has(result.state)) {
+          backendUrl = result.backendUrl ?? null;
+          setTutor(result.state);
           // The server rebuilds the snapshot when it starts, so read the settings again.
           accessibility.refresh().catch((err) => {
             console.error("[settings] could not refresh:", err?.message ?? String(err));
@@ -121,6 +145,7 @@ function init() {
     accessibility.start({ token: pass.token, shared: pass.payload.shared }).catch((err) => {
       console.error("[settings] could not load:", err?.message ?? String(err));
     });
+    token = pass.token;
     startWaking(pass);
     capture?.start(pass.token);
   }
