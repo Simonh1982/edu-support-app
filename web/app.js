@@ -1,5 +1,6 @@
 // Learner page: sign-in, pass handling, waking the tutor (WP-012), capture (WP-014b), the
-// learner's accessibility settings (WP-017), and pasting, typing and checking tasks (WP-108b).
+// learner's accessibility settings (WP-017), pasting, typing and checking tasks (WP-108b), "Coming up"
+// (WP-109), and the home screen, the saved view and the edit queue (WP-110).
 import { config } from "./config.js";
 import {
   checkNewPass,
@@ -15,8 +16,13 @@ import { createWaker, WAKE_MESSAGES } from "./shared/wake.js";
 import { createCaptureScreen } from "./capture.js";
 import { createTaskEntry } from "./check.js";
 import { createUpcoming } from "./upcoming.js";
+import { createHome } from "./home.js";
+import { openDeviceStore } from "./device-store.js";
 import { createApi } from "./shared/api.js";
 import { createAccessibility } from "./shared/accessibility.js";
+import { OFFLINE_MESSAGES, createOffline, memoryKeyValue, queueNote, signOutMessage } from "./shared/offline.js";
+import { recommendNext } from "./shared/recommend.js";
+import { ukToday } from "./shared/upcoming.js";
 
 // Kept as an export of this file so existing tests and callers still work.
 export { loginUrl };
@@ -44,6 +50,12 @@ function init() {
     wakeStatus: byId("wake-status"),
     retry: byId("wake-retry"),
     signOut: byId("sign-out"),
+    signOutDialog: byId("sign-out-dialog"),
+    signOutText: byId("sign-out-text"),
+    signOutConfirm: byId("sign-out-confirm"),
+    signOutCancel: byId("sign-out-cancel"),
+    morePhotos: byId("more-photos"),
+    capturesHeading: byId("captures-heading"),
   };
   if (Object.values(els).some((el) => !el)) return;
 
@@ -54,6 +66,8 @@ function init() {
   let token = null;
   let backendUrl = null;
   let taskEntry = null;
+  let upcoming = null;
+  let sharedComputer = false;
 
   // Text size, spacing, theme and contrast from the snapshot (blueprint §10.6). Read through the
   // Worker, so they apply while the tutor is still waking.
@@ -63,10 +77,18 @@ function init() {
     local,
   });
 
+  // WP-110: the saved view and the edit queue. IndexedDB on own devices; memory only on a shared
+  // computer (blueprint §10.3).
+  const offline = createOffline();
+  const home = createHome({ onRecommend: (taskId) => upcoming?.focusTask(taskId) });
+  offline.onChange((count) => home?.setQueueNote(queueNote(count, { shared: sharedComputer })));
+
   // Captures go to the Worker's inbox, so they work while the tutor is still waking (blueprint §4.4).
-  const signedOut = () => {
+  // A pass the Worker or tutor rejects (account removed, or every device signed out) also forgets
+  // anything saved on this device; a pass that has simply expired keeps it for the next sign-in.
+  const signedOut = (reason) => {
     clearPass({ role: ROLE, local, session });
-    showSignIn("revoked", { focus: true });
+    showSignIn("revoked", { focus: true, forget: reason !== "expired" });
   };
   const capture = createCaptureScreen({
     workerUrl: config.workerUrl,
@@ -74,11 +96,26 @@ function init() {
     onCheck: (uploadId) => taskEntry?.open(uploadId),
   });
 
-  // Pasting, typing and "Check the details" need the tutor itself, so they wait until it answers.
+  // Pasting and "Check the details" need the tutor itself, so they wait until it answers.
   const api = createApi({ getBackendUrl: () => backendUrl, getToken: () => token });
-  // "Coming up" (WP-109): from the snapshot while the tutor wakes, from the tutor once it answers
-  const upcoming = createUpcoming({ workerUrl: config.workerUrl, api, onSignedOut: signedOut });
-  taskEntry = createTaskEntry({ api, capture, onSignedOut: signedOut, onTaskAdded: () => upcoming?.refresh() });
+  // "Coming up" (WP-109): the saved copy and the snapshot while the tutor wakes, the tutor once it answers
+  upcoming = createUpcoming({
+    workerUrl: config.workerUrl,
+    api,
+    offline,
+    onSignedOut: signedOut,
+    onList: ({ items, appName }) => {
+      home?.setRecommendation(recommendNext(items, { today: ukToday() }));
+      if (appName !== undefined) home?.setAppName(appName);
+    },
+  });
+
+  // A typed task made while the tutor wakes waits in the edit queue (WP-110).
+  async function queueTask(body) {
+    const added = await offline.add({ type: "add", body });
+    return added.ok ? { kind: "queued", message: OFFLINE_MESSAGES.taskQueued } : { kind: "queue-error", message: added.error };
+  }
+  taskEntry = createTaskEntry({ api, capture, onSignedOut: signedOut, onTaskAdded: () => upcoming?.refresh(), queueTask });
 
   function setTutor(state) {
     capture?.setTutor(state);
@@ -91,7 +128,9 @@ function init() {
     waker = null;
   }
 
-  function showSignIn(code, { focus = false } = {}) {
+  // forget: also empty the saved view and the queue (sign-out). Otherwise (an expired pass) they stay
+  // on this device and are used after the next sign-in.
+  function showSignIn(code, { focus = false, forget = false } = {}) {
     stopWaking();
     capture?.stop();
     taskEntry?.stop();
@@ -100,6 +139,13 @@ function init() {
     token = null;
     backendUrl = null;
     accessibility.stop();
+    if (forget) {
+      offline.clear().catch((err) => console.error("[offline] could not clear:", err?.name ?? "Error"));
+    } else {
+      offline.stop();
+    }
+    home?.reset();
+    if (els.signOutDialog.open) els.signOutDialog.close();
     els.home.hidden = true;
     els.signIn.hidden = false;
     els.form.querySelector("button[type=submit]")?.removeAttribute("disabled");
@@ -122,12 +168,12 @@ function init() {
       .then((result) => {
         if (waker !== current) return;
         if (result.state === "signedOut") {
-          clearPass({ role: ROLE, local, session });
-          showSignIn("revoked", { focus: true });
+          signedOut(result.reason);
         } else if (RETRY_STATES.has(result.state)) {
           els.retry.hidden = false;
         } else if (READY_STATES.has(result.state)) {
           backendUrl = result.backendUrl ?? null;
+          // "Coming up" sends anything queued, then loads the tutor's list
           setTutor(result.state);
           // The server rebuilds the snapshot when it starts, so read the settings again.
           accessibility.refresh().catch((err) => {
@@ -143,16 +189,23 @@ function init() {
   }
 
   function showHome(pass, { focus = false } = {}) {
+    sharedComputer = pass.payload.shared === true;
     els.signIn.hidden = true;
     els.home.hidden = false;
-    els.sharedNote.hidden = !pass.payload.shared;
+    els.sharedNote.hidden = !sharedComputer;
+    home?.reset();
+    home?.setAppName(null);
     if (focus) els.homeHeading.focus();
     accessibility.start({ token: pass.token, shared: pass.payload.shared }).catch((err) => {
       console.error("[settings] could not load:", err?.message ?? String(err));
     });
+    // Nothing is saved in the browser on a shared computer, so its queue lives in memory only.
+    const store = sharedComputer ? memoryKeyValue() : openDeviceStore() ?? memoryKeyValue();
+    offline.start({ store, shared: sharedComputer });
     token = pass.token;
     startWaking(pass);
     capture?.start(pass.token);
+    taskEntry?.start();
     upcoming?.start(pass.token);
   }
 
@@ -174,9 +227,34 @@ function init() {
     else showSignIn(pass?.expired ? "pass-expired" : undefined, { focus: true });
   });
 
-  els.signOut.addEventListener("click", () => {
+  function signOutNow() {
     clearPass({ role: ROLE, local, session });
-    showSignIn("signed-out", { focus: true });
+    showSignIn("signed-out", { focus: true, forget: true });
+  }
+
+  // Changes still waiting would be lost, so ask first, in an in-page dialog (blueprint §10.6).
+  els.signOut.addEventListener("click", () => {
+    const waiting = offline.count();
+    if (waiting > 0 && typeof els.signOutDialog.showModal === "function") {
+      setText(els.signOutText, signOutMessage(waiting));
+      els.signOutDialog.showModal();
+      els.signOutCancel.focus();
+      return;
+    }
+    signOutNow();
+  });
+  els.signOutConfirm.addEventListener("click", () => {
+    els.signOutDialog.close();
+    signOutNow();
+  });
+  els.signOutCancel.addEventListener("click", () => {
+    els.signOutDialog.close();
+    els.signOut.focus();
+  });
+
+  els.morePhotos.addEventListener("click", () => {
+    home?.show("work");
+    els.capturesHeading.focus();
   });
 
   // Coming back from sign-in: take the pass (or error) out of the address bar straight away.
