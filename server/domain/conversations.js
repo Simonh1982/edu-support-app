@@ -13,6 +13,7 @@ import {
 } from '../ai/conversation.js';
 import { isIdkStyle, idkCount, DEFAULT_DISENGAGE_AFTER } from '../derived/engagement.js';
 import { routeFromTask, routeOptions } from '../derived/route.js';
+import { isDisclosure, noteDisclosure } from '../wellbeing.js';
 import {
   DomainError, bad, notFound, plainObject, onlyKeys, oneOf, recordId, topicId, flag, textField, idDate,
 } from './fields.js';
@@ -153,6 +154,8 @@ export async function openConversation(store, id, { disengageAfter } = {}) {
       learnerText: turn?.learnerText?.value ?? null,
       reply: turn?.text?.value ?? null,
       textRemoved: turn ? turn.textRemoved === true : true,
+      // a number only, so the screen can show the helplines again beside a level-3 reply
+      wellbeingLevel: Number.isInteger(turn?.wellbeingLevel) ? turn.wellbeingLevel : null,
       createdAt: turn?.createdAt ?? null,
     });
   }
@@ -258,25 +261,31 @@ export async function sendMessage(store, id, body, ctx = {}) {
       ctx, message: text.value, instruction: instructionFor(isAttempt ? 'attempt' : 'message', disengaged), needLevel: true,
     });
 
+    // Levels 2–3 (build spec §32.1): his words, the reply and anything made from them are dropped
+    // before anything is saved. A disclosure isn't a go at the work, so it makes no Attempt record and
+    // opens no help; he still sees the reply.
+    const disclosure = isDisclosure(answer.wellbeingLevel);
+    const counts = isAttempt && !disclosure;
+    const action = counts ? 'attempt' : 'message';
     let state = { pair: conv.pair, waiting: conv.waiting, escape: conv.escape };
     let attemptId = null;
-    if (isAttempt) {
+    if (counts) {
       state = advance(conv, { action: 'attempt' });
       if (conv.lastSupportEventId) await logSupportOutcome(store, { supportEventId: conv.lastSupportEventId, outcome: 'tried-again' });
       attemptId = (await recordAttempt(store, { ...base, text: text.value }, { curriculum: ctx.curriculum, now })).id;
     }
     const turn = await saveAiTurn(store, {
       feature: conv.route, role: 'conversation', model: answer.model, taskId: conv.taskId, topicId: conv.topicId, attemptId,
-      learnerText: text.value, text: answer.reply, latencyMs: answer.ms, success: true,
+      learnerText: disclosure ? null : text.value, text: disclosure ? null : answer.reply, latencyMs: answer.ms, success: true,
       taskSpecific: answer.taskSpecific, wellbeingLevel: answer.wellbeingLevel,
     }, { now });
     const changes = {
       ...state,
       lastAttemptId: attemptId ?? conv.lastAttemptId,
-      lastSupportEventId: isAttempt ? null : conv.lastSupportEventId,
-      turns: [...conv.turns, { turnId: turn.id, action: isAttempt ? 'attempt' : 'message', idk }],
+      lastSupportEventId: counts ? null : conv.lastSupportEventId,
+      turns: [...conv.turns, { turnId: turn.id, action, idk: idk && !disclosure }],
     };
-    if (disengaged && !conv.disengagedAt) {
+    if (disengaged && !disclosure && !conv.disengagedAt) {
       changes.disengagedAt = ukIso(now);
       await store.logEvent('conversation.disengaged', {
         createdBy: 'system',
@@ -285,9 +294,11 @@ export async function sendMessage(store, id, body, ctx = {}) {
       });
     }
     const saved = await saveConversation(store, conv, changes, now);
+    // then the event (date and level only) and the owner's alert; neither ever sees his words
+    await noteDisclosure(store, answer.wellbeingLevel, { wellbeing: ctx.wellbeing ?? null, log: ctx.log ?? console });
     return {
       conversation: conversationView(saved, { disengageAfter: after }),
-      turn: turnView(turn, { action: isAttempt ? 'attempt' : 'message', reply: answer.reply, wellbeingLevel: answer.wellbeingLevel }),
+      turn: turnView(turn, { action, reply: answer.reply, wellbeingLevel: answer.wellbeingLevel }),
       attemptId,
     };
   });
@@ -377,5 +388,8 @@ export async function suggestRoute(store, body, ctx = {}) {
       success: answer.route !== null, wellbeingLevel: answer.wellbeingLevel,
     }, { now: ctx.now ?? new Date() });
   }
-  return { route: answer.route, options: routeOptions(answer.route, ROUTES), by: answer.route ? 'light' : 'none' };
+  const out = { route: answer.route, options: routeOptions(answer.route, ROUTES), by: answer.route ? 'light' : 'none' };
+  // Above level 1 the conversation model writes the reply (blueprint §7.10): the screen sends his
+  // message straight on, and that reply is the one rated, so the owner is alerted once.
+  return isDisclosure(answer.wellbeingLevel) ? { ...out, sendNow: true } : out;
 }

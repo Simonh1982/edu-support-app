@@ -15,6 +15,7 @@ import { startCurriculum } from './curriculum.js';
 import { matchApiRoute, handleApi } from './api.js';
 import { createRateLimiter, createAiCeiling, passKey, RATE_LIMIT_MESSAGE } from './rate-limits.js';
 import { startReader } from './reader.js';
+import { createWellbeing } from './wellbeing.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -123,7 +124,7 @@ export async function checkPass(req, authSettings, log = console) {
  */
 export function createHandler({
   config, state, log = console, authSettings = null, getStore = () => null, getCurriculum = () => null, rateLimiter = null,
-  getAi = () => null, aiCeiling = null,
+  getAi = () => null, aiCeiling = null, wellbeing = null,
 }) {
   // one limiter per server: requests per pass per minute (blueprint §3.5)
   const limiter = rateLimiter ?? createRateLimiter({ limit: config.rateLimitPerMin ?? 120 });
@@ -175,7 +176,7 @@ export function createHandler({
         const body = req.method === 'POST' || req.method === 'PATCH' ? await readJson(req, config.jsonBodyLimit) : null;
         const result = await handleApi({
           match, pass: auth.pass, store: getStore(), body, query: url.searchParams, getCurriculum,
-          getAi, aiCeiling, settings: { disengageAfter: config.disengageAfter }, log,
+          getAi, aiCeiling, settings: { disengageAfter: config.disengageAfter }, wellbeing, log,
         });
         return sendJson(res, result.status, result.body);
       }
@@ -243,6 +244,8 @@ async function main() {
     getCurriculum: () => curriculum,
     getAi: () => aiHandle,
     aiCeiling,
+    // owner alerts at wellbeing levels 2–3 (WP-112): only the running server sends them
+    wellbeing: createWellbeing(),
   });
   console.log(`[limits] ${config.rateLimitPerMin} requests a minute per pass; ${aiCeiling.status().limit} AI requests a day`);
   console.log(`${new Date().toISOString()} starting: pid ${process.pid}; started by: ${processChain(process.ppid)}`);
