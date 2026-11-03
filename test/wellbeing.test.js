@@ -77,6 +77,8 @@ function tutor({ levels = [0], lightLevel = 0, reply = KIND_REPLY } = {}) {
         return JSON.stringify({ reply, replyType: 'other', taskSpecific: false, wellbeingLevel: level, sources: [] });
       },
       [MODELS.light]: () => JSON.stringify({ route: 'research', wellbeingLevel: lightLevel }),
+      // the live check (WP-113) passes every reply here; test/check.test.js covers failures
+      [MODELS.checker]: () => JSON.stringify({ leak: false, reason: 'invented' }),
     },
   });
   return { ai, models: MODELS };
