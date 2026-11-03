@@ -176,7 +176,8 @@ export function createHandler({
         const body = req.method === 'POST' || req.method === 'PATCH' ? await readJson(req, config.jsonBodyLimit) : null;
         const result = await handleApi({
           match, pass: auth.pass, store: getStore(), body, query: url.searchParams, getCurriculum,
-          getAi, aiCeiling, settings: { disengageAfter: config.disengageAfter }, wellbeing, log,
+          getAi, aiCeiling, wellbeing, log,
+          settings: { disengageAfter: config.disengageAfter, tally: { replies: config.tallyReplies, chars: config.tallyChars } },
         });
         return sendJson(res, result.status, result.body);
       }
@@ -247,7 +248,8 @@ async function main() {
     // owner alerts at wellbeing levels 2–3 (WP-112): only the running server sends them
     wellbeing: createWellbeing(),
   });
-  console.log(`[limits] ${config.rateLimitPerMin} requests a minute per pass; ${aiCeiling.status().limit} AI requests a day`);
+  console.log(`[limits] ${config.rateLimitPerMin} requests a minute per pass; ${aiCeiling.status().limit} AI requests a day; `
+    + `questions only after ${config.tallyReplies} task-specific replies or ${config.tallyChars} characters per task`);
   console.log(`${new Date().toISOString()} starting: pid ${process.pid}; started by: ${processChain(process.ppid)}`);
   if (!auth.settings) console.log(`[auth] off: ${auth.errors.join('; ')}`);
   // a closing terminal sends SIGHUP; the server must survive it (blueprint §3.2)

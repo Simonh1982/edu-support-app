@@ -1,6 +1,8 @@
 // Attempts, support events and AI turns (build spec Appendix A.3, A.6; §21.1).
 // Attempts: attempts/<UK month>/<id>.json. AI turns: ai-turns/<UK month>/<id>.json (blueprint §2.2).
 // Support requests and outcomes are events only: facts and ids, never text.
+import { readdir } from 'node:fs/promises';
+import path from 'node:path';
 import { newRecord, ukMonth } from '../storage/records.js';
 import { ITEM_ID_PATTERN } from '../storage/items.js';
 import { ROUTES } from '../ai/prompt.js';
@@ -128,4 +130,30 @@ export async function saveAiTurn(store, fields, { now = new Date() } = {}) {
   const turn = newAiTurn(fields, { now });
   await store.put(aiTurnPath(turn.id), turn);
   return turn;
+}
+
+/**
+ * Every saved AI turn for one task, for the per-task tally (WP-113). since: a UK month ("2026-11");
+ * earlier month folders are skipped, because a task's turns can't predate the task.
+ */
+export async function listTaskTurns(store, taskId, { since = null } = {}) {
+  if (typeof taskId !== 'string' || !ITEM_ID_PATTERN.test(taskId)) return [];
+  const root = path.join(store.dir, 'ai-turns');
+  let months = [];
+  try {
+    months = await readdir(root, { withFileTypes: true });
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  const out = [];
+  for (const month of months) {
+    if (!month.isDirectory() || !/^\d{4}-\d{2}$/.test(month.name)) continue;
+    if (since && month.name < since) continue;
+    for (const name of await readdir(path.join(root, month.name))) {
+      if (!name.endsWith('.json') || !ITEM_ID_PATTERN.test(name.slice(0, -5))) continue;
+      const turn = await store.read(`ai-turns/${month.name}/${name}`);
+      if (turn?.taskId === taskId) out.push(turn);
+    }
+  }
+  return out;
 }

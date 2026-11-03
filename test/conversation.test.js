@@ -69,6 +69,8 @@ function tutor({ level = 0, reply = 'Invented tutor reply.', route = 'learn', fa
         return JSON.stringify(body);
       },
       [MODELS.light]: () => JSON.stringify({ route, wellbeingLevel: 0 }),
+      // the live check (WP-113) passes every reply here; test/check.test.js covers failures
+      [MODELS.checker]: () => JSON.stringify({ leak: false, reason: 'invented' }),
     },
     failures: fail ? { [MODELS.conversation]: 'invented outage' } : {},
   });

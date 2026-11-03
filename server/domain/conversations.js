@@ -2,7 +2,8 @@
 // §22, §57), the disengagement trigger (§34), route choice (§10) and reply votes (A-007, §31).
 // A Conversation record (conversations/<UK month>/<id>.json) holds state and turn IDs only, never
 // text: the words live in the AI turn and Attempt records, which have their own retention rules.
-// Events hold ids, types and counts only.
+// Events hold ids, types and counts only. Assignment-related replies pass the live check, and the
+// per-task tally switches a task to questions only (WP-113, build spec §23.5–§23.6).
 import { newRecord, updateRecord, ukIso, ukMonth } from '../storage/records.js';
 import { ITEM_ID_PATTERN } from '../storage/items.js';
 import { ROUTES, buildRequest, loadProfileSettings } from '../ai/prompt.js';
@@ -15,11 +16,16 @@ import { isIdkStyle, idkCount, DEFAULT_DISENGAGE_AFTER } from '../derived/engage
 import { routeFromTask, routeOptions } from '../derived/route.js';
 import { isDisclosure, noteDisclosure } from '../wellbeing.js';
 import {
+  needsCheck, liveCheck, askChecker, STRICT_INSTRUCTION, QUESTIONS_ONLY_INSTRUCTION, CHECK_FEATURE,
+} from '../ai/check.js';
+import { taskTally, overTally, DEFAULT_TALLY } from '../derived/tally.js';
+import {
   DomainError, bad, notFound, plainObject, onlyKeys, oneOf, recordId, topicId, flag, textField, idDate,
 } from './fields.js';
 import { readTask, withTaskLock } from './tasks.js';
 import {
-  recordAttempt, readAttempt, logSupport, logSupportOutcome, saveAiTurn, aiTurnPath, SUPPORT_TYPES, WORK_LIMITS,
+  recordAttempt, readAttempt, logSupport, logSupportOutcome, saveAiTurn, aiTurnPath, listTaskTurns, SUPPORT_TYPES,
+  WORK_LIMITS,
 } from './work.js';
 
 export const FIRST_PAIR = Object.freeze(['hint', 'breakdown']);
@@ -188,9 +194,8 @@ function requireAi(getAi) {
 }
 
 // Everything a tutor call needs. Only the parts build spec §32.3 allows reach the model.
-async function tutorCall(store, conv, { ctx, message, attempt, instruction, needLevel }) {
+async function tutorCall(store, conv, { ctx, task, message, attempt, instruction, needLevel }) {
   const handle = requireAi(ctx.getAi);
-  const task = conv.taskId ? await readTask(store, conv.taskId) : null;
   const curriculum = ctx.curriculum ?? null;
   const topics = [...new Set([conv.topicId, ...(Array.isArray(task?.topicIds) ? task.topicIds : [])].filter(Boolean))]
     .slice(0, CONVERSATION_LIMITS.topics);
@@ -217,8 +222,57 @@ async function tutorCall(store, conv, { ctx, message, attempt, instruction, need
   });
 }
 
-const instructionFor = (action, disengaged) => [ACTION_INSTRUCTIONS[action], disengaged ? DISENGAGED_INSTRUCTION : '']
-  .filter(Boolean).join('\n');
+const instructionFor = (action, disengaged, questionsOnly = false) => [
+  ACTION_INSTRUCTIONS[action], questionsOnly ? QUESTIONS_ONLY_INSTRUCTION : '', disengaged ? DISENGAGED_INSTRUCTION : '',
+].filter(Boolean).join('\n');
+
+/**
+ * Ask the tutor, then run the live check where it applies (build spec §23.5–§23.6; blueprint
+ * §7.6–§7.7). The tally is worked out from the task's saved turns each time; once it reaches the
+ * setting, that task's replies are questions only. A reply to a level 2–3 message is care, not
+ * coursework, so it isn't checked. A draft that fails the check is never saved or shown.
+ * Returns { answer, checkResult, checks }; throws only as tutorCall does (first reply).
+ */
+async function answerFor(store, conv, { ctx, action, type = null, message, attempt, writing, disengaged, needLevel }) {
+  const handle = requireAi(ctx.getAi);
+  const task = conv.taskId ? await readTask(store, conv.taskId) : null;
+  let questionsOnly = false;
+  if (task) {
+    const since = typeof task.createdAt === 'string' ? task.createdAt.slice(0, 7) : null;
+    questionsOnly = overTally(taskTally(await listTaskTurns(store, task.id, { since }), task.id), ctx.tally ?? DEFAULT_TALLY);
+  }
+  const instruction = instructionFor(type ?? action, disengaged, questionsOnly);
+  const ask = (extra, level) => tutorCall(store, conv, {
+    ctx, task, message, attempt, needLevel: level, instruction: [instruction, extra].filter(Boolean).join('\n'),
+  });
+  const first = await ask('', needLevel);
+  if (!needsCheck({ route: conv.route, taskId: conv.taskId, type }) || isDisclosure(first.wellbeingLevel)) {
+    return { answer: first, checkResult: null, checks: [] };
+  }
+  const log = ctx.log ?? console;
+  const checked = await liveCheck({
+    answer: first,
+    route: conv.route,
+    check: (reply) => askChecker({
+      ai: handle.ai, model: handle.models?.checker, task: taskForPrompt(task), reply, writing, ceiling: ctx.aiCeiling, log,
+    }),
+    // the rating belongs to his message, which hasn't changed, so the first reply's level stands
+    regenerate: () => ask(STRICT_INSTRUCTION, false),
+    log,
+  });
+  return { answer: { ...first, ...checked.answer }, checkResult: checked.checkResult, checks: checked.checks };
+}
+
+// One AI turn per checker call (role, model and time only), as for every other AI call (blueprint §7.12).
+async function saveChecks(store, conv, checks, now) {
+  for (const c of checks) {
+    if (!c.model) continue;
+    await saveAiTurn(store, {
+      feature: CHECK_FEATURE, role: 'checker', model: c.model, taskId: conv.taskId, topicId: conv.topicId,
+      latencyMs: c.ms, success: c.leak !== null,
+    }, { now });
+  }
+}
 
 function turnView(turn, { action, type = null, reply, wellbeingLevel }) {
   return { id: turn.id, action, type, replyType: type ?? 'other', reply, wellbeingLevel, textRemoved: turn.textRemoved };
@@ -257,8 +311,8 @@ export async function sendMessage(store, id, body, ctx = {}) {
     const idk = isIdkStyle(text.value);
     const count = idkCount(conv.turns) + (idk ? 1 : 0);
     const disengaged = count >= after;
-    const answer = await tutorCall(store, conv, {
-      ctx, message: text.value, instruction: instructionFor(isAttempt ? 'attempt' : 'message', disengaged), needLevel: true,
+    const { answer, checkResult, checks } = await answerFor(store, conv, {
+      ctx, action: isAttempt ? 'attempt' : 'message', message: text.value, writing: text.value, disengaged, needLevel: true,
     });
 
     // Levels 2–3 (build spec §32.1): his words, the reply and anything made from them are dropped
@@ -277,8 +331,9 @@ export async function sendMessage(store, id, body, ctx = {}) {
     const turn = await saveAiTurn(store, {
       feature: conv.route, role: 'conversation', model: answer.model, taskId: conv.taskId, topicId: conv.topicId, attemptId,
       learnerText: disclosure ? null : text.value, text: disclosure ? null : answer.reply, latencyMs: answer.ms, success: true,
-      taskSpecific: answer.taskSpecific, wellbeingLevel: answer.wellbeingLevel,
+      taskSpecific: answer.taskSpecific, checkResult, wellbeingLevel: answer.wellbeingLevel,
     }, { now });
+    await saveChecks(store, conv, checks, now);
     const changes = {
       ...state,
       lastAttemptId: attemptId ?? conv.lastAttemptId,
@@ -317,10 +372,13 @@ export async function requestSupport(store, id, body, ctx = {}) {
     const state = advance(conv, { action: 'support', type });
     if (conv.turns.length >= CONVERSATION_LIMITS.turns) throw new DomainError(409, STATE_MESSAGES.full);
     const attempt = conv.lastAttemptId ? await readAttempt(store, conv.lastAttemptId) : null;
-    const answer = await tutorCall(store, conv, {
+    const { answer, checkResult, checks } = await answerFor(store, conv, {
       ctx,
+      action: 'support',
+      type,
       attempt: attempt?.text?.value ?? '',
-      instruction: instructionFor(type, idkCount(conv.turns) >= after),
+      writing: attempt?.text?.value ?? '',
+      disengaged: idkCount(conv.turns) >= after,
       // a button press isn't something he typed, so there's nothing to rate (§32.1)
       needLevel: false,
     });
@@ -328,8 +386,9 @@ export async function requestSupport(store, id, body, ctx = {}) {
     const event = await logSupport(store, { type, route: conv.route, attemptId: conv.lastAttemptId, ...base });
     const turn = await saveAiTurn(store, {
       feature: conv.route, role: 'conversation', model: answer.model, ...base, attemptId: conv.lastAttemptId,
-      text: answer.reply, latencyMs: answer.ms, success: true, taskSpecific: answer.taskSpecific,
+      text: answer.reply, latencyMs: answer.ms, success: true, taskSpecific: answer.taskSpecific, checkResult,
     }, { now });
+    await saveChecks(store, conv, checks, now);
     const saved = await saveConversation(store, conv, {
       ...state,
       lastSupportEventId: event.id,
