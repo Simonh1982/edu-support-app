@@ -19,6 +19,7 @@ import {
   needsCheck, liveCheck, askChecker, STRICT_INSTRUCTION, QUESTIONS_ONLY_INSTRUCTION, CHECK_FEATURE,
 } from '../ai/check.js';
 import { taskTally, overTally, DEFAULT_TALLY } from '../derived/tally.js';
+import { WEB_ROUTES, WEB_INSTRUCTION, filterSources, sourceLines } from '../ai/sources.js';
 import {
   DomainError, bad, notFound, plainObject, onlyKeys, oneOf, recordId, topicId, flag, textField, idDate,
 } from './fields.js';
@@ -162,13 +163,14 @@ export async function openConversation(store, id, { disengageAfter } = {}) {
       textRemoved: turn ? turn.textRemoved === true : true,
       // a number only, so the screen can show the helplines again beside a level-3 reply
       wellbeingLevel: Number.isInteger(turn?.wellbeingLevel) ? turn.wellbeingLevel : null,
+      sources: Array.isArray(turn?.sources) ? turn.sources : [],
       createdAt: turn?.createdAt ?? null,
     });
   }
   return { ...conversationView(conv, { disengageAfter }), turns };
 }
 
-function taskForPrompt(task) {
+export function taskForPrompt(task) {
   if (!task) return undefined;
   return {
     question: task.questionText?.value ?? '',
@@ -194,8 +196,10 @@ function requireAi(getAi) {
 }
 
 // Everything a tutor call needs. Only the parts build spec §32.3 allows reach the model.
-async function tutorCall(store, conv, { ctx, task, message, attempt, instruction, needLevel }) {
+// web: offer the web tools if this route has them (WP-114a); second drafts never search.
+async function tutorCall(store, conv, { ctx, task, message, attempt, instruction, needLevel, web = false }) {
   const handle = requireAi(ctx.getAi);
+  const useWeb = web && WEB_ROUTES.includes(conv.route);
   const curriculum = ctx.curriculum ?? null;
   const topics = [...new Set([conv.topicId, ...(Array.isArray(task?.topicIds) ? task.topicIds : [])].filter(Boolean))]
     .slice(0, CONVERSATION_LIMITS.topics);
@@ -209,7 +213,7 @@ async function tutorCall(store, conv, { ctx, task, message, attempt, instruction
     conversation: await recentTurns(store, conv),
     attempt,
     message,
-    instruction,
+    instruction: [instruction, useWeb ? WEB_INSTRUCTION : ''].filter(Boolean).join('\n'),
   });
   const customTools = createReadTools({
     getCurriculum: () => curriculum,
@@ -217,7 +221,7 @@ async function tutorCall(store, conv, { ctx, task, message, attempt, instruction
     scope: { taskId: conv.taskId, topicIds: topics },
   });
   return askTutor({
-    ai: handle.ai, model: handle.models.conversation, system, prompt, customTools, needLevel,
+    ai: handle.ai, model: handle.models.conversation, system, prompt, customTools, needLevel, web: useWeb,
     ceiling: ctx.aiCeiling, log: ctx.log ?? console,
   });
 }
@@ -231,6 +235,8 @@ const instructionFor = (action, disengaged, questionsOnly = false) => [
  * §7.6–§7.7). The tally is worked out from the task's saved turns each time; once it reaches the
  * setting, that task's replies are questions only. A reply to a level 2–3 message is care, not
  * coursework, so it isn't checked. A draft that fails the check is never saved or shown.
+ * Source cards go through the source filter, then the checker reads them with the reply; they are
+ * kept only when that first reply passes, and never beside a reply to a level 2–3 message.
  * Returns { answer, checkResult, checks }; throws only as tutorCall does (first reply).
  */
 async function answerFor(store, conv, { ctx, action, type = null, message, attempt, writing, disengaged, needLevel }) {
@@ -242,25 +248,35 @@ async function answerFor(store, conv, { ctx, action, type = null, message, attem
     questionsOnly = overTally(taskTally(await listTaskTurns(store, task.id, { since }), task.id), ctx.tally ?? DEFAULT_TALLY);
   }
   const instruction = instructionFor(type ?? action, disengaged, questionsOnly);
-  const ask = (extra, level) => tutorCall(store, conv, {
-    ctx, task, message, attempt, needLevel: level, instruction: [instruction, extra].filter(Boolean).join('\n'),
+  const ask = (extra, level, web = false) => tutorCall(store, conv, {
+    ctx, task, message, attempt, needLevel: level, web, instruction: [instruction, extra].filter(Boolean).join('\n'),
   });
-  const first = await ask('', needLevel);
+  const log = ctx.log ?? console;
+  const raw = await ask('', needLevel, true);
+  const filtered = filterSources(raw.sources, { question: task?.questionText?.value ?? '' });
+  if (filtered.dropped) log.log(`[sources] ${filtered.dropped} dropped by the source filter`);
+  const first = { ...raw, sources: isDisclosure(raw.wellbeingLevel) ? [] : filtered.kept };
   if (!needsCheck({ route: conv.route, taskId: conv.taskId, type }) || isDisclosure(first.wellbeingLevel)) {
     return { answer: first, checkResult: null, checks: [] };
   }
-  const log = ctx.log ?? console;
   const checked = await liveCheck({
     answer: first,
     route: conv.route,
     check: (reply) => askChecker({
-      ai: handle.ai, model: handle.models?.checker, task: taskForPrompt(task), reply, writing, ceiling: ctx.aiCeiling, log,
+      ai: handle.ai,
+      model: handle.models?.checker,
+      task: taskForPrompt(task),
+      reply: reply === first.reply ? `${reply}${sourceLines(first.sources)}` : reply,
+      writing,
+      ceiling: ctx.aiCeiling,
+      log,
     }),
     // the rating belongs to his message, which hasn't changed, so the first reply's level stands
     regenerate: () => ask(STRICT_INSTRUCTION, false),
     log,
   });
-  return { answer: { ...first, ...checked.answer }, checkResult: checked.checkResult, checks: checked.checks };
+  const sources = checked.checkResult === 'passed' ? first.sources : [];
+  return { answer: { ...first, ...checked.answer, sources }, checkResult: checked.checkResult, checks: checked.checks };
 }
 
 // One AI turn per checker call (role, model and time only), as for every other AI call (blueprint §7.12).
@@ -275,7 +291,10 @@ async function saveChecks(store, conv, checks, now) {
 }
 
 function turnView(turn, { action, type = null, reply, wellbeingLevel }) {
-  return { id: turn.id, action, type, replyType: type ?? 'other', reply, wellbeingLevel, textRemoved: turn.textRemoved };
+  return {
+    id: turn.id, action, type, replyType: type ?? 'other', reply, wellbeingLevel, textRemoved: turn.textRemoved,
+    sources: Array.isArray(turn.sources) ? turn.sources : [],
+  };
 }
 
 /**
@@ -332,6 +351,7 @@ export async function sendMessage(store, id, body, ctx = {}) {
       feature: conv.route, role: 'conversation', model: answer.model, taskId: conv.taskId, topicId: conv.topicId, attemptId,
       learnerText: disclosure ? null : text.value, text: disclosure ? null : answer.reply, latencyMs: answer.ms, success: true,
       taskSpecific: answer.taskSpecific, checkResult, wellbeingLevel: answer.wellbeingLevel,
+      sources: disclosure ? [] : answer.sources,
     }, { now });
     await saveChecks(store, conv, checks, now);
     const changes = {
@@ -387,6 +407,7 @@ export async function requestSupport(store, id, body, ctx = {}) {
     const turn = await saveAiTurn(store, {
       feature: conv.route, role: 'conversation', model: answer.model, ...base, attemptId: conv.lastAttemptId,
       text: answer.reply, latencyMs: answer.ms, success: true, taskSpecific: answer.taskSpecific, checkResult,
+      sources: answer.sources,
     }, { now });
     await saveChecks(store, conv, checks, now);
     const saved = await saveConversation(store, conv, {

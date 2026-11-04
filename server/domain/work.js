@@ -7,6 +7,7 @@ import { newRecord, ukMonth } from '../storage/records.js';
 import { ITEM_ID_PATTERN } from '../storage/items.js';
 import { ROUTES } from '../ai/prompt.js';
 import { ROLES } from '../ai/models.js';
+import { parseSources } from '../ai/sources.js';
 import {
   bad, notFound, plainObject, onlyKeys, textField, oneOf, wholeNumber, flag, recordId, topicId, idDate,
 } from './fields.js';
@@ -93,7 +94,7 @@ export async function logSupportOutcome(store, { supportEventId, outcome } = {})
 export function newAiTurn(fields, { now = new Date() } = {}) {
   plainObject(fields, 'AI turn');
   onlyKeys(fields, ['feature', 'role', 'model', 'taskId', 'topicId', 'attemptId', 'learnerText', 'text', 'tokens',
-    'credits', 'latencyMs', 'success', 'taskSpecific', 'checkResult', 'wellbeingLevel'], 'AI turn');
+    'credits', 'latencyMs', 'success', 'taskSpecific', 'checkResult', 'wellbeingLevel', 'sources'], 'AI turn');
   if (typeof fields.feature !== 'string' || !FEATURE_PATTERN.test(fields.feature)) throw bad('feature is not valid');
   const role = oneOf(fields.role, 'role', ROLES, { required: true });
   if (typeof fields.model !== 'string' || fields.model.length > 80) throw bad('model is not valid');
@@ -123,6 +124,8 @@ export function newAiTurn(fields, { now = new Date() } = {}) {
     taskSpecific: flag(fields.taskSpecific, 'taskSpecific', false),
     checkResult: oneOf(fields.checkResult, 'checkResult', CHECK_RESULTS),
     wellbeingLevel: level,
+    // source cards shown with the reply (WP-114a); none are kept when the text isn't
+    sources: keepText ? parseSources(fields.sources) : [],
   }, { createdBy: 'ai', now });
 }
 
