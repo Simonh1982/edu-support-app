@@ -3,15 +3,18 @@
 // before help and the order of the pairs. He can write his attempt while the tutor wakes (§6.1); it
 // sends once the tutor's ready. Nothing here is kept in browser storage, and all text from him or the
 // tutor is shown with textContent, never as HTML.
+// WP-114b: source cards under research replies, with Save and Summarise; summaries show as AI cards.
 import { apiErrorMessage } from "./shared/api.js";
 import { dueText, ukToday } from "./shared/upcoming.js";
 import {
   HELPLINES,
   ROUTE_LABELS,
+  SOURCE_MESSAGES,
   TALK_MESSAGES,
   TASK_BUTTONS,
   VOTE_LABELS,
   canEscape,
+  cardKey,
   checkMessage,
   isWorkRoute,
   learnerLine,
@@ -20,6 +23,10 @@ import {
   routeChoices,
   shownVote,
   showsCare,
+  sourceErrorMessage,
+  sourceLabel,
+  summaryFromEntry,
+  summaryFromResult,
   supportHeading,
   supportLabel,
   talkErrorMessage,
@@ -46,6 +53,81 @@ function button(doc, text, { className = "secondary", label } = {}) {
   const el = make(doc, "button", { className, text, attrs: { type: "button" } });
   if (label) el.setAttribute("aria-label", label);
   return el;
+}
+
+// A link to a source, opened in a new tab so the conversation stays put.
+function sourceLink(doc, text, url) {
+  const link = make(doc, "a", { text, attrs: { href: url, target: "_blank", rel: "noopener noreferrer" } });
+  link.append(make(doc, "span", { className: "visually-hidden", text: ` ${SOURCE_MESSAGES.newTab}` }));
+  return link;
+}
+
+// An AI summary (build spec §28): a tinted card whose label "AI summary" is text, not colour alone.
+function summaryCard(doc, summary, key) {
+  const box = make(doc, "div", {
+    className: "ai-summary", attrs: { id: `summary-${key}`, tabindex: "-1", role: "group", "aria-labelledby": `summary-label-${key}` },
+  });
+  box.append(make(doc, "p", { className: "ai-summary-label", text: SOURCE_MESSAGES.summaryLabel, attrs: { id: `summary-label-${key}` } }));
+  box.append(make(doc, "p", { className: "hint", text: SOURCE_MESSAGES.summaryNote }));
+  box.append(make(doc, "p", { className: "ai-summary-text", text: summary.text }));
+  if (summary.section) box.append(make(doc, "p", { text: `${SOURCE_MESSAGES.section} ${summary.section}` }));
+  if (summary.url) {
+    const p = make(doc, "p");
+    p.append(sourceLink(doc, SOURCE_MESSAGES.readOriginal, summary.url));
+    box.append(p);
+  }
+  return box;
+}
+
+/**
+ * The source cards under a tutor reply (build spec §9.1, §26): the kind of source, a link to the
+ * original, the site, a line on what it covers, then Save and Summarise. Exported for tests.
+ * stateOf(index) → { sourceId?, saving?, summarising?, summary?, asked?, note? }.
+ */
+export function sourceList(doc, turn, { stateOf = () => ({}), onSave = () => {}, onSummarise = () => {}, ready = true } = {}) {
+  const list = Array.isArray(turn?.sources) ? turn.sources : [];
+  if (list.length === 0 || !turn.reply) return null;
+  const headingId = `sources-${turn.id}`;
+  const section = make(doc, "section", { className: "sources", attrs: { "aria-labelledby": headingId } });
+  section.append(make(doc, "h3", { className: "sources-heading", text: SOURCE_MESSAGES.heading, attrs: { id: headingId } }));
+  const cards = make(doc, "ul", { className: "source-cards" });
+  for (const card of list) {
+    const state = stateOf(card.index) ?? {};
+    const key = `${turn.id}-${card.index}`;
+    const item = make(doc, "li", { className: "source-card", attrs: { id: `source-${key}`, tabindex: "-1" } });
+    item.append(make(doc, "p", { className: "source-kind", text: sourceLabel(card.category) }));
+    const title = make(doc, "p", { className: "source-title" });
+    title.append(sourceLink(doc, card.title, card.url));
+    item.append(title);
+    item.append(make(doc, "p", { className: "source-site", text: card.publisher ? `${card.publisher} · ${card.site}` : card.site }));
+    if (card.why) item.append(make(doc, "p", { className: "source-why", text: `${SOURCE_MESSAGES.why} ${card.why}` }));
+    const working = Boolean(state.saving || state.summarising);
+    const buttons = [];
+    if (!state.sourceId) {
+      const save = button(doc, state.saving ? SOURCE_MESSAGES.saving : SOURCE_MESSAGES.save);
+      save.dataset.action = "save";
+      save.disabled = !ready || working;
+      save.addEventListener("click", () => onSave(card));
+      buttons.push(save);
+    }
+    if (!state.summary && !state.asked) {
+      const summarise = button(doc, state.summarising ? SOURCE_MESSAGES.summarising : SOURCE_MESSAGES.summarise);
+      summarise.dataset.action = "summarise";
+      summarise.disabled = !ready || working;
+      summarise.addEventListener("click", () => onSummarise(card));
+      buttons.push(summarise);
+    }
+    if (buttons.length) {
+      const actions = make(doc, "div", { className: "actions source-actions" });
+      actions.append(...buttons);
+      item.append(actions);
+    }
+    if (state.note) item.append(make(doc, "p", { className: "source-note", text: state.note }));
+    if (state.summary) item.append(summaryCard(doc, state.summary, key));
+    cards.append(item);
+  }
+  section.append(cards);
+  return section;
 }
 
 /**
@@ -90,6 +172,7 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
   // { route, taskId, title, conversationId, view, turns, asked }; null when no conversation is open
   let session = null;
   const votes = new Map(); // turn id → up | down | removed (kept in memory only)
+  const cards = new Map(); // cardKey → { sourceId, summaryId, saving, summarising, summary, asked, note } (memory only)
 
   function signedOut(reason) {
     stop();
@@ -235,6 +318,13 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     if (turn.reply) tutor.append(make(doc, "p", { className: "turn-text", text: turn.reply }));
     else tutor.append(make(doc, "p", { className: "hint", text: TALK_MESSAGES.noReply }));
     if (showsCare(turn)) tutor.append(careBox());
+    const sources = sourceList(doc, turn, {
+      stateOf: (index) => cards.get(cardKey(turn.id, index)),
+      onSave: (card) => saveCard(turn.id, card),
+      onSummarise: (card) => summariseCard(turn.id, card),
+      ready,
+    });
+    if (sources) tutor.append(sources);
     if (turn.reply) tutor.append(voteButtons(turn));
     item.append(tutor);
     return item;
@@ -407,6 +497,98 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     }
   }
 
+  // ---------- source cards (WP-114b) ----------
+  const cardOf = (turnId, index) => cards.get(cardKey(turnId, index)) ?? {};
+  function setCard(turnId, index, changes) {
+    cards.set(cardKey(turnId, index), { ...cardOf(turnId, index), ...changes });
+  }
+
+  function focusCard(turnId, index, { summary = false } = {}) {
+    const key = `${turnId}-${index}`;
+    const target = (summary && byId(`summary-${key}`)) || byId(`source-${key}`);
+    target?.focus();
+  }
+
+  function cardFailed(turnId, index, result) {
+    if (result.kind === "auth") {
+      signedOut(result.reason);
+      return;
+    }
+    const { message, unreachable } = sourceErrorMessage(result);
+    setCard(turnId, index, { saving: false, summarising: false, note: message });
+    if (unreachable) onUnreachable?.();
+  }
+
+  /** Makes the Source record if it isn't there yet; the card's state afterwards, or null. */
+  async function ensureSaved(turnId, card) {
+    const known = cardOf(turnId, card.index);
+    if (known.sourceId) return known;
+    const result = await api.saveSource({ turnId, index: card.index });
+    if (!active) return null;
+    if (result.kind !== "ok" || typeof result.body?.source?.id !== "string") {
+      cardFailed(turnId, card.index, result);
+      return null;
+    }
+    const source = result.body.source;
+    setCard(turnId, card.index, { sourceId: source.id, summaryId: typeof source.summaryId === "string" ? source.summaryId : null });
+    return cardOf(turnId, card.index);
+  }
+
+  async function saveCard(turnId, card) {
+    if (!ready || !active) return;
+    const state = cardOf(turnId, card.index);
+    if (state.saving || state.summarising || state.sourceId) return;
+    setCard(turnId, card.index, { saving: true, note: "" });
+    render();
+    const saved = await ensureSaved(turnId, card);
+    if (!active) return;
+    if (saved) setCard(turnId, card.index, { saving: false, note: SOURCE_MESSAGES.saved });
+    render();
+    focusCard(turnId, card.index);
+  }
+
+  // Summarise: saves the card first (a summary keeps its source, build spec §28). A card saved and
+  // summarised before shows that summary again rather than making a second one.
+  async function summariseCard(turnId, card) {
+    if (!ready || !active) return;
+    const state = cardOf(turnId, card.index);
+    if (state.saving || state.summarising || state.summary) return;
+    setCard(turnId, card.index, { summarising: true, note: "" });
+    render();
+    const saved = await ensureSaved(turnId, card);
+    if (!active) return;
+    if (!saved) {
+      render();
+      focusCard(turnId, card.index);
+      return;
+    }
+    let summary = null;
+    if (saved.summaryId) {
+      const opened = await api.openItem("notebook", saved.summaryId);
+      if (!active) return;
+      if (opened.kind === "ok" && opened.body?.item) summary = summaryFromEntry(opened.body.item, card);
+    }
+    if (summary?.kind !== "summary") {
+      const result = await api.summariseSource(saved.sourceId);
+      if (!active) return;
+      if (result.kind !== "ok") {
+        cardFailed(turnId, card.index, result);
+        render();
+        focusCard(turnId, card.index);
+        return;
+      }
+      summary = summaryFromResult(result.body, card);
+    }
+    if (summary.kind === "summary") {
+      setCard(turnId, card.index, { summarising: false, summary, summaryId: summary.id, note: "" });
+    } else {
+      // nothing saved: "read the original" and "too close" are final; "couldn't open it" can be tried again
+      setCard(turnId, card.index, { summarising: false, asked: summary.outcome === "read-original" || summary.outcome === "too-close", note: summary.text });
+    }
+    render();
+    focusCard(turnId, card.index, { summary: summary.kind === "summary" });
+  }
+
   els.back.addEventListener("click", () => home.show("work"));
 
   /** After the tutor wakes again, carry on from the saved turns (blueprint §9.2). */
@@ -445,6 +627,7 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     showAll = false;
     session = null;
     votes.clear();
+    cards.clear();
     els.helpTasks.replaceChildren();
     els.helpAll.hidden = true;
     els.helpForm.hidden = true;

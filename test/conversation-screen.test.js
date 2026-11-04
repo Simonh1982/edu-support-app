@@ -142,7 +142,7 @@ test("votes: tap to choose, tap again to remove, tap the other to change", () =>
 
 test("turns from a reply and from a reopened conversation", () => {
   const sent = turnFromReply({ id: "turn_a1", action: "attempt", type: null, reply: "Invented reply" }, { learnerText: "my go" });
-  assert.deepEqual(sent, { id: "turn_a1", action: "attempt", type: null, learnerText: "my go", reply: "Invented reply", wellbeingLevel: null });
+  assert.deepEqual(sent, { id: "turn_a1", action: "attempt", type: null, learnerText: "my go", reply: "Invented reply", wellbeingLevel: null, sources: [] });
   const helped = turnFromReply({ id: "turn_a2", action: "support", type: "hint", reply: "Invented hint" }, { learnerText: "ignored" });
   assert.equal(helped.learnerText, null);
   assert.equal(learnerLine(helped, "research"), "You asked: Give me a search hint");
