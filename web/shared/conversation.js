@@ -22,6 +22,13 @@ export const HELPLINES = Object.freeze([
   Object.freeze({ name: "Samaritans", how: "call 116 123", href: "tel:116123" }),
   Object.freeze({ name: "In immediate danger", how: "call 999", href: "tel:999" }),
 ]);
+// Copies of server/ai/sources.js values (checked by test/sources-screen.test.js, WP-114b).
+export const SOURCE_CATEGORIES = Object.freeze([
+  "introduction", "video", "official", "educational", "primary", "data", "academic", "specialist", "other",
+]);
+export const SOURCE_CARDS = 5;
+// A summary opens the page and, on a task, passes the live check, which may write it a second time.
+export const SUMMARY_TIMEOUT_MS = 210_000;
 
 // Each send can take up to two tutor calls of 60 s, so the browser waits longer than for other calls.
 export const CONVERSATION_TIMEOUT_MS = 150_000;
@@ -90,6 +97,36 @@ export const TALK_MESSAGES = Object.freeze({
 export const VOTE_LABELS = Object.freeze({
   up: Object.freeze({ text: "👍 Helpful", label: "Thumbs up: this helped" }),
   down: Object.freeze({ text: "👎 Not helpful", label: "Thumbs down: this didn't help" }),
+});
+
+// What kind of source each card is, in plain words (build spec §26).
+export const SOURCE_LABELS = Object.freeze({
+  introduction: "Quick introduction",
+  video: "Video",
+  official: "Official information",
+  educational: "Educational resource",
+  primary: "Primary source",
+  data: "Data and statistics",
+  academic: "More challenging reading",
+  specialist: "Specialist source",
+  other: "Source",
+});
+
+// Source cards and AI summaries (build spec §9.1, §26, §28; WP-114b).
+export const SOURCE_MESSAGES = Object.freeze({
+  heading: "Sources the tutor found",
+  why: "What it covers:",
+  newTab: "(opens in a new tab)",
+  save: "Save to my sources",
+  saving: "Saving…",
+  saved: "Saved to your sources.",
+  summarise: "Summarise this",
+  summarising: "Summarising… This can take a minute or two.",
+  summaryLabel: "AI summary",
+  summaryNote: "Written by the AI from this source. Read the original to check it, and quote from the original, not this summary.",
+  section: "Most useful part:",
+  readOriginal: "Read the original",
+  failed: "That didn't work just now. Please try again.",
 });
 
 export const isWorkRoute = (route) => WORK_ROUTES.includes(route);
@@ -181,6 +218,7 @@ export function turnFromReply(turn, { learnerText = null } = {}) {
     learnerText: turn.action === "support" ? null : learnerText,
     reply: typeof turn.reply === "string" ? turn.reply : null,
     wellbeingLevel: Number.isInteger(turn.wellbeingLevel) ? turn.wellbeingLevel : null,
+    sources: cardsFrom(turn.sources),
   };
 }
 
@@ -196,7 +234,91 @@ export function turnsFromServer(conversation) {
       learnerText: typeof t.learnerText === "string" ? t.learnerText : null,
       reply: typeof t.reply === "string" ? t.reply : null,
       wellbeingLevel: Number.isInteger(t.wellbeingLevel) ? t.wellbeingLevel : null,
+      sources: cardsFrom(t.sources),
     }));
+}
+
+/** An http(s) address that is safe to put in a link (no user name or password), or null. */
+export function safeLink(url) {
+  if (typeof url !== "string" || !url.trim()) return null;
+  try {
+    const u = new URL(url.trim());
+    if ((u.protocol !== "https:" && u.protocol !== "http:") || u.username || u.password) return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+/** The site an address is on, without "www.", for the card. */
+export function siteOf(url) {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+export const cardKey = (turnId, index) => `${turnId}:${index}`;
+
+/**
+ * The source cards on a turn (WP-114a), cleaned for the screen. Each keeps its position in the
+ * server's list (index), because saving a card names the turn and that position.
+ */
+export function cardsFrom(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  list.slice(0, SOURCE_CARDS).forEach((raw, index) => {
+    if (!raw || typeof raw !== "object") return;
+    const url = safeLink(raw.url);
+    const title = typeof raw.title === "string" ? raw.title.trim() : "";
+    if (!url || !title) return;
+    const why = typeof raw.why === "string" ? raw.why : typeof raw.why?.value === "string" ? raw.why.value : "";
+    const publisher = typeof raw.publisher === "string" && raw.publisher.trim() ? raw.publisher.trim() : null;
+    const category = SOURCE_CATEGORIES.includes(raw.category) ? raw.category : "other";
+    out.push({ index, title, url, site: siteOf(url), publisher, category, why: why.trim() });
+  });
+  return out;
+}
+
+export function sourceLabel(category) {
+  return SOURCE_LABELS[category] ?? SOURCE_LABELS.other;
+}
+
+/** A saved AI summary (a notebook entry, WP-114a) as a card, or a message if it has no text. */
+export function summaryFromEntry(entry, card = null) {
+  const textOf = (v) => (typeof v === "string" ? v.trim() : typeof v?.value === "string" ? v.value.trim() : "");
+  const text = textOf(entry?.text);
+  if (!text) return { kind: "message", text: SOURCE_MESSAGES.failed };
+  return {
+    kind: "summary",
+    id: typeof entry.id === "string" ? entry.id : null,
+    text,
+    section: textOf(entry.section) || null,
+    url: safeLink(entry.source?.url) ?? card?.url ?? null,
+  };
+}
+
+/**
+ * What POST /api/sources/:id/summary gave (build spec §28): a summary card when it was saved, or the
+ * server's message (read the original; couldn't open it; too close to the task) to show instead.
+ */
+export function summaryFromResult(body, card = null) {
+  if (body?.outcome === "saved" && body.entry) return summaryFromEntry(body.entry, card);
+  if (typeof body?.message === "string" && body.message.trim() && body.message.length <= 400) {
+    return { kind: "message", text: body.message.trim(), outcome: typeof body.outcome === "string" ? body.outcome : null };
+  }
+  return { kind: "message", text: SOURCE_MESSAGES.failed };
+}
+
+/** A plain message for a failed save or summary. unreachable: the tutor may be resting. */
+export function sourceErrorMessage(result) {
+  if (!result || ["network", "no-address", "not-json"].includes(result.kind)) return { message: TALK_MESSAGES.unreachable, unreachable: true };
+  if (result.kind !== "http") return { message: SOURCE_MESSAGES.failed };
+  const said = typeof result.body?.error === "string" && result.body.error.length <= 300 ? result.body.error : null;
+  if ([400, 404, 409, 429].includes(result.status) && said) return { message: said };
+  if (result.status === 503) return { message: "The tutor isn't quite ready. Please try again in a minute." };
+  return { message: SOURCE_MESSAGES.failed };
 }
 
 /** Level 3: the helplines are shown beside the reply, whatever it says (build spec §32.1). */

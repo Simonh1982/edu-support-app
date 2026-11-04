@@ -3,7 +3,7 @@
 // /status gave the waker. No DOM-only or Node-only APIs: fetch and the clock are passed in for tests.
 // WP-111b: the conversation calls, which wait longer because a tutor reply can take a minute or two.
 import { readJsonBody, timeoutSignal } from "./auth.js";
-import { CONVERSATION_TIMEOUT_MS } from "./conversation.js";
+import { CONVERSATION_TIMEOUT_MS, SUMMARY_TIMEOUT_MS } from "./conversation.js";
 
 export const API_TIMEOUT_MS = 20_000;
 // Waiting for a pasted brief (or a photo still being read) before showing "Check the details".
@@ -71,6 +71,7 @@ export function apiErrorMessage(result) {
 /** The calls the learner page makes, bound to the current address and pass. */
 export function createApi({
   getBackendUrl, getToken, fetchImpl = globalThis.fetch, timeoutMs = API_TIMEOUT_MS, talkTimeoutMs = CONVERSATION_TIMEOUT_MS,
+  summaryTimeoutMs = SUMMARY_TIMEOUT_MS,
 }) {
   const call = (path, { method = "GET", body, timeout = timeoutMs } = {}) =>
     apiRequest({ backendUrl: getBackendUrl(), path, token: getToken(), method, body, fetchImpl, timeoutMs: timeout });
@@ -94,6 +95,11 @@ export function createApi({
     sendMessage: (id, body) => talk(`${conversationPath(id)}/messages`, body),
     requestSupport: (id, type) => talk(`${conversationPath(id)}/support`, { type }),
     vote: (turnId, vote) => call(`api/turns/${encodeURIComponent(turnId)}/vote`, { method: "POST", body: { vote } }),
+    // WP-114b: saving a source card, its AI summary, and opening a saved item (server routes from WP-114a)
+    saveSource: ({ turnId, index }) => call("api/sources", { method: "POST", body: { turnId, index } }),
+    summariseSource: (id) =>
+      call(`api/sources/${encodeURIComponent(id)}/summary`, { method: "POST", body: {}, timeout: summaryTimeoutMs }),
+    openItem: (type, id) => call(`api/item?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`),
   };
 }
 

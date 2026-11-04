@@ -867,6 +867,90 @@ button.vote[aria-pressed="true"]::after {
   text-underline-offset: 0.2em;
 }
 
+/* ---------- source cards and AI summaries (WP-114b; build spec §26, §28) ---------- */
+.sources {
+  margin-top: 0.75rem;
+}
+
+.sources-heading {
+  margin: 0.5rem 0;
+}
+
+.source-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.source-card {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem 0.25rem;
+  border: var(--border-width) solid var(--muted);
+  border-radius: 0.5rem;
+}
+
+.source-card:focus,
+.ai-summary:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.source-card p {
+  margin: 0 0 0.5rem;
+}
+
+.source-kind,
+.source-site {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.source-kind {
+  font-weight: 700;
+}
+
+.source-title a,
+.ai-summary a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--fg);
+  font-weight: 700;
+  text-underline-offset: 0.2em;
+}
+
+.source-actions {
+  margin: 0.5rem 0;
+}
+
+.source-note {
+  font-weight: 600;
+}
+
+/* Tinted, and labelled "AI summary" in words, so it never relies on colour alone. The tint is light,
+   so the theme's text colour keeps its contrast; browsers without color-mix keep the plain background. */
+.ai-summary {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.75rem 1rem 0.25rem;
+  border: 2px dashed var(--accent);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+
+.ai-summary-label {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 700;
+}
+
+.ai-summary-text {
+  white-space: pre-wrap;
+}
+
 /* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
 @media (prefers-reduced-motion: reduce) {
   *,
