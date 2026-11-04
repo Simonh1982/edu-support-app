@@ -6,7 +6,7 @@
 // Fetched pages are data, never instructions. Nothing here stores anything.
 import { parseJsonReply } from './json.js';
 import { errorSummary } from './copilot.js';
-import { WEB_TOOLS, WEB_PERMISSION_KINDS, permissionPolicy } from './tools.js';
+import { WEB_TOOLS, WEB_PERMISSION_KINDS, permissionPolicy, toolNameOf } from './tools.js';
 import { clip, tagSafe } from './prompt.js';
 import { DomainError } from '../domain/fields.js';
 
@@ -60,16 +60,31 @@ export function webOptions(tools = WEB_TOOLS) {
 }
 
 /**
- * A permission listener that notes whether a web tool really ran. Sources and summaries count only
- * when it did, so nothing the model "remembers" is shown as a found source.
- * VERIFY: web_search and web_fetch raise permission kind 'url' (seen in WP-007's spike).
+ * True when an SDK event shows one of the given web tools running: an event whose type mentions a
+ * tool and whose data names the tool. This is the evidence the web-tools spike's "tools seen" line uses.
+ * VERIFY: tool events carry the tool name in event.data (toolName, tool_name, name or tool).
  */
-export function webTracker() {
+export function webToolRan(event, tools = WEB_TOOLS) {
+  const type = typeof event?.type === 'string' ? event.type : '';
+  const name = toolNameOf(event?.data);
+  return /tool/i.test(type) && name !== null && tools.includes(name);
+}
+
+/**
+ * Notes whether a web tool really ran. Sources and summaries count only when it did, so nothing the
+ * model "remembers" is shown as a found source. Two signals, either is enough: a tool event naming
+ * one of the tools (the live check on 4 Nov 2026 showed web_search runs with no permission request),
+ * or an approved 'url' permission request.
+ */
+export function webTracker(tools = WEB_TOOLS) {
   const state = { used: false };
   return {
     state,
     onPermission(request, allowed) {
       if (allowed && WEB_PERMISSION_KINDS.includes(request?.kind)) state.used = true;
+    },
+    onEvent(event) {
+      if (webToolRan(event, tools)) state.used = true;
     },
   };
 }
@@ -244,11 +259,12 @@ export async function askSummary({
 }) {
   const took = ceiling ? ceiling.take() : { ok: true };
   if (!took.ok) throw new DomainError(429, took.message || failedMessage);
-  const tracker = webTracker();
+  const tracker = webTracker(['web_fetch']);
   let reply;
   try {
     reply = await ai.ask({
-      model, system, prompt, timeoutMs, ...webOptions(['web_fetch']), onPermission: tracker.onPermission,
+      model, system, prompt, timeoutMs, ...webOptions(['web_fetch']),
+      onPermission: tracker.onPermission, onEvent: tracker.onEvent,
     });
   } catch (err) {
     log.error(`[sources] summary call failed: ${errorSummary(err)}`);

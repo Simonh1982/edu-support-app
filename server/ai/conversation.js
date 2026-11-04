@@ -112,7 +112,10 @@ export async function askTutor({
     const tracker = webTracker();
     try {
       reply = await ai.ask(searching
-        ? { model, system, prompt, customTools, timeoutMs: WEB_TUTOR_TIMEOUT_MS, ...webOptions(), onPermission: tracker.onPermission }
+        ? {
+          model, system, prompt, customTools, timeoutMs: WEB_TUTOR_TIMEOUT_MS, ...webOptions(),
+          onPermission: tracker.onPermission, onEvent: tracker.onEvent,
+        }
         : { model, system, prompt, customTools, timeoutMs: web ? RETRY_AFTER_WEB_TIMEOUT_MS : timeoutMs });
     } catch (err) {
       // error text only (the adapter redacts it); never the prompt or the learner's words
@@ -124,7 +127,10 @@ export async function askTutor({
     ms += reply.ms ?? 0;
     const parsed = parseTutorReply(reply.text);
     if (parsed) {
-      const sources = tracker.state.used ? parseSources(parseJsonReply(reply.text)?.sources) : [];
+      const listed = parseSources(parseJsonReply(reply.text)?.sources);
+      const sources = tracker.state.used ? listed : [];
+      // a count only, so a live problem shows in the server log without any text or addresses
+      if (searching && listed.length && !tracker.state.used) log.log(`[sources] ${listed.length} cards dropped: no web tool ran`);
       best = { ...parsed, sources, model: typeof reply.model === 'string' ? reply.model : model };
       if (!needLevel || parsed.wellbeingLevel !== null) break;
     }
