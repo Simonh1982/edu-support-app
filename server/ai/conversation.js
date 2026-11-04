@@ -5,12 +5,16 @@ import { parseJsonReply } from './json.js';
 import { errorSummary } from './copilot.js';
 import { ROUTES, LIMITS, clip, tagSafe } from './prompt.js';
 import { DomainError } from '../domain/fields.js';
+import { WEB_TUTOR_TIMEOUT_MS, webOptions, webTracker, parseSources } from './sources.js';
 
 export const TUTOR_TIMEOUT_MS = 60_000;
 export const ROUTE_TIMEOUT_MS = 30_000;
 // A reply without a usable `reply` or `wellbeingLevel` is asked for once more (blueprint §7.4).
 export const MAX_TUTOR_TRIES = 2;
 export const MAX_REPLY_CHARS = 20000;
+// The second try after a web reply: no tools and a shorter wait, so the whole exchange (with the
+// live check) stays inside the screen's 150-second wait.
+export const RETRY_AFTER_WEB_TIMEOUT_MS = 45_000;
 
 export const CONVERSATION_MESSAGES = Object.freeze({
   notReady: "The tutor isn't ready yet. Please try again in a moment.",
@@ -87,9 +91,12 @@ function takeCeiling(ceiling) {
  * Ask the conversation model, retrying once if the reply is unusable or (for typed messages) has no
  * wellbeingLevel. A level still missing after the retry is recorded as null and logged (blueprint §7.4).
  * Each call counts towards the daily AI ceiling. Throws DomainError 429 or 502.
+ * web: the web tools are offered on the first try only (owner decision 1B: the tutor decides whether
+ * to search). Source cards are kept only when a web tool really ran on the try that gave the reply.
  */
 export async function askTutor({
-  ai, model, system, prompt, customTools = [], needLevel, ceiling = null, timeoutMs = TUTOR_TIMEOUT_MS, log = console,
+  ai, model, system, prompt, customTools = [], needLevel, web = false, ceiling = null, timeoutMs = TUTOR_TIMEOUT_MS,
+  log = console,
 }) {
   let best = null;
   let ms = 0;
@@ -101,8 +108,12 @@ export async function askTutor({
       throw err;
     }
     let reply;
+    const searching = web && i === 0;
+    const tracker = webTracker();
     try {
-      reply = await ai.ask({ model, system, prompt, customTools, timeoutMs });
+      reply = await ai.ask(searching
+        ? { model, system, prompt, customTools, timeoutMs: WEB_TUTOR_TIMEOUT_MS, ...webOptions(), onPermission: tracker.onPermission }
+        : { model, system, prompt, customTools, timeoutMs: web ? RETRY_AFTER_WEB_TIMEOUT_MS : timeoutMs });
     } catch (err) {
       // error text only (the adapter redacts it); never the prompt or the learner's words
       log.error(`[conversation] AI call failed: ${errorSummary(err)}`);
@@ -113,7 +124,8 @@ export async function askTutor({
     ms += reply.ms ?? 0;
     const parsed = parseTutorReply(reply.text);
     if (parsed) {
-      best = { ...parsed, model: typeof reply.model === 'string' ? reply.model : model };
+      const sources = tracker.state.used ? parseSources(parseJsonReply(reply.text)?.sources) : [];
+      best = { ...parsed, sources, model: typeof reply.model === 'string' ? reply.model : model };
       if (!needLevel || parsed.wellbeingLevel !== null) break;
     }
   }

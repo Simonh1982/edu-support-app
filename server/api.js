@@ -9,6 +9,7 @@ import {
   startConversation, openConversation, conversationView, sendMessage, requestSupport, voteOnTurn, suggestRoute,
   STATE_MESSAGES,
 } from './domain/conversations.js';
+import { listSources, saveSource, summariseSource } from './domain/sources.js';
 
 const ID = '([A-Za-z0-9][A-Za-z0-9_-]{0,99})';
 const LEARNER = Object.freeze(['learner']);
@@ -34,6 +35,10 @@ export const API_ROUTES = Object.freeze([
   route('POST', `/api/conversations/${ID}/messages`, 'sendMessage'),
   route('POST', `/api/conversations/${ID}/support`, 'requestSupport'),
   route('POST', `/api/turns/${ID}/vote`, 'voteOnTurn'),
+  // WP-114a: saving source cards and AI summaries of saved sources
+  route('GET', '/api/sources', 'listSources'),
+  route('POST', '/api/sources', 'saveSource'),
+  route('POST', `/api/sources/${ID}/summary`, 'summariseSource'),
 ]);
 
 export const API_MESSAGES = Object.freeze({
@@ -121,6 +126,17 @@ const HANDLERS = {
   },
   async voteOnTurn({ store, params: [id], body }) {
     return { status: 200, body: await voteOnTurn(store, id, object(body)) };
+  },
+  async listSources({ store, query }) {
+    return { status: 200, body: { sources: await listSources(store, { taskId: query.get('taskId') || null }) } };
+  },
+  async saveSource({ store, body, ctx }) {
+    const { source, duplicate } = await saveSource(store, object(body), ctx);
+    return { status: duplicate ? 200 : 201, body: { source, duplicate } };
+  },
+  async summariseSource({ store, params: [id], ctx }) {
+    const result = await summariseSource(store, id, ctx);
+    return { status: result.outcome === 'saved' ? 201 : 200, body: result };
   },
 };
 
