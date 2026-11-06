@@ -137,7 +137,9 @@ export function sourceList(doc, turn, {
  * page can wake it again. Returns { setTutor(state), start(), stop(), refreshTasks() }, or null if the
  * page doesn't have the sections.
  */
-export function createConversation({ api, home, getTasks = () => [], onSignedOut, onUnreachable, doc = document, now = () => new Date() }) {
+export function createConversation({
+  api, home, getTasks = () => [], onSignedOut, onUnreachable, doc = document, now = () => new Date(), attach = null, onTaskChanged,
+}) {
   const byId = (id) => doc.getElementById(id);
   const els = {
     helpTasks: byId("help-tasks"),
@@ -175,7 +177,8 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
   const votes = new Map(); // turn id → up | down | removed (kept in memory only)
   const cards = new Map(); // cardKey → { sourceId, summaryId, saving, summarising, summary, asked, note } (memory only)
   // WP-114e: the task panel; null if the page doesn't have it, and the conversation works without it
-  const panel = createTaskPanel({ api, doc, now, onSignedOut: (reason) => signedOut(reason), onUnreachable });
+  // WP-114f: attach sends copies of a source to the Worker inbox; onTaskChanged follows a stage change
+  const panel = createTaskPanel({ api, doc, now, onSignedOut: (reason) => signedOut(reason), onUnreachable, attach, onTaskChanged });
   const taskItem = (taskId, title) => (getTasks?.() ?? []).find((i) => i?.taskId === taskId) ?? { taskId, title };
 
   function signedOut(reason) {

@@ -272,6 +272,23 @@
               <h3 id="task-panel-title"></h3>
               <p id="task-panel-meta" class="hint"></p>
               <p id="task-panel-due" class="task-panel-due"></p>
+              <details id="task-panel-stage" class="more">
+                <summary>Change the stage</summary>
+                <label for="task-panel-stage-select">Stage</label>
+                <select id="task-panel-stage-select">
+                  <option value="not-started">Not started</option>
+                  <option value="researching">Researching</option>
+                  <option value="planning">Planning</option>
+                  <option value="drafting">Drafting</option>
+                  <option value="reviewing">Reviewing</option>
+                  <option value="submitted">Handed in</option>
+                  <option value="done">Done</option>
+                </select>
+                <div class="actions">
+                  <button type="button" id="task-panel-stage-save" class="primary">Save the stage</button>
+                </div>
+                <p id="task-panel-stage-status" class="status" role="status" aria-live="polite"></p>
+              </details>
               <details id="task-panel-question" class="more">
                 <summary>Show the question</summary>
                 <p id="task-panel-question-text" class="read-text"></p>
@@ -289,6 +306,9 @@
                     <input type="text" id="own-source-author" maxlength="120" autocomplete="off">
                     <label for="own-source-url">Link, if it has one</label>
                     <input type="url" id="own-source-url" maxlength="500" autocomplete="off" inputmode="url">
+                    <label for="own-source-files">A copy of it, if you have one</label>
+                    <p class="hint" id="own-source-files-hint">Up to 5: a PDF, a Word file or photos of the pages. The tutor reads the copy when the page won't open.</p>
+                    <input type="file" id="own-source-files" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple aria-describedby="own-source-files-hint">
                     <div class="actions">
                       <button type="submit" id="own-source-add" class="primary">Add this source</button>
                     </div>

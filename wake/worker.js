@@ -1,7 +1,7 @@
 // Cloudflare Worker for edu-support-app (blueprint §5 and §6): GitHub sign-in, passes, and the
 // Codespace's status and wake, the snapshot and items from the storage repository (WP-013), and the
 // capture inbox (WP-014). This whole file is pasted into the Cloudflare dashboard, so it imports
-// nothing. A later package adds the weekly wake (WP-016). Never log a pass, a token, an account name,
+// nothing. There is no weekly wake (A-004). Never log a pass, a token, an account name,
 // the storage repository's name or anything from a capture.
 
 // ===== PASS BLOCK START (Web Crypto only; copied verbatim into wake/worker.js) =====
@@ -236,7 +236,8 @@ const INBOX_TYPES = Object.freeze({
 });
 const INBOX_SOURCES = Object.freeze(['camera', 'gallery', 'file']);
 // A-001: the route decides. Anything unclear counts as the learner's own writing, so nothing is changed.
-const INBOX_KINDS = Object.freeze(['brief', 'own']);
+// A-010 (WP-114f): 'source' is a copy of a source he attached: read exactly, and the words are the source's.
+const INBOX_KINDS = Object.freeze(['brief', 'own', 'source']);
 const INBOX_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
 // The two inbox files for a capture, or null if the ID or type isn't allowed. The phone's own file
@@ -971,7 +972,7 @@ async function handleRepoFile(request, { fetchImpl = globalThis.fetch } = {}) {
       },
     });
   } catch (err) {
-    console.error(`[repo-file] failed: ${err?.message ?? String(err)}`);
+    console.error(`[repo-file] failed: ${err?.name ?? 'error'}`);
     return repoFileJson(500, { error: 'Something went wrong reading that file.' });
   }
 }

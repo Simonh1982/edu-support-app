@@ -167,13 +167,13 @@ async function addTopics({ ask, proposal, curriculum }) {
 }
 
 async function saveDone(ctx, { method, text, truncated, uncertain, corrections, proposal, readBy, reread, extra = {} }) {
-  const { store, record, now, kind } = ctx;
+  const { store, record, now, kind, textAuthor } = ctx;
   const changes = {
     ...extra,
     status: 'done',
     failureReason: null,
     // briefs are someone else's words; own work is the learner's, kept exactly
-    extractedText: { value: text, author: kind === 'brief' ? 'source' : 'learner' },
+    extractedText: { value: text, author: textAuthor ?? (kind === 'brief' ? 'source' : 'learner') },
     truncated,
     uncertain,
     spellingCorrections: kind === 'brief' ? corrections : [],
@@ -338,6 +338,8 @@ export async function readUpload({
   const ctx = {
     store, handle, record, curriculum, limitsFor, extract, now,
     kind: record.contentKind === 'brief' ? 'brief' : 'own',
+    // A-010 (WP-114f): a copy of a source is read exactly, like his own writing, but the words are the source's
+    textAuthor: ['brief', 'source'].includes(record.contentKind) ? 'source' : 'learner',
     ask: makeAsk({ store, handle, aiCeiling, timeoutMs }),
   };
   return isDocumentUpload(record) || isTextUpload(record) ? readDocument(ctx) : readImage(ctx);

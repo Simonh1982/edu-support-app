@@ -105,6 +105,8 @@ export function createApi({
     getTask: (id) => call(`api/tasks/${encodeURIComponent(id)}`),
     listSources: (taskId) => call(`api/sources?taskId=${encodeURIComponent(taskId)}`),
     addOwnSource: (body) => call("api/sources/own", { method: "POST", body }),
+    // WP-114f: link copies to a saved source by capture ID (the page sends the files to the Worker inbox)
+    attachToSource: (id, attachments) => call(`api/sources/${encodeURIComponent(id)}/attachments`, { method: "POST", body: { attachments } }),
   };
 }
 
