@@ -4,6 +4,8 @@
 // text: the words live in the AI turn and Attempt records, which have their own retention rules.
 // Events hold ids, types and counts only. Assignment-related replies pass the live check, and the
 // per-task tally switches a task to questions only (WP-113, build spec §23.5–§23.6).
+import { readdir } from 'node:fs/promises';
+import path from 'node:path';
 import { newRecord, updateRecord, ukIso, ukMonth } from '../storage/records.js';
 import { ITEM_ID_PATTERN } from '../storage/items.js';
 import { ROUTES, buildRequest, loadProfileSettings } from '../ai/prompt.js';
@@ -19,11 +21,13 @@ import {
   needsCheck, liveCheck, askChecker, STRICT_INSTRUCTION, QUESTIONS_ONLY_INSTRUCTION, CHECK_FEATURE,
 } from '../ai/check.js';
 import { taskTally, overTally, DEFAULT_TALLY } from '../derived/tally.js';
-import { WEB_ROUTES, WEB_INSTRUCTION, filterSources, sourceLines } from '../ai/sources.js';
+import {
+  WEB_ROUTES, webInstruction, filterSources, sourceLines, loadSourceSettings, preferredSites, cardsForScreen,
+} from '../ai/sources.js';
 import {
   DomainError, bad, notFound, plainObject, onlyKeys, oneOf, recordId, topicId, flag, textField, idDate,
 } from './fields.js';
-import { readTask, withTaskLock } from './tasks.js';
+import { readTask, withTaskLock, FINISHED_STAGES } from './tasks.js';
 import {
   recordAttempt, readAttempt, logSupport, logSupportOutcome, saveAiTurn, aiTurnPath, listTaskTurns, SUPPORT_TYPES,
   WORK_LIMITS,
@@ -167,7 +171,57 @@ export async function openConversation(store, id, { disengageAfter } = {}) {
       createdAt: turn?.createdAt ?? null,
     });
   }
+  if (turns.some((t) => t.sources.length)) {
+    const options = await accessOptions(store);
+    for (const t of turns) t.sources = cardsForScreen(t.sources, options);
+  }
   return { ...conversationView(conv, { disengageAfter }), turns };
+}
+
+// ---------- source cards (A-009) ----------
+const MAX_FILTER_TASKS = 100;
+
+function filterTarget(task) {
+  return {
+    question: task?.questionText?.value ?? '',
+    anchors: (Array.isArray(task?.anchors) ? task.anchors : [])
+      .map((a) => a?.text?.value).filter((v) => typeof v === 'string' && v.trim()),
+  };
+}
+
+/**
+ * The question and anchors of every open task, for the source filter (A-009 point 3: an answer page
+ * goes when it closely matches any open task). Code only: other tasks never reach a model (§32.3).
+ */
+async function openTaskTargets(store, current) {
+  const out = current ? [filterTarget(current)] : [];
+  let names = [];
+  try {
+    names = (await readdir(path.join(store.dir, 'tasks'), { withFileTypes: true }))
+      .filter((d) => d.isDirectory()).map((d) => d.name);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  for (const id of names.sort().slice(0, MAX_FILTER_TASKS)) {
+    if (id === current?.id || !ITEM_ID_PATTERN.test(id)) continue;
+    const task = await readTask(store, id);
+    if (!task || task.deletedAt || [...FINISHED_STAGES].includes(task.stage)) continue;
+    out.push(filterTarget(task));
+  }
+  return out;
+}
+
+// The labels and school list as they are now, so the access notes on cards always match them.
+async function accessOptions(store) {
+  const [profile, sites] = await Promise.all([
+    loadProfileSettings({ storageDir: store.dir }), loadSourceSettings({ storageDir: store.dir }),
+  ]);
+  return { labels: profile.labels, school: sites.school };
+}
+
+async function shownTurn(store, view) {
+  if (!view.sources.length) return view;
+  return { ...view, sources: cardsForScreen(view.sources, await accessOptions(store)) };
 }
 
 export function taskForPrompt(task) {
@@ -205,6 +259,13 @@ async function tutorCall(store, conv, { ctx, task, message, attempt, instruction
     .slice(0, CONVERSATION_LIMITS.topics);
   const extracts = curriculum ? topics.map((t) => topicExtract(curriculum, t)).filter(Boolean) : [];
   const settings = await loadProfileSettings({ storageDir: store.dir });
+  // A-009: the preferred sites for this task's qualification (private settings), for "Start here"
+  let webText = '';
+  if (useWeb) {
+    const sites = await loadSourceSettings({ storageDir: store.dir });
+    const qualId = task?.qualificationId ?? curriculum?.topics?.get?.(conv.topicId)?.qualId ?? null;
+    webText = webInstruction({ preferred: preferredSites(sites, qualId) });
+  }
   const { system, prompt } = await buildRequest({
     route: conv.route,
     settings,
@@ -213,7 +274,7 @@ async function tutorCall(store, conv, { ctx, task, message, attempt, instruction
     conversation: await recentTurns(store, conv),
     attempt,
     message,
-    instruction: [instruction, useWeb ? WEB_INSTRUCTION : ''].filter(Boolean).join('\n'),
+    instruction: [instruction, webText].filter(Boolean).join('\n'),
   });
   const customTools = createReadTools({
     getCurriculum: () => curriculum,
@@ -253,7 +314,8 @@ async function answerFor(store, conv, { ctx, action, type = null, message, attem
   });
   const log = ctx.log ?? console;
   const raw = await ask('', needLevel, true);
-  const filtered = filterSources(raw.sources, { question: task?.questionText?.value ?? '' });
+  const targets = raw.sources?.length ? await openTaskTargets(store, task) : [];
+  const filtered = filterSources(raw.sources, { tasks: targets });
   if (filtered.dropped) log.log(`[sources] ${filtered.dropped} dropped by the source filter`);
   const first = { ...raw, sources: isDisclosure(raw.wellbeingLevel) ? [] : filtered.kept };
   if (!needsCheck({ route: conv.route, taskId: conv.taskId, type }) || isDisclosure(first.wellbeingLevel)) {
@@ -373,7 +435,7 @@ export async function sendMessage(store, id, body, ctx = {}) {
     await noteDisclosure(store, answer.wellbeingLevel, { wellbeing: ctx.wellbeing ?? null, log: ctx.log ?? console });
     return {
       conversation: conversationView(saved, { disengageAfter: after }),
-      turn: turnView(turn, { action, reply: answer.reply, wellbeingLevel: answer.wellbeingLevel }),
+      turn: await shownTurn(store, turnView(turn, { action, reply: answer.reply, wellbeingLevel: answer.wellbeingLevel })),
       attemptId,
     };
   });
@@ -417,7 +479,7 @@ export async function requestSupport(store, id, body, ctx = {}) {
     }, now);
     return {
       conversation: conversationView(saved, { disengageAfter: after }),
-      turn: turnView(turn, { action: 'support', type, reply: answer.reply, wellbeingLevel: null }),
+      turn: await shownTurn(store, turnView(turn, { action: 'support', type, reply: answer.reply, wellbeingLevel: null })),
     };
   });
 }

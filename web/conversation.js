@@ -13,7 +13,9 @@ import {
   TALK_MESSAGES,
   TASK_BUTTONS,
   VOTE_LABELS,
+  FINAL_SUMMARY_OUTCOMES,
   canEscape,
+  canSummarise,
   cardKey,
   checkMessage,
   isWorkRoute,
@@ -95,12 +97,13 @@ export function sourceList(doc, turn, { stateOf = () => ({}), onSave = () => {},
     const state = stateOf(card.index) ?? {};
     const key = `${turn.id}-${card.index}`;
     const item = make(doc, "li", { className: "source-card", attrs: { id: `source-${key}`, tabindex: "-1" } });
-    item.append(make(doc, "p", { className: "source-kind", text: sourceLabel(card.category) }));
+    item.append(make(doc, "p", { className: "source-kind", text: sourceLabel(card.category, card.minutes) }));
     const title = make(doc, "p", { className: "source-title" });
     title.append(sourceLink(doc, card.title, card.url));
     item.append(title);
     item.append(make(doc, "p", { className: "source-site", text: card.publisher ? `${card.publisher} · ${card.site}` : card.site }));
     if (card.why) item.append(make(doc, "p", { className: "source-why", text: `${SOURCE_MESSAGES.why} ${card.why}` }));
+    if (card.accessNote) item.append(make(doc, "p", { className: "source-access", text: card.accessNote }));
     const working = Boolean(state.saving || state.summarising);
     const buttons = [];
     if (!state.sourceId) {
@@ -110,7 +113,7 @@ export function sourceList(doc, turn, { stateOf = () => ({}), onSave = () => {},
       save.addEventListener("click", () => onSave(card));
       buttons.push(save);
     }
-    if (!state.summary && !state.asked) {
+    if (!state.summary && !state.asked && canSummarise(card)) {
       const summarise = button(doc, state.summarising ? SOURCE_MESSAGES.summarising : SOURCE_MESSAGES.summarise);
       summarise.dataset.action = "summarise";
       summarise.disabled = !ready || working;
@@ -582,8 +585,8 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     if (summary.kind === "summary") {
       setCard(turnId, card.index, { summarising: false, summary, summaryId: summary.id, note: "" });
     } else {
-      // nothing saved: "read the original" and "too close" are final; "couldn't open it" can be tried again
-      setCard(turnId, card.index, { summarising: false, asked: summary.outcome === "read-original" || summary.outcome === "too-close", note: summary.text });
+      // nothing saved: "read the original", "too close" and "needs a subscription" are final; "couldn't open it" can be tried again
+      setCard(turnId, card.index, { summarising: false, asked: FINAL_SUMMARY_OUTCOMES.includes(summary.outcome), note: summary.text });
     }
     render();
     focusCard(turnId, card.index, { summary: summary.kind === "summary" });
