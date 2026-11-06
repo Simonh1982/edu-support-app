@@ -9,7 +9,7 @@ import {
   startConversation, openConversation, conversationView, sendMessage, requestSupport, voteOnTurn, suggestRoute,
   STATE_MESSAGES,
 } from './domain/conversations.js';
-import { listSources, saveSource, summariseSource } from './domain/sources.js';
+import { listSources, saveSource, summariseSource, addOwnSource } from './domain/sources.js';
 
 const ID = '([A-Za-z0-9][A-Za-z0-9_-]{0,99})';
 const LEARNER = Object.freeze(['learner']);
@@ -39,6 +39,8 @@ export const API_ROUTES = Object.freeze([
   route('GET', '/api/sources', 'listSources'),
   route('POST', '/api/sources', 'saveSource'),
   route('POST', `/api/sources/${ID}/summary`, 'summariseSource'),
+  // WP-114e (A-010): a source he found himself; the summary route also takes pasted text
+  route('POST', '/api/sources/own', 'addOwnSource'),
 ]);
 
 export const API_MESSAGES = Object.freeze({
@@ -134,8 +136,12 @@ const HANDLERS = {
     const { source, duplicate } = await saveSource(store, object(body), ctx);
     return { status: duplicate ? 200 : 201, body: { source, duplicate } };
   },
-  async summariseSource({ store, params: [id], ctx }) {
-    const result = await summariseSource(store, id, ctx);
+  async addOwnSource({ store, body, ctx }) {
+    const { source, duplicate } = await addOwnSource(store, object(body), ctx);
+    return { status: duplicate ? 200 : 201, body: { source, duplicate } };
+  },
+  async summariseSource({ store, params: [id], body, ctx }) {
+    const result = await summariseSource(store, id, ctx, body ?? {});
     return { status: result.outcome === 'saved' ? 201 : 200, body: result };
   },
 };

@@ -11,26 +11,35 @@ import { ITEM_ID_PATTERN } from '../storage/items.js';
 import { buildRequest, loadProfileSettings } from '../ai/prompt.js';
 import {
   SUMMARY_CONTRACT, summaryInstruction, askSummary, summaryText, SOURCE_LIMITS,
+  pastedSummaryInstruction, PASTED_SOURCE_MAX_CHARS, cleanUrl,
 } from '../ai/sources.js';
 import { liveCheck, askChecker, STRICT_INSTRUCTION, CHECK_FEATURE } from '../ai/check.js';
 import { CONVERSATION_MESSAGES } from '../ai/conversation.js';
-import { DomainError, bad, plainObject, onlyKeys, recordId, wholeNumber } from './fields.js';
+import { DomainError, bad, notFound, plainObject, onlyKeys, recordId, wholeNumber, shortString } from './fields.js';
 import { readTask, withTaskLock } from './tasks.js';
 import { aiTurnPath, saveAiTurn } from './work.js';
 import { taskForPrompt } from './conversations.js';
 
 export const SUMMARY_FEATURE = 'source-summary';
 export const MAX_SOURCE_FILES = 1000;
+// A-010: sources he found himself (a book, a PDF, a page the tutor couldn't open).
+export const OWN_SOURCE_LIMITS = Object.freeze({ title: 200, author: 120 });
 
 export const SOURCE_MESSAGES = Object.freeze({
   notFound: 'Source not found.',
   cardNotFound: "That source isn't available to save any more.",
   readOriginal: "This one's short and readable, so it's worth reading the original. Open the link and take a look.",
-  unavailable: "I couldn't open that page just now. Some sites don't let the tutor read them, so open the link and read it yourself, or try again later.",
-  subscription: "This one needs a subscription, so I can't read it. Ask {parents} if they can get you a copy.",
+  unavailable: "I couldn't open that page just now. Some sites don't let the tutor read them. Open the link and read it yourself, or copy the part you need and paste it below.",
+  subscription: "This one needs a subscription, so I can't read it. Ask {parents} if they can get you a copy, then paste the part you need below.",
   video: "Videos can't be summarised. Watch it, and jot down the key points as you go.",
   tooClose: "I couldn't summarise this one without getting too close to your task. Have a look at the original: "
     + "it's yours to read and judge.",
+  // A-010: paste to summarise, and sources he adds himself
+  noLink: "This source has no link, so paste the part you'd like summarised.",
+  pasteEmpty: 'Paste some text from the source first.',
+  pasteTooLong: `That's more than ${PASTED_SOURCE_MAX_CHARS.toLocaleString('en-GB')} characters. Paste the part you need most.`,
+  pasteUnclear: "I couldn't make sense of that text. Check you copied the right part, then paste it again.",
+  badLink: 'The link must be a web address, such as https://example.org/page.',
 });
 
 const validId = (id) => typeof id === 'string' && ITEM_ID_PATTERN.test(id);
@@ -106,6 +115,66 @@ export async function saveSource(store, body, ctx = {}) {
   });
 }
 
+/**
+ * A source he found himself (A-010): a title, and an author and a link if he has them. Body:
+ * { title, author?, url?, taskId? }. The same link on the same task returns the saved record.
+ */
+export async function addOwnSource(store, body, ctx = {}) {
+  plainObject(body, 'source');
+  onlyKeys(body, ['title', 'author', 'url', 'taskId'], 'source');
+  const title = shortString(body.title, 'title', { max: OWN_SOURCE_LIMITS.title, required: true });
+  const author = shortString(body.author, 'author', { max: OWN_SOURCE_LIMITS.author });
+  const given = typeof body.url === 'string' ? body.url.trim() : body.url;
+  let url = null;
+  if (given !== undefined && given !== null && given !== '') {
+    url = cleanUrl(given);
+    if (!url) throw bad(SOURCE_MESSAGES.badLink);
+  }
+  const taskId = recordId(body.taskId, 'taskId');
+  const task = taskId ? await readTask(store, taskId) : null;
+  if (taskId && !task) throw notFound('Task');
+  return withTaskLock('sources', async () => {
+    if (url) {
+      const existing = (await listSources(store)).find((s) => s.url === url && (s.taskId ?? null) === taskId);
+      if (existing) return { source: existing, duplicate: true };
+    }
+    const source = newRecord('src', {
+      url,
+      title,
+      publisher: author,
+      publishedDate: null,
+      category: 'other',
+      why: null,
+      selected: true,
+      evaluation: null,
+      taskId,
+      topicIds: Array.isArray(task?.topicIds) ? task.topicIds : [],
+      fromTurnId: null,
+      summaryId: null,
+      origin: 'learner',
+    }, { createdBy: 'learner', now: ctx.now ?? new Date() });
+    await store.put(sourcePath(source.id), source);
+    await store.logEvent('source.added', {
+      createdBy: 'learner',
+      links: links({ sourceId: source.id, taskId }),
+      payload: { origin: 'learner', link: Boolean(url) },
+    });
+    return { source, duplicate: false };
+  });
+}
+
+/** Pasted text for a summary (A-010): trimmed, and within the limit. Never stored or logged. */
+function pastedText(body) {
+  const b = body ?? {};
+  plainObject(b, 'summary');
+  onlyKeys(b, ['text'], 'summary');
+  if (b.text === undefined) return null;
+  const text = typeof b.text === 'string' ? b.text.trim() : '';
+  if (!text) throw bad(SOURCE_MESSAGES.pasteEmpty);
+  if (text.length > PASTED_SOURCE_MAX_CHARS) throw bad(SOURCE_MESSAGES.pasteTooLong);
+  return text;
+}
+
 function requireAi(getAi) {
   const handle = getAi?.() ?? null;
   if (!handle?.ai || !handle.models?.conversation) throw new DomainError(503, CONVERSATION_MESSAGES.notReady);
@@ -120,13 +189,18 @@ function requireAi(getAi) {
  *  - 'subscription': the page is behind a paywall or login (A-009); nothing saved
  * Videos are never summarised (A-009): there is no page text to read (409).
  *  - 'too-close': on a task, the summary failed the live check twice; nothing saved
+ *  - 'unclear' (A-010): pasted text the model couldn't read as a source; nothing saved
  * One AI turn per model call (no text: the summary lives in the notebook entry). Not rated for
  * wellbeing and not counted in the per-task tally: it teaches the source, it isn't a tutor reply.
+ * body: {} to fetch the page, or { text } with text he pasted from the source (A-010). Pasted text
+ * goes to the model once and is never stored or logged; only the summary is kept.
  */
-export async function summariseSource(store, id, ctx = {}) {
+export async function summariseSource(store, id, ctx = {}, body = {}) {
   const source = await readSource(store, id);
   if (!source || source.deletedAt) throw new DomainError(404, SOURCE_MESSAGES.notFound);
   if (source.category === 'video') throw new DomainError(409, SOURCE_MESSAGES.video);
+  const pasted = pastedText(body);
+  if (!pasted && !source.url) throw new DomainError(409, SOURCE_MESSAGES.noLink);
   const handle = requireAi(ctx.getAi);
   const log = ctx.log ?? console;
   const now = ctx.now ?? new Date();
@@ -138,12 +212,13 @@ export async function summariseSource(store, id, ctx = {}) {
       route: 'research',
       settings,
       task: taskForPrompt(task),
-      instruction: [summaryInstruction(source), extra].filter(Boolean).join('\n'),
+      sourceText: pasted ?? undefined,
+      instruction: [pasted ? pastedSummaryInstruction(source) : summaryInstruction(source), extra].filter(Boolean).join('\n'),
       contract: SUMMARY_CONTRACT,
     });
     return askSummary({
       ai: handle.ai, model: handle.models.conversation, system, prompt, ceiling: ctx.aiCeiling, log,
-      failedMessage: CONVERSATION_MESSAGES.failed,
+      failedMessage: CONVERSATION_MESSAGES.failed, pasted: Boolean(pasted),
     });
   };
   const turnFor = (call, checkResult = null) => saveAiTurn(store, {
@@ -190,12 +265,13 @@ export async function summariseSource(store, id, ctx = {}) {
     }, { now });
   }
 
-  const kind = chosen.result.kind;
+  // pasted text can't be "unavailable" or behind a paywall: the model couldn't read it as a source
+  const kind = pasted && ['unavailable', 'subscription'].includes(chosen.result.kind) ? 'unclear' : chosen.result.kind;
   const outcome = checkResult === 'fallback' ? 'too-close' : (kind === 'summary' ? 'saved' : kind);
   const event = (extra = {}) => store.logEvent('source.summary', {
     createdBy: 'learner',
     links: links({ sourceId: source.id, taskId: source.taskId ?? null, ...extra }),
-    payload: links({ outcome, checkResult }),
+    payload: links({ outcome, checkResult, method: pasted ? 'paste' : null }),
   });
   if (outcome !== 'saved') {
     await event();
@@ -204,6 +280,7 @@ export async function summariseSource(store, id, ctx = {}) {
       unavailable: SOURCE_MESSAGES.unavailable,
       subscription: SOURCE_MESSAGES.subscription.replaceAll('{parents}', settings.labels.parents),
       'too-close': SOURCE_MESSAGES.tooClose,
+      unclear: SOURCE_MESSAGES.pasteUnclear,
     }[outcome];
     return { outcome, message, entry: null, checkResult };
   }

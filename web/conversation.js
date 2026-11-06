@@ -4,7 +4,11 @@
 // sends once the tutor's ready. Nothing here is kept in browser storage, and all text from him or the
 // tutor is shown with textContent, never as HTML.
 // WP-114b: source cards under research replies, with Save and Summarise; summaries show as AI cards.
+// WP-114e: the task panel at the top (web/task-panel.js), and "Paste the text instead" when the tutor
+// can't open a page (A-010).
 import { apiErrorMessage } from "./shared/api.js";
+import { pasteBox, sourceLink, summaryCard } from "./source-parts.js";
+import { createTaskPanel } from "./task-panel.js";
 import { dueText, ukToday } from "./shared/upcoming.js";
 import {
   HELPLINES,
@@ -14,10 +18,12 @@ import {
   TASK_BUTTONS,
   VOTE_LABELS,
   FINAL_SUMMARY_OUTCOMES,
+  PASTE_OUTCOMES,
   canEscape,
   canSummarise,
   cardKey,
   checkMessage,
+  checkPasted,
   isWorkRoute,
   learnerLine,
   nextVote,
@@ -57,36 +63,18 @@ function button(doc, text, { className = "secondary", label } = {}) {
   return el;
 }
 
-// A link to a source, opened in a new tab so the conversation stays put.
-function sourceLink(doc, text, url) {
-  const link = make(doc, "a", { text, attrs: { href: url, target: "_blank", rel: "noopener noreferrer" } });
-  link.append(make(doc, "span", { className: "visually-hidden", text: ` ${SOURCE_MESSAGES.newTab}` }));
-  return link;
-}
-
-// An AI summary (build spec §28): a tinted card whose label "AI summary" is text, not colour alone.
-function summaryCard(doc, summary, key) {
-  const box = make(doc, "div", {
-    className: "ai-summary", attrs: { id: `summary-${key}`, tabindex: "-1", role: "group", "aria-labelledby": `summary-label-${key}` },
-  });
-  box.append(make(doc, "p", { className: "ai-summary-label", text: SOURCE_MESSAGES.summaryLabel, attrs: { id: `summary-label-${key}` } }));
-  box.append(make(doc, "p", { className: "hint", text: SOURCE_MESSAGES.summaryNote }));
-  box.append(make(doc, "p", { className: "ai-summary-text", text: summary.text }));
-  if (summary.section) box.append(make(doc, "p", { text: `${SOURCE_MESSAGES.section} ${summary.section}` }));
-  if (summary.url) {
-    const p = make(doc, "p");
-    p.append(sourceLink(doc, SOURCE_MESSAGES.readOriginal, summary.url));
-    box.append(p);
-  }
-  return box;
-}
+// sourceLink and summaryCard live in source-parts.js (WP-114e), shared with the task panel.
 
 /**
  * The source cards under a tutor reply (build spec §9.1, §26): the kind of source, a link to the
  * original, the site, a line on what it covers, then Save and Summarise. Exported for tests.
- * stateOf(index) → { sourceId?, saving?, summarising?, summary?, asked?, note? }.
+ * stateOf(index) → { sourceId?, saving?, summarising?, summary?, asked?, note?, canPaste?, pasteText?, pasteOpen? }.
+ * WP-114e: once the tutor couldn't open a page, "Paste the text instead" appears (onPaste(card, text));
+ * onPasteChange(card, changes) keeps what he has typed across redraws.
  */
-export function sourceList(doc, turn, { stateOf = () => ({}), onSave = () => {}, onSummarise = () => {}, ready = true } = {}) {
+export function sourceList(doc, turn, {
+  stateOf = () => ({}), onSave = () => {}, onSummarise = () => {}, onPaste = () => {}, onPasteChange = () => {}, ready = true,
+} = {}) {
   const list = Array.isArray(turn?.sources) ? turn.sources : [];
   if (list.length === 0 || !turn.reply) return null;
   const headingId = `sources-${turn.id}`;
@@ -126,6 +114,16 @@ export function sourceList(doc, turn, { stateOf = () => ({}), onSave = () => {},
       item.append(actions);
     }
     if (state.note) item.append(make(doc, "p", { className: "source-note", text: state.note }));
+    if (state.canPaste && !state.summary && canSummarise(card)) {
+      item.append(pasteBox(doc, {
+        key,
+        text: state.pasteText ?? "",
+        open: state.pasteOpen === true,
+        disabled: !ready || working,
+        onChange: (changes) => onPasteChange(card, changes),
+        onSubmit: (text) => onPaste(card, text),
+      }));
+    }
     if (state.summary) item.append(summaryCard(doc, state.summary, key));
     cards.append(item);
   }
@@ -176,6 +174,9 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
   let session = null;
   const votes = new Map(); // turn id → up | down | removed (kept in memory only)
   const cards = new Map(); // cardKey → { sourceId, summaryId, saving, summarising, summary, asked, note } (memory only)
+  // WP-114e: the task panel; null if the page doesn't have it, and the conversation works without it
+  const panel = createTaskPanel({ api, doc, now, onSignedOut: (reason) => signedOut(reason), onUnreachable });
+  const taskItem = (taskId, title) => (getTasks?.() ?? []).find((i) => i?.taskId === taskId) ?? { taskId, title };
 
   function signedOut(reason) {
     stop();
@@ -268,6 +269,8 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
       els.text.value = draft;
     }
     setText(els.error, "");
+    // WP-114e: the panel shows the list entry at once, then the full task once the tutor's ready
+    if (!same) panel?.show(taskId ? taskItem(taskId, title) : null);
     render();
     home.show("talk");
   }
@@ -325,6 +328,8 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
       stateOf: (index) => cards.get(cardKey(turn.id, index)),
       onSave: (card) => saveCard(turn.id, card),
       onSummarise: (card) => summariseCard(turn.id, card),
+      onPaste: (card, text) => pasteCard(turn.id, card, text),
+      onPasteChange: (card, changes) => setCard(turn.id, card.index, changes),
       ready,
     });
     if (sources) tutor.append(sources);
@@ -338,6 +343,8 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     const { route, view } = session;
     setText(els.heading, ROUTE_LABELS[route] ?? ROUTE_LABELS.research);
     setText(els.task, session.title ? TALK_MESSAGES.workingOn(session.title) : TALK_MESSAGES.noTask);
+    // the panel names the task, so this line is only needed without one
+    els.task.hidden = Boolean(panel && session.taskId);
 
     // other routes are offered only until the first send
     const others = routeChoices(route).filter((r) => r !== route);
@@ -534,6 +541,7 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     }
     const source = result.body.source;
     setCard(turnId, card.index, { sourceId: source.id, summaryId: typeof source.summaryId === "string" ? source.summaryId : null });
+    panel?.refresh();
     return cardOf(turnId, card.index);
   }
 
@@ -582,14 +590,50 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
       }
       summary = summaryFromResult(result.body, card);
     }
+    showSummary(turnId, card, summary);
+  }
+
+  function showSummary(turnId, card, summary) {
     if (summary.kind === "summary") {
-      setCard(turnId, card.index, { summarising: false, summary, summaryId: summary.id, note: "" });
+      setCard(turnId, card.index, { summarising: false, summary, summaryId: summary.id, note: "", canPaste: false, pasteText: "" });
+      panel?.refresh();
     } else {
-      // nothing saved: "read the original", "too close" and "needs a subscription" are final; "couldn't open it" can be tried again
-      setCard(turnId, card.index, { summarising: false, asked: FINAL_SUMMARY_OUTCOMES.includes(summary.outcome), note: summary.text });
+      // nothing saved: "read the original", "too close" and "needs a subscription" are final; "couldn't open it" can be tried again.
+      // A-010: when the tutor couldn't read the page, he can paste the part he needs instead.
+      setCard(turnId, card.index, {
+        summarising: false,
+        asked: FINAL_SUMMARY_OUTCOMES.includes(summary.outcome),
+        canPaste: PASTE_OUTCOMES.includes(summary.outcome) || cardOf(turnId, card.index).canPaste === true,
+        note: summary.text,
+      });
     }
     render();
     focusCard(turnId, card.index, { summary: summary.kind === "summary" });
+  }
+
+  // A-010: a summary of text he pasted from the source. The text goes to the tutor once; only the summary is kept.
+  async function pasteCard(turnId, card, text) {
+    if (!ready || !active) return;
+    const state = cardOf(turnId, card.index);
+    if (state.saving || state.summarising || !state.sourceId) return;
+    const checked = checkPasted(text);
+    if (checked.error) {
+      setCard(turnId, card.index, { note: checked.error });
+      render();
+      focusCard(turnId, card.index);
+      return;
+    }
+    setCard(turnId, card.index, { summarising: true, note: "" });
+    render();
+    const result = await api.summariseSource(state.sourceId, { text: checked.text });
+    if (!active) return;
+    if (result.kind !== "ok") {
+      cardFailed(turnId, card.index, result);
+      render();
+      focusCard(turnId, card.index);
+      return;
+    }
+    showSummary(turnId, card, summaryFromResult(result.body, card));
   }
 
   els.back.addEventListener("click", () => home.show("work"));
@@ -613,6 +657,7 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
   function setTutor(state) {
     const wasReady = ready;
     ready = READY_STATES.has(state);
+    panel?.setTutor(state);
     render();
     if (ready && !wasReady && active) return resume();
     return undefined;
@@ -631,6 +676,7 @@ export function createConversation({ api, home, getTasks = () => [], onSignedOut
     session = null;
     votes.clear();
     cards.clear();
+    panel?.clear();
     els.helpTasks.replaceChildren();
     els.helpAll.hidden = true;
     els.helpForm.hidden = true;
