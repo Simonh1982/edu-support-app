@@ -97,9 +97,14 @@ export function createApi({
     vote: (turnId, vote) => call(`api/turns/${encodeURIComponent(turnId)}/vote`, { method: "POST", body: { vote } }),
     // WP-114b: saving a source card, its AI summary, and opening a saved item (server routes from WP-114a)
     saveSource: ({ turnId, index }) => call("api/sources", { method: "POST", body: { turnId, index } }),
-    summariseSource: (id) =>
-      call(`api/sources/${encodeURIComponent(id)}/summary`, { method: "POST", body: {}, timeout: summaryTimeoutMs }),
+    // body: {} to fetch the page, or { text } with text he pasted from it (A-010)
+    summariseSource: (id, body = {}) =>
+      call(`api/sources/${encodeURIComponent(id)}/summary`, { method: "POST", body, timeout: summaryTimeoutMs }),
     openItem: (type, id) => call(`api/item?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`),
+    // WP-114e: the task panel (the full task and its saved sources) and sources he adds himself (A-010)
+    getTask: (id) => call(`api/tasks/${encodeURIComponent(id)}`),
+    listSources: (taskId) => call(`api/sources?taskId=${encodeURIComponent(taskId)}`),
+    addOwnSource: (body) => call("api/sources/own", { method: "POST", body }),
   };
 }
 

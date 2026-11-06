@@ -27,6 +27,8 @@ export const SOURCE_CATEGORIES = Object.freeze([
   "introduction", "video", "official", "educational", "primary", "data", "academic", "specialist", "other",
 ]);
 export const SOURCE_CARDS = 5;
+// Copy of PASTED_SOURCE_MAX_CHARS in server/ai/sources.js (A-010; checked by test/task-panel.test.js).
+export const PASTED_SOURCE_MAX_CHARS = 12_000;
 // A summary opens the page and, on a task, passes the live check, which may write it a second time.
 export const SUMMARY_TIMEOUT_MS = 210_000;
 
@@ -128,6 +130,13 @@ export const SOURCE_MESSAGES = Object.freeze({
   section: "Most useful part:",
   readOriginal: "Read the original",
   failed: "That didn't work just now. Please try again.",
+  // A-010: paste to summarise
+  pasteHeading: "Paste the text instead",
+  pasteLabel: "Copy the part you need from the source, then paste it here",
+  pasteHint: "Only the AI summary is kept, not the text you paste.",
+  pasteSend: "Summarise what I pasted",
+  pasteEmpty: "Paste some text from the source first.",
+  pasteTooLong: `That's more than ${PASTED_SOURCE_MAX_CHARS.toLocaleString("en-GB")} characters. Paste the part you need most.`,
 });
 
 export const isWorkRoute = (route) => WORK_ROUTES.includes(route);
@@ -298,6 +307,16 @@ export function canSummarise(card) {
 
 /** Summary outcomes that won't change if asked again, so Summarise goes. "Couldn't open" can be retried. */
 export const FINAL_SUMMARY_OUTCOMES = Object.freeze(["read-original", "too-close", "subscription"]);
+/** After these, "Paste the text instead" is offered (A-010): the tutor couldn't read the page itself. */
+export const PASTE_OUTCOMES = Object.freeze(["unavailable", "subscription", "unclear"]);
+
+/** Checks text he pasted from a source before it is sent. Never stored. */
+export function checkPasted(text) {
+  const value = typeof text === "string" ? text.trim() : "";
+  if (!value) return { error: SOURCE_MESSAGES.pasteEmpty };
+  if (value.length > PASTED_SOURCE_MAX_CHARS) return { error: SOURCE_MESSAGES.pasteTooLong };
+  return { text: value };
+}
 
 /** A saved AI summary (a notebook entry, WP-114a) as a card, or a message if it has no text. */
 export function summaryFromEntry(entry, card = null) {

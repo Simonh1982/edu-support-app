@@ -951,6 +951,55 @@ button.vote[aria-pressed="true"]::after {
   white-space: pre-wrap;
 }
 
+/* ---------- the task panel and "Paste the text instead" (WP-114e; A-010) ---------- */
+.task-panel {
+  margin: 0.75rem 0 1rem;
+  padding: 0.25rem 1rem;
+  border: var(--border-width) solid var(--muted);
+  border-left: 4px solid var(--accent);
+  border-radius: 0.5rem;
+}
+
+.task-panel h3 {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.task-panel p {
+  margin: 0 0 0.5rem;
+}
+
+.task-panel-due {
+  font-weight: 600;
+}
+
+.task-panel label,
+.paste-source label {
+  display: block;
+  font-weight: 600;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.task-panel input,
+.paste-source textarea {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  line-height: var(--line-height);
+  color: var(--fg);
+  background: var(--bg);
+  border: 2px solid var(--muted);
+  border-radius: 0.5rem;
+}
+
+.paste-source textarea {
+  min-height: calc(var(--tap) * 3);
+  resize: vertical;
+}
+
 /* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
 @media (prefers-reduced-motion: reduce) {
   *,

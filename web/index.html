@@ -267,6 +267,37 @@
             <h2 id="talk-heading" tabindex="-1">Understand and research it</h2>
             <p id="talk-task" class="hint"></p>
 
+            <!-- WP-114e: the task, with its question, sources and (WP-115) notes, each collapsed (build spec §10, §26; A-010) -->
+            <section id="task-panel" class="task-panel" aria-labelledby="task-panel-title" hidden>
+              <h3 id="task-panel-title"></h3>
+              <p id="task-panel-meta" class="hint"></p>
+              <p id="task-panel-due" class="task-panel-due"></p>
+              <details id="task-panel-question" class="more">
+                <summary>Show the question</summary>
+                <p id="task-panel-question-text" class="read-text"></p>
+              </details>
+              <details id="task-panel-sources" class="more">
+                <summary id="task-panel-sources-label">Your sources for this task</summary>
+                <p id="task-panel-sources-status" class="hint"></p>
+                <ul id="task-panel-sources-list" class="source-cards"></ul>
+                <details id="own-source" class="more">
+                  <summary>Add a source you found yourself</summary>
+                  <form id="own-source-form" novalidate>
+                    <label for="own-source-title">Title</label>
+                    <input type="text" id="own-source-title" maxlength="200" autocomplete="off">
+                    <label for="own-source-author">Author or publisher, if you know it</label>
+                    <input type="text" id="own-source-author" maxlength="120" autocomplete="off">
+                    <label for="own-source-url">Link, if it has one</label>
+                    <input type="url" id="own-source-url" maxlength="500" autocomplete="off" inputmode="url">
+                    <div class="actions">
+                      <button type="submit" id="own-source-add" class="primary">Add this source</button>
+                    </div>
+                  </form>
+                  <p id="own-source-status" class="status" role="status" aria-live="polite"></p>
+                </details>
+              </details>
+            </section>
+
             <div id="talk-routes" class="route-switch" hidden>
               <p class="hint">Not quite right? Start somewhere else:</p>
               <div id="talk-route-buttons" class="actions"></div>
