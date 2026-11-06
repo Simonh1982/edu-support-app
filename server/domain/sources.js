@@ -26,7 +26,9 @@ export const SOURCE_MESSAGES = Object.freeze({
   notFound: 'Source not found.',
   cardNotFound: "That source isn't available to save any more.",
   readOriginal: "This one's short and readable, so it's worth reading the original. Open the link and take a look.",
-  unavailable: "I couldn't open that page just now. Try the link yourself, or ask again later.",
+  unavailable: "I couldn't open that page just now. Some sites don't let the tutor read them, so open the link and read it yourself, or try again later.",
+  subscription: "This one needs a subscription, so I can't read it. Ask {parents} if they can get you a copy.",
+  video: "Videos can't be summarised. Watch it, and jot down the key points as you go.",
   tooClose: "I couldn't summarise this one without getting too close to your task. Have a look at the original: "
     + "it's yours to read and judge.",
 });
@@ -115,6 +117,8 @@ function requireAi(getAi) {
  *  - 'saved': a notebook entry (type 'summary', text by 'ai', source attached) → 201
  *  - 'read-original': short and readable, so he reads it himself; nothing saved
  *  - 'unavailable': the page couldn't be opened; nothing saved
+ *  - 'subscription': the page is behind a paywall or login (A-009); nothing saved
+ * Videos are never summarised (A-009): there is no page text to read (409).
  *  - 'too-close': on a task, the summary failed the live check twice; nothing saved
  * One AI turn per model call (no text: the summary lives in the notebook entry). Not rated for
  * wellbeing and not counted in the per-task tally: it teaches the source, it isn't a tutor reply.
@@ -122,6 +126,7 @@ function requireAi(getAi) {
 export async function summariseSource(store, id, ctx = {}) {
   const source = await readSource(store, id);
   if (!source || source.deletedAt) throw new DomainError(404, SOURCE_MESSAGES.notFound);
+  if (source.category === 'video') throw new DomainError(409, SOURCE_MESSAGES.video);
   const handle = requireAi(ctx.getAi);
   const log = ctx.log ?? console;
   const now = ctx.now ?? new Date();
@@ -143,7 +148,7 @@ export async function summariseSource(store, id, ctx = {}) {
   };
   const turnFor = (call, checkResult = null) => saveAiTurn(store, {
     feature: SUMMARY_FEATURE, role: 'conversation', model: call.model, taskId: source.taskId ?? null, topicId,
-    latencyMs: call.ms, success: true, checkResult,
+    latencyMs: call.ms, success: call.success !== false, checkResult,
   }, { now });
 
   const first = await ask();
@@ -173,7 +178,10 @@ export async function summariseSource(store, id, ctx = {}) {
   }
 
   // one AI turn for the summary, as for a checked tutor reply: a failed draft is never kept
-  await turnFor({ model: chosen.model, ms: calls.reduce((n, c) => n + (c.ms ?? 0), 0) }, checkResult);
+  // success false when the page couldn't be opened, so the owner can count those turns (WP-114d)
+  await turnFor({
+    model: chosen.model, ms: calls.reduce((n, c) => n + (c.ms ?? 0), 0), success: chosen.result.kind !== 'unavailable',
+  }, checkResult);
   for (const c of checks) {
     if (!c.model) continue;
     await saveAiTurn(store, {
@@ -191,7 +199,12 @@ export async function summariseSource(store, id, ctx = {}) {
   });
   if (outcome !== 'saved') {
     await event();
-    const message = { 'read-original': SOURCE_MESSAGES.readOriginal, unavailable: SOURCE_MESSAGES.unavailable, 'too-close': SOURCE_MESSAGES.tooClose }[outcome];
+    const message = {
+      'read-original': SOURCE_MESSAGES.readOriginal,
+      unavailable: SOURCE_MESSAGES.unavailable,
+      subscription: SOURCE_MESSAGES.subscription.replaceAll('{parents}', settings.labels.parents),
+      'too-close': SOURCE_MESSAGES.tooClose,
+    }[outcome];
     return { outcome, message, entry: null, checkResult };
   }
 

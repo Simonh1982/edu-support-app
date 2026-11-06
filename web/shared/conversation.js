@@ -30,8 +30,9 @@ export const SOURCE_CARDS = 5;
 // A summary opens the page and, on a task, passes the live check, which may write it a second time.
 export const SUMMARY_TIMEOUT_MS = 210_000;
 
-// Each send can take up to two tutor calls of 60 s, so the browser waits longer than for other calls.
-export const CONVERSATION_TIMEOUT_MS = 150_000;
+// A research reply may run several searches (A-009 tiers: up to 110 s), then a retry and the live
+// check, so the browser waits longer than for other calls.
+export const CONVERSATION_TIMEOUT_MS = 210_000;
 // The quickest few tasks are shown as buttons; the rest sit behind "Show all".
 export const TASK_BUTTONS = 5;
 
@@ -276,14 +277,27 @@ export function cardsFrom(list) {
     const why = typeof raw.why === "string" ? raw.why : typeof raw.why?.value === "string" ? raw.why.value : "";
     const publisher = typeof raw.publisher === "string" && raw.publisher.trim() ? raw.publisher.trim() : null;
     const category = SOURCE_CATEGORIES.includes(raw.category) ? raw.category : "other";
-    out.push({ index, title, url, site: siteOf(url), publisher, category, why: why.trim() });
+    const card = { index, title, url, site: siteOf(url), publisher, category, why: why.trim() };
+    // A-009: a video's length, and the access line the server worked out (school login or subscription)
+    if (category === "video" && Number.isInteger(raw.minutes) && raw.minutes >= 1 && raw.minutes <= 180) card.minutes = raw.minutes;
+    if (typeof raw.accessNote === "string" && raw.accessNote.trim() && raw.accessNote.length <= 200) card.accessNote = raw.accessNote.trim();
+    out.push(card);
   });
   return out;
 }
 
-export function sourceLabel(category) {
-  return SOURCE_LABELS[category] ?? SOURCE_LABELS.other;
+export function sourceLabel(category, minutes = null) {
+  const label = SOURCE_LABELS[category] ?? SOURCE_LABELS.other;
+  return category === "video" && Number.isInteger(minutes) && minutes > 0 ? `${label} (${minutes} min)` : label;
 }
+
+/** Summaries need page text, so videos can't be summarised (A-009). */
+export function canSummarise(card) {
+  return card?.category !== "video";
+}
+
+/** Summary outcomes that won't change if asked again, so Summarise goes. "Couldn't open" can be retried. */
+export const FINAL_SUMMARY_OUTCOMES = Object.freeze(["read-original", "too-close", "subscription"]);
 
 /** A saved AI summary (a notebook entry, WP-114a) as a card, or a message if it has no text. */
 export function summaryFromEntry(entry, card = null) {

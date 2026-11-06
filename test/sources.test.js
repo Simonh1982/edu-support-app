@@ -145,7 +145,7 @@ test('source cards: cleaned, http(s) only, one per address, at most five; "why" 
   assert.deepEqual(parseSources([{ ...CARD, why: { value: CARD.why, author: 'ai' } }])[0].why, { value: CARD.why, author: 'ai' }, 'saved cards re-clean');
 });
 
-test('source filter: essay banks always; model answers and pages titled like his question are dropped', () => {
+test('source filter (A-009): page by page; answer pages go only when they closely match an open task', () => {
   assert.equal(isBlockedHost(hostOf('https://www.ukessays.com/x')), true);
   assert.equal(isBlockedHost(hostOf('https://uk.studocu.com/x')), true, 'subdomains too');
   assert.equal(isBlockedHost(hostOf('https://notukessays.com/x')), false);
@@ -154,13 +154,15 @@ test('source filter: essay banks always; model answers and pages titled like his
   const inPath = { title: 'Invented page', url: 'https://invented.example.org/example-essay-hard-engineering-effectiveness-coastline', why: 'x' };
   const otherModel = { title: 'Model answers on river flooding', url: 'https://invented.example.org/c', why: 'x' };
   const useful = { title: 'Hard engineering explained', url: 'https://invented.example.org/d', why: 'x' };
+  const anchorAnswer = { title: 'Imaginary Bay sea walls: a sample essay', url: 'https://invented.example.org/e', why: 'x' };
   // two lists, because one reply keeps at most five cards
-  const all = [...parseSources([ESSAY, modelAnswer, sameTitle]), ...parseSources([inPath, otherModel, useful])];
-  const { kept, dropped } = filterSources(all, { question: QUESTION });
-  assert.deepEqual(kept.map((c) => c.title), ['Model answers on river flooding', 'Hard engineering explained']);
+  const all = [...parseSources([ESSAY, modelAnswer, sameTitle]), ...parseSources([inPath, otherModel, useful, anchorAnswer])];
+  const { kept, dropped } = filterSources(all, { tasks: [{ question: QUESTION, anchors: ['Imaginary Bay'] }] });
+  // an essay-bank page and a model answer on other questions may be linked (A-009 point 3)
+  assert.deepEqual(kept.map((c) => c.title), ['Invented essay', 'Model answers on river flooding', 'Hard engineering explained']);
   assert.equal(dropped, 4);
-  const noTask = filterSources(all, {});
-  assert.equal(noTask.dropped, 1, 'with no task question, only the essay banks go');
+  assert.equal(filterSources(all, {}).dropped, 0, 'with no open task, nothing is dropped');
+  assert.equal(filterSources(all, { question: QUESTION }).dropped, 3, 'a question alone: the anchor rule needs the anchors');
 });
 
 test('summary replies: a summary, read the original, unavailable, or nothing usable', () => {
@@ -229,21 +231,25 @@ test('cards count only when a web tool really ran; shell is still refused', asyn
   assert.deepEqual(decisions, [['url', true], ['shell', false]]);
 });
 
-test('the source filter runs on cards from the tutor; dropped cards are counted, never logged with text', async () => {
+test('the source filter runs on cards from the tutor against every open task; dropped cards are counted, never logged with text', async () => {
   const logs = [];
-  const m = models({ sources: [ESSAY, CARD] });
+  const anchorAnswer = { title: 'Imaginary Bay sea walls: a sample essay', url: 'https://revision.invented.example.org/imaginary-bay-sample', category: 'other', why: 'An answer.' };
+  const m = models({ sources: [anchorAnswer, ESSAY, CARD] });
   const store = await fakeStore();
-  const match = matchApiRoute('POST', '/api/conversations');
   const ctxCall = (method, url, body) => handleApi({
     match: matchApiRoute(method, url), pass: { role: 'learner' }, store, body, getCurriculum: () => curriculum,
     getAi: () => m.handle, log: { log: (l) => logs.push(l), error: (l) => logs.push(l) },
   });
-  assert.ok(match);
+  await ctxCall('POST', '/api/tasks', {
+    title: 'Invented coast essay', questionText: QUESTION, topicIds: ['demo-geo-1a'], anchors: [{ type: 'location', text: 'Imaginary Bay' }],
+  });
+  // a conversation with no task: the open task's anchors still count (A-009 point 3)
   const c = (await ctxCall('POST', '/api/conversations', { route: 'research' })).body.conversation;
   const r = await ctxCall('POST', `/api/conversations/${c.id}/messages`, { text: 'invented question' });
-  assert.deepEqual(r.body.turn.sources.map((s) => s.url), [CARD.url]);
+  // tier order: the introduction first; the essay-bank page on another question stays
+  assert.deepEqual(r.body.turn.sources.map((s) => s.url), [CARD.url, ESSAY.url]);
   assert.ok(logs.includes('[sources] 1 dropped by the source filter'));
-  assert.equal(logs.join('\n').includes('ukessays'), false);
+  assert.equal(logs.join('\n').includes('sample essay'), false);
   await rm(store.dir, { recursive: true, force: true });
 });
 
