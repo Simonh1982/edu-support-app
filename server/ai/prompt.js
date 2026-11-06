@@ -268,7 +268,9 @@ const wrap = (tag, text, max) => {
  * @param {string} [parts.sourceText] text from a source   @param {string} [parts.message] his new message
  * @param {string} [parts.instruction] a fixed server instruction (never learner text)
  */
-export function buildPrompt({ task, curriculum, notebook, conversation, attempt, draft, sourceText, message, instruction, contract = REPLY_CONTRACT } = {}) {
+export function buildPrompt({ task, curriculum, notebook, conversation, attempt, draft, sourceText, sourceLimit, message, instruction, contract = REPLY_CONTRACT } = {}) {
+  // sourceLimit (WP-114f): a longer limit for a copy of a source he attached; never above 40,000 characters
+  const sourceMax = Math.min(Number.isInteger(sourceLimit) && sourceLimit > 0 ? sourceLimit : LIMITS.sourceChars, 40_000);
   return [
     taskBlock(task),
     curriculumBlock(curriculum),
@@ -276,7 +278,7 @@ export function buildPrompt({ task, curriculum, notebook, conversation, attempt,
     conversationBlock(conversation),
     wrap('learner_attempt', attempt, LIMITS.attemptChars),
     wrap('learner_draft', draft, LIMITS.draftChars),
-    wrap('source_text', sourceText, LIMITS.sourceChars),
+    wrap('source_text', sourceText, sourceMax),
     wrap('learner_message', message, LIMITS.messageChars),
     str(instruction).trim(),
     str(contract).trim(),

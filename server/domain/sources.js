@@ -4,6 +4,8 @@
 // summary is a notebook entry (notebook/<id>.json, the WP-103 record shape) written by 'ai', with
 // the source attached. On a task, a summary passes the live check first (build spec §23.5); one
 // that can't pass is never saved. Events hold ids, counts and code words only, never text.
+// WP-114f (A-010): a source can carry copies he attached (uploadIds; server/domain/attachments.js).
+// A summary then reads the copy instead of the page, with no web tools.
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { newRecord, updateRecord } from '../storage/records.js';
@@ -11,7 +13,7 @@ import { ITEM_ID_PATTERN } from '../storage/items.js';
 import { buildRequest, loadProfileSettings } from '../ai/prompt.js';
 import {
   SUMMARY_CONTRACT, summaryInstruction, askSummary, summaryText, SOURCE_LIMITS,
-  pastedSummaryInstruction, PASTED_SOURCE_MAX_CHARS, cleanUrl,
+  pastedSummaryInstruction, fileSummaryInstruction, PASTED_SOURCE_MAX_CHARS, cleanUrl,
 } from '../ai/sources.js';
 import { liveCheck, askChecker, STRICT_INSTRUCTION, CHECK_FEATURE } from '../ai/check.js';
 import { CONVERSATION_MESSAGES } from '../ai/conversation.js';
@@ -19,6 +21,7 @@ import { DomainError, bad, notFound, plainObject, onlyKeys, recordId, wholeNumbe
 import { readTask, withTaskLock } from './tasks.js';
 import { aiTurnPath, saveAiTurn } from './work.js';
 import { taskForPrompt } from './conversations.js';
+import { ATTACH_MESSAGES, ATTACHED_SOURCE_MAX_CHARS, attachmentIds, attachmentText, mergeUploadIds } from './attachments.js';
 
 export const SUMMARY_FEATURE = 'source-summary';
 export const MAX_SOURCE_FILES = 1000;
@@ -35,7 +38,7 @@ export const SOURCE_MESSAGES = Object.freeze({
   tooClose: "I couldn't summarise this one without getting too close to your task. Have a look at the original: "
     + "it's yours to read and judge.",
   // A-010: paste to summarise, and sources he adds himself
-  noLink: "This source has no link, so paste the part you'd like summarised.",
+  noLink: "This source has no link, so paste the part you'd like summarised, or attach a copy.",
   pasteEmpty: 'Paste some text from the source first.',
   pasteTooLong: `That's more than ${PASTED_SOURCE_MAX_CHARS.toLocaleString('en-GB')} characters. Paste the part you need most.`,
   pasteUnclear: "I couldn't make sense of that text. Check you copied the right part, then paste it again.",
@@ -115,13 +118,29 @@ export async function saveSource(store, body, ctx = {}) {
   });
 }
 
+/** Adds upload IDs to a source (WP-114f). Call inside withTaskLock('sources'). Event: counts only. */
+async function addUploads(store, source, added, ctx = {}) {
+  const before = Array.isArray(source.uploadIds) ? source.uploadIds : [];
+  const uploadIds = mergeUploadIds(before, added);
+  if (uploadIds.length === before.length) return source;
+  const updated = updateRecord(source, { uploadIds }, { now: ctx.now ?? new Date() });
+  await store.put(sourcePath(source.id), updated);
+  await store.logEvent('source.attached', {
+    createdBy: 'learner',
+    links: links({ sourceId: source.id, taskId: source.taskId ?? null }),
+    payload: { files: uploadIds.length - before.length },
+  });
+  return updated;
+}
+
 /**
  * A source he found himself (A-010): a title, and an author and a link if he has them. Body:
- * { title, author?, url?, taskId? }. The same link on the same task returns the saved record.
+ * { title, author?, url?, taskId?, attachments? }. The same link on the same task returns the saved
+ * record. attachments (WP-114f): the capture IDs of copies the page sends to the Worker inbox.
  */
 export async function addOwnSource(store, body, ctx = {}) {
   plainObject(body, 'source');
-  onlyKeys(body, ['title', 'author', 'url', 'taskId'], 'source');
+  onlyKeys(body, ['title', 'author', 'url', 'taskId', 'attachments'], 'source');
   const title = shortString(body.title, 'title', { max: OWN_SOURCE_LIMITS.title, required: true });
   const author = shortString(body.author, 'author', { max: OWN_SOURCE_LIMITS.author });
   const given = typeof body.url === 'string' ? body.url.trim() : body.url;
@@ -131,12 +150,13 @@ export async function addOwnSource(store, body, ctx = {}) {
     if (!url) throw bad(SOURCE_MESSAGES.badLink);
   }
   const taskId = recordId(body.taskId, 'taskId');
+  const uploadIds = attachmentIds(body.attachments);
   const task = taskId ? await readTask(store, taskId) : null;
   if (taskId && !task) throw notFound('Task');
   return withTaskLock('sources', async () => {
     if (url) {
       const existing = (await listSources(store)).find((s) => s.url === url && (s.taskId ?? null) === taskId);
-      if (existing) return { source: existing, duplicate: true };
+      if (existing) return { source: uploadIds.length ? await addUploads(store, existing, uploadIds, ctx) : existing, duplicate: true };
     }
     const source = newRecord('src', {
       url,
@@ -151,15 +171,33 @@ export async function addOwnSource(store, body, ctx = {}) {
       topicIds: Array.isArray(task?.topicIds) ? task.topicIds : [],
       fromTurnId: null,
       summaryId: null,
+      uploadIds,
       origin: 'learner',
     }, { createdBy: 'learner', now: ctx.now ?? new Date() });
     await store.put(sourcePath(source.id), source);
     await store.logEvent('source.added', {
       createdBy: 'learner',
       links: links({ sourceId: source.id, taskId }),
-      payload: { origin: 'learner', link: Boolean(url) },
+      payload: { origin: 'learner', link: Boolean(url), ...(uploadIds.length ? { files: uploadIds.length } : {}) },
     });
     return { source, duplicate: false };
+  });
+}
+
+/**
+ * Attach copies to a saved source (A-010 choice 3B; WP-114f). Body: { attachments: [clientId] }: the
+ * capture IDs the page sends to the Worker inbox with kind 'source'. At most five copies per source.
+ */
+export async function attachToSource(store, id, body, ctx = {}) {
+  plainObject(body, 'attachments');
+  onlyKeys(body, ['attachments'], 'attachments');
+  const added = attachmentIds(body.attachments);
+  if (!added.length) throw bad(ATTACH_MESSAGES.badList);
+  return withTaskLock('sources', async () => {
+    const source = await readSource(store, id);
+    if (!source || source.deletedAt) throw new DomainError(404, SOURCE_MESSAGES.notFound);
+    if (source.category === 'video') throw new DomainError(409, SOURCE_MESSAGES.video);
+    return { source: await addUploads(store, source, added, ctx) };
   });
 }
 
@@ -189,36 +227,49 @@ function requireAi(getAi) {
  *  - 'subscription': the page is behind a paywall or login (A-009); nothing saved
  * Videos are never summarised (A-009): there is no page text to read (409).
  *  - 'too-close': on a task, the summary failed the live check twice; nothing saved
- *  - 'unclear' (A-010): pasted text the model couldn't read as a source; nothing saved
+ *  - 'unclear' (A-010): pasted text or an attached copy the model couldn't read as a source; nothing saved
  * One AI turn per model call (no text: the summary lives in the notebook entry). Not rated for
  * wellbeing and not counted in the per-task tally: it teaches the source, it isn't a tutor reply.
  * body: {} to fetch the page, or { text } with text he pasted from the source (A-010). Pasted text
  * goes to the model once and is never stored or logged; only the summary is kept.
+ * WP-114f: with body {}, a source with attached copies is summarised from their text (409 while a copy
+ * is still being read, or when none could be read), with no web tools.
  */
 export async function summariseSource(store, id, ctx = {}, body = {}) {
   const source = await readSource(store, id);
   if (!source || source.deletedAt) throw new DomainError(404, SOURCE_MESSAGES.notFound);
   if (source.category === 'video') throw new DomainError(409, SOURCE_MESSAGES.video);
   const pasted = pastedText(body);
-  if (!pasted && !source.url) throw new DomainError(409, SOURCE_MESSAGES.noLink);
+  // a copy he attached is read instead of the page, which may refuse the tutor
+  const files = pasted ? { state: 'none' } : await attachmentText(store, source);
+  if (files.state === 'waiting') throw new DomainError(409, ATTACH_MESSAGES.waiting);
+  if (files.state === 'failed') throw new DomainError(409, ATTACH_MESSAGES.failed);
+  const fileText = files.state === 'ready' ? files.text : null;
+  if (!pasted && !fileText && !source.url) throw new DomainError(409, SOURCE_MESSAGES.noLink);
   const handle = requireAi(ctx.getAi);
   const log = ctx.log ?? console;
   const now = ctx.now ?? new Date();
   const task = source.taskId ? await readTask(store, source.taskId) : null;
   const settings = await loadProfileSettings({ storageDir: store.dir });
   const topicId = Array.isArray(source.topicIds) ? source.topicIds[0] ?? null : null;
+  const instructionFor = () => {
+    if (pasted) return pastedSummaryInstruction(source);
+    if (fileText) return fileSummaryInstruction(source, { shortened: files.shortened === true });
+    return summaryInstruction(source);
+  };
   const ask = async (extra = '') => {
     const { system, prompt } = await buildRequest({
       route: 'research',
       settings,
       task: taskForPrompt(task),
-      sourceText: pasted ?? undefined,
-      instruction: [pasted ? pastedSummaryInstruction(source) : summaryInstruction(source), extra].filter(Boolean).join('\n'),
+      sourceText: pasted ?? fileText ?? undefined,
+      sourceLimit: fileText ? ATTACHED_SOURCE_MAX_CHARS : undefined,
+      instruction: [instructionFor(), extra].filter(Boolean).join('\n'),
       contract: SUMMARY_CONTRACT,
     });
     return askSummary({
       ai: handle.ai, model: handle.models.conversation, system, prompt, ceiling: ctx.aiCeiling, log,
-      failedMessage: CONVERSATION_MESSAGES.failed, pasted: Boolean(pasted),
+      failedMessage: CONVERSATION_MESSAGES.failed, pasted: Boolean(pasted || fileText), method: fileText ? 'file' : 'paste',
     });
   };
   const turnFor = (call, checkResult = null) => saveAiTurn(store, {
@@ -265,13 +316,14 @@ export async function summariseSource(store, id, ctx = {}, body = {}) {
     }, { now });
   }
 
-  // pasted text can't be "unavailable" or behind a paywall: the model couldn't read it as a source
-  const kind = pasted && ['unavailable', 'subscription'].includes(chosen.result.kind) ? 'unclear' : chosen.result.kind;
+  // pasted text or a copy can't be "unavailable" or behind a paywall: the model couldn't read it as a source
+  const given = Boolean(pasted || fileText);
+  const kind = given && ['unavailable', 'subscription'].includes(chosen.result.kind) ? 'unclear' : chosen.result.kind;
   const outcome = checkResult === 'fallback' ? 'too-close' : (kind === 'summary' ? 'saved' : kind);
   const event = (extra = {}) => store.logEvent('source.summary', {
     createdBy: 'learner',
     links: links({ sourceId: source.id, taskId: source.taskId ?? null, ...extra }),
-    payload: links({ outcome, checkResult, method: pasted ? 'paste' : null }),
+    payload: links({ outcome, checkResult, method: pasted ? 'paste' : fileText ? 'file' : null }),
   });
   if (outcome !== 'saved') {
     await event();
@@ -280,7 +332,7 @@ export async function summariseSource(store, id, ctx = {}, body = {}) {
       unavailable: SOURCE_MESSAGES.unavailable,
       subscription: SOURCE_MESSAGES.subscription.replaceAll('{parents}', settings.labels.parents),
       'too-close': SOURCE_MESSAGES.tooClose,
-      unclear: SOURCE_MESSAGES.pasteUnclear,
+      unclear: fileText ? ATTACH_MESSAGES.unclear : SOURCE_MESSAGES.pasteUnclear,
     }[outcome];
     return { outcome, message, entry: null, checkResult };
   }

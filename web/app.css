@@ -979,6 +979,7 @@ button.vote[aria-pressed="true"]::after {
   margin: 0.75rem 0 0.25rem;
 }
 
+.task-panel select,
 .task-panel input,
 .paste-source textarea {
   display: block;
@@ -998,6 +999,15 @@ button.vote[aria-pressed="true"]::after {
 .paste-source textarea {
   min-height: calc(var(--tap) * 3);
   resize: vertical;
+}
+
+/* WP-114f: attaching a copy of a source, and changing the stage */
+.task-panel input[type="file"] {
+  padding: 0.75rem;
+}
+
+.source-attach-note {
+  font-weight: 600;
 }
 
 /* Reduced motion: from the device's setting, or from the learner's own setting (data-motion). */
