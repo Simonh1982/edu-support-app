@@ -91,7 +91,8 @@ async function collect(dir) {
   // Uploads get a plain label only: their extracted text never reaches the snapshot.
   for (const id of await jsonIds(dir, 'uploads')) {
     const record = await readJson(dir, `uploads/${id}.json`);
-    if (record) items.push({ type: 'upload', id, record, title: Object.hasOwn(UPLOAD_LABELS, record.origin) ? UPLOAD_LABELS[record.origin] : 'File' });
+    // copies of a source (WP-114f) belong to the source and show in the task panel, not here
+    if (record && record.contentKind !== 'source') items.push({ type: 'upload', id, record, title: Object.hasOwn(UPLOAD_LABELS, record.origin) ? UPLOAD_LABELS[record.origin] : 'File' });
   }
   const taskIds = (await names(dir, 'tasks', { folders: true })).filter((id) => ITEM_ID_PATTERN.test(id));
   for (const taskId of taskIds) {

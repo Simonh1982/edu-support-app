@@ -17,7 +17,7 @@ export const INBOX_TYPES = Object.freeze({
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": Object.freeze({ ext: "docx", image: false }),
 });
 export const INBOX_SOURCES = Object.freeze(["camera", "gallery", "file"]);
-export const INBOX_KINDS = Object.freeze(["brief", "own"]);
+export const INBOX_KINDS = Object.freeze(["brief", "own", "source"]);
 export const IMAGE_TOO_LARGE_MESSAGE = "This photo is too large to read. Please take it again.";
 
 /** Same rule as the server: the Upload's ID comes from the device's ID. */
@@ -85,7 +85,8 @@ export function failureMessage(reason) {
 // ---------- IDs and labels ----------
 
 // p photo, f file, t pasted text (WP-108b): the first letter labels items that have no record yet.
-const CLIENT_ID_PREFIXES = Object.freeze({ camera: "p", gallery: "p", file: "f", paste: "t" });
+// s: a copy of a source attached in the task panel (WP-114f)
+const CLIENT_ID_PREFIXES = Object.freeze({ camera: "p", gallery: "p", file: "f", paste: "t", attachment: "s" });
 
 /**
  * A new client ID, made on the device. A retry reuses it, so the Worker (or the paste route)
@@ -344,7 +345,8 @@ export function rowMessage(row, tutor = "waiting") {
 export function inboxItems(body) {
   const items = Array.isArray(body?.items) ? body.items : [];
   return items
-    .filter((item) => typeof item?.clientId === "string" && CLIENT_ID_PATTERN.test(item.clientId))
+    // copies of a source (s…, WP-114f) show in the task panel instead
+    .filter((item) => typeof item?.clientId === "string" && CLIENT_ID_PATTERN.test(item.clientId) && !item.clientId.startsWith("s"))
     .map((item) => ({ clientId: item.clientId, uploadId: uploadIdFor(item.clientId), bytes: Number(item.bytes) || 0 }));
 }
 

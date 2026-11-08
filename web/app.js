@@ -14,7 +14,7 @@ import {
   usableStorage,
 } from "./shared/auth.js";
 import { createWaker, tutorPanel, WAKE_MESSAGES } from "./shared/wake.js";
-import { createCaptureScreen } from "./capture.js";
+import { createCaptureScreen, resizeImage } from "./capture.js";
 import { createTaskEntry } from "./check.js";
 import { createUpcoming } from "./upcoming.js";
 import { createHome } from "./home.js";
@@ -138,6 +138,9 @@ function init() {
     getTasks: () => latestItems,
     onSignedOut: signedOut,
     onUnreachable: wakeAgain,
+    // WP-114f: copies of a source go to the Worker inbox like every capture; a stage change refreshes "Coming up"
+    attach: { workerUrl: config.workerUrl, getToken: () => token, resizeImage },
+    onTaskChanged: () => upcoming?.refresh(),
   });
 
   function wakeAgain() {
