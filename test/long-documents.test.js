@@ -242,3 +242,22 @@ test('a long summary on a task: the summary check is used, and its second draft 
     assert.ok(!drafts[1].prompt.includes(STRICT_INSTRUCTION));
   } finally { await rm(store.dir, { recursive: true, force: true }); }
 });
+
+// ---------- WP-114g-fix: the same copy attached twice ----------
+
+test('the same copy attached twice counts once, so the note gives pages; other parts still say which pages', async () => {
+  const store = await fakeStore();
+  try {
+    const copy = pdfCopy(25, 3270);
+    await put(store, 'sinv1006-aa', copy);
+    await put(store, 'sinv1006-bb', copy);
+    const r = await attachmentText(store, { uploadIds: ['up_sinv1006-aa', 'up_sinv1006-bb'] });
+    assert.equal(r.text.length, 75_000);
+    assert.doesNotMatch(r.text, /\[Part /, 'one part, so no part headers');
+    assert.match(r.coverage, /^This summary covers roughly the first 22 of 25 pages\. /);
+    // two different copies, the first too long on its own
+    await put(store, 'sinv1006-cc', pdfCopy(3, 1000));
+    const two = await attachmentText(store, { uploadIds: ['up_sinv1006-aa', 'up_sinv1006-cc'] });
+    assert.match(two.coverage, /first 22 of 25 pages of the first part, and none of the other part\./);
+  } finally { await rm(store.dir, { recursive: true, force: true }); }
+});

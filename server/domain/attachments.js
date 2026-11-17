@@ -60,6 +60,14 @@ export function coverageNote(parts, { cut = Infinity, headers = [] } = {}) {
     else break;
   }
   const unit = parts.every((p) => p.image) ? 'photo' : 'part';
+  if (!whole) {
+    const [first] = parts;
+    const limit = cut - (headers[0] ?? 0);
+    const pages = Number.isInteger(first.pageCount) && Array.isArray(first.pageEnds) ? first.pageEnds.filter((e) => e <= limit).length : 0;
+    if (pages >= 1 && pages < first.pageCount) {
+      return `This summary covers roughly the first ${pages} of ${plural(first.pageCount, 'page')} of the first ${unit}, and none of the other ${parts.length - 1 === 1 ? unit : `${parts.length - 1} ${unit}s`}. ${ATTACH_MESSAGES.rest}`;
+    }
+  }
   return `This summary covers ${whole ? `the first ${whole} of ${plural(parts.length, unit)}` : `only the start of the first ${unit}`}. ${ATTACH_MESSAGES.rest}`;
 }
 
@@ -136,6 +144,7 @@ export async function attachmentText(store, source) {
   if (!ids.length) return { state: 'none' };
   const parts = [];
   const facts = [];
+  const seen = new Set();
   let shortened = false;
   for (const id of ids) {
     const record = await readUploadRecord(store, id);
@@ -143,7 +152,9 @@ export async function attachmentText(store, source) {
     if (status === 'waiting' || status === 'reading') return { state: 'waiting' };
     if (status !== 'done') continue;
     const value = typeof record.extractedText?.value === 'string' ? record.extractedText.value.trim() : '';
-    if (!value) continue;
+    // the same copy attached twice is one part (seen live, WP-114g-fix)
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
     if (record.truncated === true) shortened = true;
     parts.push(value);
     facts.push({
