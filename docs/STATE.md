@@ -1,6 +1,6 @@
-STATE version: 48
-Updated: 2026-11-17 21:45 (UK time)
-Last work package applied: WP-114g-fix part 3 (A-012: 120,000 characters; Try the summary again)
+STATE version: 49
+Updated: 2026-11-17 22:15 (UK time)
+Last work package applied: fix: storage repository name hidden before git text is shortened
 
 ## File tree
 ```
@@ -417,7 +417,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - `test/prompt.test.js` (WP-111a-fix): the "private tone examples replace the generic ones" check now looks for the reworded generic example 4 (`Tutor: I can't write it for you`) instead of the removed `Tutor: Nice try`, so it still proves the generic block is replaced. Expected text only.
 - `test/conversation.test.js` (WP-111a): the fake `curriculum` is given the shape `loadCurriculum()` produces (qualification with `id`, `title`, `units`, `aos`, `commandWords`; topic with `id`, `qualId`, `unitId`, `title`, `record`). As written it was `{}` / `{ title }`, which matched the sandbox stub but not the real `topicExtract()`, so 4 tests failed with "Cannot read properties of undefined (reading 'units')". Test data only; no app code changed.
 - `package.json` (owner-approved hotfix, 31 Oct 2026, not from a work package): `"overrides": { "zod": "4.6.7" }` added after `dependencies`; lockfile regenerated. Reason: `npm audit` flagged 2 high (GHSA-mrhx-c7xc-m3w5, memory exhaustion) in `zod` 4.3.6, which `@github/copilot-sdk` 1.0.22 pins exactly (1.0.28 pins the same). Nothing in the app or the SDK imports `zod` at run time (SDK uses it in type definitions only). After the override: `npm audit` 0 vulnerabilities; `npm ci`, `npm test` (361/361) and `npm run spike:docs` pass; the SDK still loads (`defineTool` present). Future packages that edit `package.json` must keep the `overrides` block; remove it only once the SDK pins `zod` >=4.6.6.
-- `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public.
+- `server/storage/store.js` (WP-009): git error text in `[storage]` logs and `storage.detail` has the storage repository's `owner/name` replaced with `<storage-repo>`, because git errors quote the remote URL and `/api/health` is public. Fix 17 Nov 2026 (seen live): the name is now replaced before the text is cut to 300 characters (`cleanGitText(text, max, hide)` in `server/storage/git.js`), because a name cut part-way at the end wasn't matched.
 - `test/storage.test.js` (WP-014a-fix): the fake git answers `ls-files` (no unmerged paths), and the "failed pull aborts the rebase" test expects `ls-files` then `rebase` after the failed pull, because `syncLocked` now checks for clashes first.
 - `wake/worker.js` `/repo-file` (WP-014c): no pass, by owner decision, because it serves only the public repository.
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
