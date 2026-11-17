@@ -8,10 +8,10 @@ import { bad } from './fields.js';
 import { CLIENT_ID_PATTERN, uploadIdFor } from '../storage/inbox.js';
 
 export const MAX_ATTACHMENTS = 5;
-// A-011 (WP-114g): an attached copy is read up to 75,000 characters, including spaces (about 12,000
+// A-011 (WP-114g), raised by A-012: an attached copy is read up to 120,000 characters, including spaces (about 12,000
 // words, or roughly 25 to 30 pages of a journal article). A longer copy gets a note saying which part
 // the summary covers.
-export const ATTACHED_SOURCE_MAX_CHARS = 75_000;
+export const ATTACHED_SOURCE_MAX_CHARS = 120_000;
 export const ATTACHMENT_KIND = 'source';
 const UPLOAD_ID = /^up_[A-Za-z0-9][A-Za-z0-9_-]{7,63}$/;
 

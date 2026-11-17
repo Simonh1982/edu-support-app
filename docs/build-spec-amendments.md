@@ -9,7 +9,7 @@
 
 ## Current amendments
 
-Build spec generated from master specification **v3.7** (31 October 2026). Current amendments: A-008 to A-011.
+Build spec generated from master specification **v3.7** (31 October 2026). Current amendments: A-008 to A-012.
 
 ### A-008: Photos and files are removed automatically, and hidden from the list once they are tasks
 **Decided:** 4 November 2026 (owner, options 1A and 2B). **Changes:** build spec §32.2 ("How long conversations are kept"), Appendix A.3 (Upload) and A.6 (retention note); blueprint §4.6 (retention table). **Workplan:** WP-123 (retention), and WP-122 or an earlier tidy-up package (the list).
@@ -108,6 +108,19 @@ Build spec generated from master specification **v3.7** (31 October 2026). Curre
 - Summary length scales with the document: short for a few pages, up to roughly **700–900 words** for a document near 75,000 characters.
 - Long summaries follow the document's own sections, and name the sections most useful to his question.
 - Every §28 rule still applies: the summary is labelled **AI summary**, keeps the source, encourages him to read the original, explains the source rather than relaying its argument on his question, and goes through the live check on a task (§23.5).
+
+### A-012: More of a long document is read, and a summary can be tried again
+**Decided:** 17 November 2026 (owner; drafted for approval, approved by merging WP-114g-fix part 3). **Changes:** A-011 part 2 (the limit) and build spec §28 (Summarisation). **Workplan:** WP-114g.
+
+**Why:** in testing, a 25-page journal article came to about 82,000 characters as the app reads it. Word counted about 50,000 for the same file, because the app also reads the text Word leaves out when it opens a PDF, such as headers, footers, captions, tables and the reference list. So 75,000 left out the last pages. Also, once a summary was refused as too close to the task, there was no way to try again without attaching the file again.
+
+**1. 120,000 characters.**
+- An attached copy is read up to **120,000 characters, including spaces** (`ATTACHED_SOURCE_MAX_CHARS`; was 75,000 under A-011).
+- Everything else in A-011 is unchanged: the coverage note when a document is longer, summaries of up to roughly 700–900 words, and pasted text at 12,000 characters.
+
+**2. Try again after "too close".**
+- When a summary fails the live check twice, the message stays, and **Summarise** becomes **Try the summary again**. It uses the copy already attached or the page already saved.
+- Each try goes through the live check as before (§23.5). "Read the original" and "needs a subscription" still end the offer, as before.
 
 ---
 

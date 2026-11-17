@@ -124,13 +124,13 @@ test('copies of the server rules match the screen and the Worker', () => {
   assert.deepEqual(items.map((i) => i.clientId), ['pinv0006-aa'], 'copies of a source show in the task panel, not in "Your photos and files"');
 });
 
-test('the prompt takes a longer source only when asked, and never more than 75,000 characters (A-011)', () => {
-  const long = 'y'.repeat(100_000);
+test('the prompt takes a longer source only when asked, and never more than 120,000 characters (A-012)', () => {
+  const long = 'y'.repeat(150_000);
   assert.match(buildPrompt({ sourceText: 'z'.repeat(LIMITS.sourceChars + 1) }), /\(shortened\)/);
   assert.doesNotMatch(buildPrompt({ sourceText: 'z'.repeat(30_000), sourceLimit: ATTACHED_SOURCE_MAX_CHARS }), /\(shortened\)/);
   const capped = buildPrompt({ sourceText: long, sourceLimit: 999_999 });
   assert.match(capped, /\(shortened\)/);
-  assert.ok(capped.length < 76_000 && capped.length > 74_000);
+  assert.ok(capped.length < 121_000 && capped.length > 119_000);
   assert.match(fileSummaryInstruction({ title: 'Invented', url: null, publisher: 'A. Inventor' }, { shortened: true }), /stops part-way/);
   assert.doesNotMatch(fileSummaryInstruction({ title: 'Invented' }), /stops part-way/);
 });
