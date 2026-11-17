@@ -14,13 +14,14 @@ import { createStore } from '../server/storage/store.js';
 import { gitEnv } from '../server/storage/git.js';
 import { storageSettings } from '../server/storage/index.js';
 import { ukIso } from '../server/storage/records.js';
-import { INBOX_MAX_BYTES, inboxPaths, uploadIdFor } from '../server/storage/inbox.js';
+import { inboxPaths, uploadIdFor } from '../server/storage/inbox.js';
 import { encodePng } from './make-icons.js';
 import { normaliseWorkerUrl } from './worker-check.js';
 
 export const USAGE = 'Usage: node scripts/inbox-check.js [worker address]';
-// Just under the 8 MB limit. Repeated invented text, so it compresses to almost nothing in git history.
-export const LARGE_BYTES = INBOX_MAX_BYTES - 64 * 1024;
+// Just under 8 MB, the size proven in phase 0 (the inbox limit is 20 MB since A-011; larger files are
+// tested by scripts/inbox-size-check.js). Repeated invented text, so it compresses to almost nothing.
+export const LARGE_BYTES = 8 * 1024 * 1024 - 64 * 1024;
 const WAIT_MS = 90_000;
 const STEP_MS = 3_000;
 // How long the tidy-up waits for the running server to push what it took in (WP-014a-fix).

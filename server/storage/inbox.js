@@ -6,9 +6,10 @@ import { SCHEMA_VERSION, ukIso } from './records.js';
 import { checkImage } from '../ai/limits.js';
 
 // ===== INBOX BLOCK START (no imports; copied verbatim into wake/worker.js) =====
-// The device sends each file as base64 text, so the Worker passes it on without encoding 8 MB itself
-// (the free plan's CPU limit, blueprint §5.3).
-const INBOX_MAX_BYTES = 8 * 1024 * 1024;
+// The device sends each file as base64 text, so the Worker passes it on without encoding it itself
+// (the free plan's CPU limit, blueprint §5.3). 20 MB since A-011; files over 8 MB are streamed
+// through the Worker to GitHub, never held whole (the free plan's 128 MB memory limit).
+const INBOX_MAX_BYTES = 20 * 1024 * 1024;
 const INBOX_MAX_BASE64 = Math.ceil(INBOX_MAX_BYTES / 3) * 4;
 // Made on the device, so a retry overwrites the same files instead of adding a duplicate.
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$/;

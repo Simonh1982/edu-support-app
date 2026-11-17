@@ -44,9 +44,9 @@ test('.gitignore keeps server logs and node_modules out of git', () => {
   assert.ok(lines.includes('node_modules/'), 'node_modules/ ignored');
 });
 
-test('CLAUDE.md carries the assigned-branch rule and Branch line', () => {
+test('CLAUDE.md carries the assigned-branch rule', () => {
+  // the main-developer CLAUDE.md (17 Nov 2026) words it as "use the branch your session is given"
   const md = read('CLAUDE.md');
-  assert.ok(md.includes('3. **Use the branch your session is assigned.**'));
-  assert.ok(!md.includes('3. **Create the branch** named in the package'));
-  assert.ok(md.includes('PR: <link>   Branch: <assigned branch>   STATE: v<n> (in this PR)'));
+  assert.ok(md.includes('**Branch:** use the branch your session is given.'));
+  assert.ok(!/\*\*Create the branch\*\*/.test(md));
 });

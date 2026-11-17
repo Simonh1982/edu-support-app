@@ -220,9 +220,10 @@ function snapshotSection(snapshot, role) {
 // ===== ITEM BLOCK END =====
 
 // ===== INBOX BLOCK START (no imports; copied verbatim into wake/worker.js) =====
-// The device sends each file as base64 text, so the Worker passes it on without encoding 8 MB itself
-// (the free plan's CPU limit, blueprint §5.3).
-const INBOX_MAX_BYTES = 8 * 1024 * 1024;
+// The device sends each file as base64 text, so the Worker passes it on without encoding it itself
+// (the free plan's CPU limit, blueprint §5.3). 20 MB since A-011; files over 8 MB are streamed
+// through the Worker to GitHub, never held whole (the free plan's 128 MB memory limit).
+const INBOX_MAX_BYTES = 20 * 1024 * 1024;
 const INBOX_MAX_BASE64 = Math.ceil(INBOX_MAX_BYTES / 3) * 4;
 // Made on the device, so a retry overwrites the same files instead of adding a duplicate.
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$/;
@@ -723,6 +724,97 @@ async function inboxWrite(env, relPath, contentJson) {
   }
 }
 
+// Bodies over this go through inboxStream (A-011, WP-114g): the free plan allows 128 MB of memory, and
+// holding a 20 MB file (27 MB of base64) plus its JSON copy would go over it.
+const INBOX_BUFFER_BYTES = 8 * 1024 * 1024;
+const INBOX_BUFFER_BASE64 = Math.ceil(INBOX_BUFFER_BYTES / 3) * 4;
+const QUOTE = 0x22;
+const BACKSLASH = 0x5c;
+const EQUALS = 0x3d;
+
+class BadCapture extends Error {}
+
+/**
+ * Writes one large inbox file by streaming the device's base64 text straight into the contents API's
+ * JSON body. Base64 never needs JSON escaping, so each chunk is only checked for a quote or a
+ * backslash (which could break out of the string); GitHub rejects anything else that isn't base64.
+ * The body can't be sent twice, so an existing file's sha is looked up first, and a refused write
+ * (for example 409, the branch moved) goes back to the device, which can try again.
+ * Returns { bytes } or { response }.
+ */
+async function inboxStream(env, relPath, body, length) {
+  const notBase64 = () => ({ response: json(400, { error: MESSAGES.badCapture, reason: 'the body must be base64 text' }) });
+  if (!body || length % 4 !== 0) return notBase64();
+  const url = contentsUrl(env, relPath);
+  const encoder = new TextEncoder();
+  let response = null;
+  let failed = null;
+  let tail = [];
+  try {
+    const sha = await existingSha(env, url);
+    const prefix = encoder.encode('{"message":"inbox: add capture","content":"');
+    const suffix = encoder.encode(`"${sha ? `,"sha":${JSON.stringify(sha)}` : ''}}`);
+    // VERIFY: FixedLengthStream (Workers runtime) sends a Content-Length, which the contents API needs.
+    const pipe = typeof FixedLengthStream === 'function'
+      ? new FixedLengthStream(prefix.length + length + suffix.length) : new TransformStream();
+    const writer = pipe.writable.getWriter();
+    const reader = body.getReader();
+    let finished = false;
+    const pump = (async () => {
+      try {
+        await writer.write(prefix);
+        let received = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (received === 0 && !BASE64_SAMPLE.test(new TextDecoder().decode(value.subarray(0, 1024)).replace(/=+$/, ''))) throw new BadCapture();
+          if (value.indexOf(QUOTE) !== -1 || value.indexOf(BACKSLASH) !== -1) throw new BadCapture();
+          received += value.length;
+          if (received > length) throw new BadCapture();
+          tail = [...tail, ...value.subarray(-2)].slice(-2);
+          await writer.write(value);
+        }
+        if (received !== length) throw new BadCapture();
+        await writer.write(suffix);
+        await writer.close();
+      } catch (err) {
+        failed ??= err;
+        await writer.abort(err).catch(() => {});
+        await reader.cancel().catch(() => {});
+      } finally {
+        finished = true;
+      }
+    })();
+    // If GitHub answers (or the connection drops) before the whole body is sent, stop copying.
+    const stop = () => {
+      if (finished) return;
+      failed ??= new Error('stopped');
+      writer.abort(failed).catch(() => {});
+      reader.cancel().catch(() => {});
+    };
+    const put = fetch(url, {
+      method: 'PUT',
+      headers: { ...githubHeaders(setting(env, 'STORAGE_TOKEN')), 'Content-Type': 'application/json' },
+      body: pipe.readable,
+    }).finally(stop);
+    const [sent] = await Promise.allSettled([put, pump]);
+    if (sent.status === 'fulfilled') response = sent.value;
+    else if (!failed || failed.message === 'stopped') throw sent.reason;
+  } catch (err) {
+    console.warn(`[inbox] GitHub unreachable: ${err?.name ?? 'error'}`);
+    return { response: json(502, { error: MESSAGES.noGitHub }) };
+  }
+  // GitHub only says OK after reading the whole JSON body, so a late stop() changes nothing
+  if (response?.ok && failed?.message === 'stopped') failed = null;
+  if (failed instanceof BadCapture) return notBase64();
+  if (response && !response.ok) return { response: storageFailure(response, 'inbox') };
+  if (failed || !response) return { response: json(400, { error: MESSAGES.badCapture, reason: 'the file did not arrive in full' }) };
+  const padding = tail[1] === EQUALS ? (tail[0] === EQUALS ? 2 : 1) : 0;
+  const bytes = (length / 4) * 3 - padding;
+  if (bytes > INBOX_MAX_BYTES) return { response: json(413, { error: MESSAGES.tooLarge }) };
+  return { bytes };
+}
+
 async function handleInboxPost(request, env, pass, url) {
   if (pass.role !== 'learner') return json(403, { error: MESSAGES.learnerOnly });
   const params = url.searchParams;
@@ -734,18 +826,27 @@ async function handleInboxPost(request, env, pass, url) {
   if (!paths || !INBOX_SOURCES.includes(source) || !INBOX_KINDS.includes(kind)) {
     return json(400, { error: MESSAGES.badCapture, reason: 'clientId, type, source or kind is not allowed' });
   }
-  if (Number(request.headers.get('Content-Length') ?? 0) > INBOX_MAX_BASE64) return json(413, { error: MESSAGES.tooLarge });
-  const text = await request.text();
-  if (text.length > INBOX_MAX_BASE64) return json(413, { error: MESSAGES.tooLarge });
-  const bytes = base64Bytes(text);
-  // A sample check gives a clear error for the usual mistakes; JSON.stringify keeps the body safe anyway.
-  if (bytes === null || !BASE64_SAMPLE.test(text.slice(0, 1024)) || !BASE64_SAMPLE.test(text.slice(-1024))) {
-    return json(400, { error: MESSAGES.badCapture, reason: 'the body must be base64 text' });
+  const declared = Number(request.headers.get('Content-Length') ?? 0);
+  if (declared > INBOX_MAX_BASE64) return json(413, { error: MESSAGES.tooLarge });
+  let bytes;
+  if (declared > INBOX_BUFFER_BASE64) {
+    // A-011: a large file is passed through as it arrives, so the Worker never holds it whole.
+    const streamed = await inboxStream(env, paths.file, request.body, declared);
+    if (streamed.response) return streamed.response;
+    bytes = streamed.bytes;
+  } else {
+    // Up to 8 MB: the route proven in phase 0, with its retries. A body with no length is held to 8 MB.
+    const text = await request.text();
+    if (text.length > INBOX_BUFFER_BASE64) return json(413, { error: MESSAGES.tooLarge });
+    bytes = base64Bytes(text);
+    // A sample check gives a clear error for the usual mistakes; JSON.stringify keeps the body safe anyway.
+    if (bytes === null || !BASE64_SAMPLE.test(text.slice(0, 1024)) || !BASE64_SAMPLE.test(text.slice(-1024))) {
+      return json(400, { error: MESSAGES.badCapture, reason: 'the body must be base64 text' });
+    }
+    // The file goes first and the metadata last, so the server never sees metadata without its file.
+    const saved = await inboxWrite(env, paths.file, JSON.stringify(text));
+    if (saved.response) return saved.response;
   }
-  if (bytes > INBOX_MAX_BYTES) return json(413, { error: MESSAGES.tooLarge });
-  // The file goes first and the metadata last, so the server never sees metadata without its file.
-  const saved = await inboxWrite(env, paths.file, JSON.stringify(text));
-  if (saved.response) return saved.response;
   const meta = inboxMetadata({
     clientId, mimeType, bytes, source, kind, capturedAt: params.get('capturedAt'), receivedAt: ukNow(), role: pass.role,
   });

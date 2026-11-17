@@ -80,7 +80,7 @@ test('inbox block helpers: paths, upload IDs, base64 sizes and limits', () => {
   assert.equal(base64Bytes('QQ=='), 1);
   assert.equal(base64Bytes('QUJ'), null);
   assert.equal(base64Bytes(''), null);
-  assert.equal(INBOX_MAX_BYTES, 8 * 1024 * 1024);
+  assert.equal(INBOX_MAX_BYTES, 20 * 1024 * 1024, 'A-011');
   assert.ok(INBOX_MAX_BASE64 >= (INBOX_MAX_BYTES / 3) * 4);
 });
 

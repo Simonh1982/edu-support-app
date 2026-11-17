@@ -6,7 +6,7 @@ import { readJsonBody, timeoutSignal, workerEndpoint, workerRequest } from "./au
 // ---------- copies of server constants ----------
 // The front end can't import server code. test/capture.test.js checks these match
 // server/storage/inbox.js (INBOX BLOCK) and server/ai/limits.js.
-export const INBOX_MAX_BYTES = 8 * 1024 * 1024;
+export const INBOX_MAX_BYTES = 20 * 1024 * 1024; // A-011
 export const CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$/;
 export const INBOX_TYPES = Object.freeze({
   "image/jpeg": Object.freeze({ ext: "jpg", image: true }),
@@ -35,7 +35,7 @@ export const RESIZE = Object.freeze({
   shrink: 0.8, // if even the lowest quality is too big, make the picture smaller
   maxShrinks: 3,
 });
-export const UPLOAD_TIMEOUT_MS = 120_000; // 8 MB over weak mobile signal can be slow
+export const UPLOAD_TIMEOUT_MS = 300_000; // 20 MB (A-011) over weak mobile signal can be slow
 export const POLL_MS = 15_000;
 export const POLL_LIMIT_MS = 15 * 60 * 1000; // stop checking 15 minutes after the last activity
 export const MAX_FILES_AT_ONCE = 10;
@@ -58,7 +58,7 @@ export const CAPTURE_MESSAGES = Object.freeze({
   saved: "Saved.",
   retry: "Couldn't send. Check your connection, then tap Try again.",
   rejected: "That photo or file couldn't be accepted.",
-  tooBig: "This file is too big to send. The limit is 8 MB.",
+  tooBig: "This file is too big to send. The limit is 20 MB.",
   notAllowed: "Only the learner can add photos and files.",
   notConfigured: "Sending isn't connected yet. Please try again later.",
   wrongType: "Only photos, PDFs and Word (.docx) files can be added.",
