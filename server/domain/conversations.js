@@ -178,6 +178,45 @@ export async function openConversation(store, id, { disengageAfter } = {}) {
   return { ...conversationView(conv, { disengageAfter }), turns };
 }
 
+// WP-114h: the screen carries on from his latest conversation for a task, up to this many days after
+// it was last used (Simon, 17 Nov 2026: the same 60 days that unlinked conversations are kept).
+export const RESUME_DAYS = 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The UK months from `from` to `to`, newest first ("2026-11", "2026-10", ...), stepping a day at a time. */
+function monthsBetween(from, to) {
+  const out = new Set();
+  for (let t = to.getTime(); t >= from.getTime(); t -= DAY_MS) out.add(ukMonth(new Date(t)));
+  out.add(ukMonth(from));
+  return [...out];
+}
+
+/**
+ * WP-114h: his most recent conversation for one task and route that has at least one reply and was
+ * used within RESUME_DAYS, with its turns (as openConversation), or null. query: { taskId, route }.
+ */
+export async function latestConversation(store, query, { now = new Date(), days = RESUME_DAYS, disengageAfter } = {}) {
+  const taskId = recordId(query?.taskId, 'taskId', { required: true });
+  const route = oneOf(query?.route, 'route', ROUTES, { required: true });
+  const since = new Date(now.getTime() - days * DAY_MS);
+  let best = null;
+  for (const month of monthsBetween(since, now)) {
+    let names = [];
+    try {
+      names = (await readdir(path.join(store.dir, 'conversations', month))).filter((n) => n.endsWith('.json'));
+    } catch { continue; }
+    for (const name of names) {
+      const conv = await store.read(`conversations/${month}/${name}`);
+      if (!conv || conv.deletedAt || conv.taskId !== taskId || conv.route !== route) continue;
+      if (!Array.isArray(conv.turns) || conv.turns.length === 0) continue;
+      const used = Date.parse(conv.updatedAt ?? conv.createdAt);
+      if (!Number.isFinite(used) || used < since.getTime()) continue;
+      if (!best || used > best.used) best = { id: conv.id, used };
+    }
+  }
+  return best ? openConversation(store, best.id, { disengageAfter }) : null;
+}
+
 // ---------- source cards (A-009) ----------
 const MAX_FILTER_TASKS = 100;
 

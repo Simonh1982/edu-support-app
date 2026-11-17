@@ -6,7 +6,7 @@ import { listTasks, readTask, createTask, updateTask, addAnchor, updateAnchor, r
 import { recordAttempt } from './domain/work.js';
 import { openUpload, uploadView, confirmUpload, addPastedBrief, UPLOAD_MESSAGES } from './domain/uploads.js';
 import {
-  startConversation, openConversation, conversationView, sendMessage, requestSupport, voteOnTurn, suggestRoute,
+  startConversation, openConversation, latestConversation, conversationView, sendMessage, requestSupport, voteOnTurn, suggestRoute,
   STATE_MESSAGES,
 } from './domain/conversations.js';
 import { listSources, saveSource, summariseSource, addOwnSource, attachToSource } from './domain/sources.js';
@@ -32,6 +32,8 @@ export const API_ROUTES = Object.freeze([
   // WP-111a: route choice, conversations with the support pairs, and votes on replies
   route('POST', '/api/route', 'suggestRoute'),
   route('POST', '/api/conversations', 'startConversation'),
+  // WP-114h: his latest conversation for a task and route (?taskId=&route=), to carry on after a reload
+  route('GET', '/api/conversations', 'latestConversation'),
   route('GET', `/api/conversations/${ID}`, 'getConversation'),
   route('POST', `/api/conversations/${ID}/messages`, 'sendMessage'),
   route('POST', `/api/conversations/${ID}/support`, 'requestSupport'),
@@ -116,6 +118,10 @@ const HANDLERS = {
   async startConversation({ store, body, curriculum, ctx }) {
     const conv = await startConversation(store, object(body), { curriculum });
     return { status: 201, body: { conversation: { ...conversationView(conv, ctx), turns: [] } } };
+  },
+  async latestConversation({ store, query, ctx }) {
+    const conversation = await latestConversation(store, { taskId: query.get('taskId'), route: query.get('route') }, ctx);
+    return { status: 200, body: { conversation } };
   },
   async getConversation({ store, params: [id], ctx }) {
     const conversation = await openConversation(store, id, ctx);

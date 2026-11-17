@@ -92,6 +92,8 @@ export function createApi({
     suggestRoute: (body) => talk("api/route", body),
     startConversation: (body) => call("api/conversations", { method: "POST", body }),
     openConversation: (id) => call(conversationPath(id)),
+    // WP-114h: his latest conversation for a task and route ({ conversation: null } when there is none)
+    latestConversation: ({ taskId, route }) => call(`api/conversations?${new URLSearchParams({ taskId, route })}`),
     sendMessage: (id, body) => talk(`${conversationPath(id)}/messages`, body),
     requestSupport: (id, type) => talk(`${conversationPath(id)}/support`, { type }),
     vote: (turnId, vote) => call(`api/turns/${encodeURIComponent(turnId)}/vote`, { method: "POST", body: { vote } }),

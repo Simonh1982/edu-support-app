@@ -1,6 +1,6 @@
 # Workplan: phase 1 (MVP: Work and Learn): APPROVED
 **Version:** 1.9, 17 November 2026. **Status:** **approved by Simon (31 Oct)**, and this is the working document. Updated after WP-114g (public STATE **v45**) and the switch to Claude Code as the main developer.
-**Starts from:** public STATE **v19** (phase 0 closed). **Now at:** STATE **v49**, last change a storage-log fix, **727 tests passing**. Build spec generated from master **v3.7**. Current amendments (in `docs/build-spec-amendments.md`): A-008, A-009, A-010, A-011 (long documents) and **A-012** (120,000 characters; try a summary again). **Next amendment: A-013.** Blueprint **v1.4** (unchanged).
+**Starts from:** public STATE **v19** (phase 0 closed). **Now at:** STATE **v50**, last package WP-114h, **731 tests passing**. Build spec generated from master **v3.7**. Current amendments (in `docs/build-spec-amendments.md`): A-008, A-009, A-010, A-011 (long documents) and **A-012** (120,000 characters; try a summary again). **Next amendment: A-013.** Blueprint **v1.4** (unchanged).
 **Scope source:** build spec §47.1 phase 1 row, plus A-005 and A-008 to A-011, plus items carried from phase 0.
 
 ## How Claude Code uses this document
@@ -112,6 +112,7 @@
 | 114e | public | Task panel, pasted text, own sources | A-010: task panel; paste the text instead; add a source he found himself | 114d | **Done** (v41; live check 6 Nov) |
 | 114f | public | Attach a copy; change the stage | A-010 3B: attach a PDF, Word file or up to 5 photos to a source (Worker inbox kind `source`); "Change the stage" in the task panel; Worker tidy-ups | 114e | **Done** (PR #42, v42, 703 tests; live check 17 Nov in part, see below) |
 | 114g | public | Long documents (**A-011**) | 20 MB file limit everywhere (Worker, server, `server/documents.js`, `web/shared/`), **verified live first**; attached copies read to 75,000 characters with a plain "covers the first … pages" note when longer; summaries that grow with the document. **Folded in:** the "Open the link" wording when a copy has no link. **Check first:** whether source summaries count towards the per-task tally (decision 11); if they do, ask Simon before changing it | 114f | **Done** (STATE v45). Part 1 (option 1 chosen by Simon): files over 8 MB streamed through the Worker; 20 MB limit everywhere (PR #43). Part 1b: no git folder-rename guess (PR #44); size check passed 17 Nov. Part 2: 75,000 characters with a coverage note, summaries of about 150–900 words following the document's sections, 100 pages, "Open the link" wording fixed. **Fix** (WP-114g-fix, STATE v46): the live check refused a long article's summary as too close, so summaries now get their own check wording (reporting the source is fine; applying it to his question is not). Part 2 (STATE v47): the same copy attached twice counts once, and the coverage note gives pages. Part 3 (STATE v48, **A-012**): 120,000 characters, and "Try the summary again" after a too-close answer. Source summaries don't count towards the per-task tally (saved with no text, not task-specific), so no change was needed |
+| 114h | public | Carry on with a conversation | After a reload, a task's conversation carries on from the latest one for that task and route (used within **60 days**, Simon's choice); **Start a new conversation** begins afresh. Raised by Simon (17 Nov) | 111b | **Done** (STATE v50) |
 | 115 | public | Notebook | Entries with author; quotes with citation; AI text pin-only; history and search; surfacing earlier research; notebook titles in the snapshot; the task panel's **Your notes** part. **Must use the notebook record shape fixed by WP-103** (`type: 'summary'` entries already exist). **Folded in (17 Nov, Simon):** a **Summarise again** button when a new copy is attached to a source that already has a summary (today the old summary shows and Summarise is gone) | 114 | To do (after 114g) |
 | 116 | public | Plan my answer | Plan record (his words only); pinned entries; gaps; main-point attempt; thesis added as an anchor (§23.6) | 115 | To do |
 | 117 | public | Review my work | Opus content review beside the spelling panel; paste check; feedback titles in the snapshot | 107, 113, 115 | To do |
@@ -154,7 +155,7 @@
 |---|---|
 | ~~Summaries of long attached documents are thin~~ | **Decided (17 Nov):** A-011, built in WP-114g. The 8 MB file limit also stopped a journal article uploading |
 | Topics and qualification can't be changed on the check screen | No topic-list route yet. Simon to choose the package |
-| Understand and research it starts again after a reload: earlier replies are lost from the screen and the tutor asks "What do you think the question is asking?" again | Raised by Simon (17 Nov). The turns are already saved (`GET /api/conversations/:id`); the screen keeps only the open conversation in memory. Simon to choose: a small package before WP-115, or fold into WP-115 |
+| ~~Understand and research it starts again after a reload~~ | **Done** in WP-114h (Simon chose a small package, 60 days) |
 | Navigation feels inconsistent in places | Simon to note the screen, what he tapped and what he expected. A small tidy-up package may follow |
 
 ### Private packages
@@ -170,9 +171,9 @@
 
 **Private commits since v1.7:** none recorded here. WP-114p status to confirm; live-check test records (the test task, its sources and attached copies) are now in the storage repository and may want a later clear-out like WP-114r.
 
-**Order:** ~~101 → … → 114 → 114d/e/f → 114g~~ → **115** → 116 → 117 → 118 → 119 → 120 → 121 → 122 → 123 → 124 → 125 → 126. WP-119, WP-123 and WP-124 are unblocked and can go earlier if Simon prefers. Private packages slot in when their information arrives; WP-142 can go at any time.
+**Order:** ~~101 → … → 114 → 114d/e/f → 114g → 114h~~ → **115** → 116 → 117 → 118 → 119 → 120 → 121 → 122 → 123 → 124 → 125 → 126. WP-119, WP-123 and WP-124 are unblocked and can go earlier if Simon prefers. Private packages slot in when their information arrives; WP-142 can go at any time.
 
-**Progress:** 15 of 26 public packages done, plus one hotfix (WP-108, 111 and 114 were split; WP-114d became 114d, 114e and 114f; WP-114g was added for A-011 and is done). Public tests: 327 at phase start → 640 (v39) → 703 (v42) → 721 (v45) → 723 (v46) → 724 (v47) → 726 (v48) → **727** (v49).
+**Progress:** 15 of 26 public packages done, plus one hotfix (WP-108, 111 and 114 were split; WP-114d became 114d, 114e and 114f; WP-114g was added for A-011 and is done). Public tests: 327 at phase start → 640 (v39) → 703 (v42) → 721 (v45) → 723 (v46) → 724 (v47) → 726 (v48) → 727 (v49) → **731** (v50).
 
 ## Risks
 | Risk | Handling |
