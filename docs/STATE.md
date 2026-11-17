@@ -1,6 +1,6 @@
-STATE version: 51
-Updated: 2026-11-17 23:30 (UK time)
-Last work package applied: WP-114i (Attach a copy instead, on a research card the tutor couldn't open)
+STATE version: 52
+Updated: 2026-11-18 00:00 (UK time)
+Last work package applied: WP-114j (attach a copy to any saved source; Summarise again from your copy)
 
 ## File tree
 ```
@@ -407,6 +407,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - WP-114g live check 17 Nov 2026 (Codespace logs): a long journal article attached to an own source on a task was read and summarised twice (22 s and 12 s), but both drafts failed the live check, so the app said it was too close to the task. Cause: summaries used the tutor-reply check, which treats describing the task's named places or case studies as a leak. Fixed in WP-114g-fix; re-check 17 Nov: a long summary following the paper's sections. Its note said "only the start of the first part": the same 25-page PDF (81,790 characters) was attached twice. Fixed in WP-114g-fix part 2 (duplicates skipped; page counts in the note). Then a different 13-page article (2.9 MB) summarised well. Raised to 120,000 characters with Try again (A-012, part 3).
 
 ## Deviations in effect
+- WP-114j (asked by Simon, 17 Nov 2026): a copy can be attached to any saved source on a task, including one already summarised (for example from a repository landing page with only the abstract). Every saved research card on a task offers **Attach a copy**. In the task panel, a summarised source with a ready copy offers **Summarise again from your copy** (`PANEL_MESSAGES.summariseFromCopy`); the new summary becomes the source's `summaryId` and the earlier notebook entry stays saved. `test/attach-panel.test.js` "source items" now expects the attach box on a summarised source (behaviour change, by request).
 - WP-114i (asked by Simon, 17 Nov 2026): when the tutor can't open a research card's page, the card offers **Attach a copy instead** beside "Paste the text instead", on a task. It opens the task panel's sources at that source with its attach box open (the proven WP-114f route); `SOURCE_MESSAGES.attachInstead` in `web/shared/conversation.js`.
 - WP-114h (asked by Simon, 17 Nov 2026; not in the original workplan): `web/conversation.js` looks up the latest conversation when a task's conversation opens (or once the tutor is ready), and has an optional **Start a new conversation** button (`#talk-new` in `web/index.html`). The 60-day window is Simon's choice, matching how long unlinked conversations are kept.
 - WP-114g-fix part 3 (A-012, asked by Simon): attached copies are read to 120,000 characters (`server/domain/attachments.js`, the `buildPrompt` cap in `server/ai/prompt.js`). `web/shared/conversation.js`: `FINAL_SUMMARY_OUTCOMES` no longer holds `too-close`, and `SOURCE_MESSAGES.summariseAgain` ("Try the summary again") labels the Summarise button after a too-close answer, on research cards (`web/conversation.js`) and in the task panel (`web/task-panel.js`), with the screen state `again`.

@@ -156,7 +156,7 @@ test("panelStage: the task's stage, else the list entry's, else not started", ()
   assert.equal(panelStage(), "not-started");
 });
 
-test("source items: the attach box only when attaching is wired up, and never on videos or summarised sources", () => {
+test("source items: the attach box only when attaching is wired up, never on videos, and also on summarised sources (WP-114j)", () => {
   const list = panelSources([
     { id: "src_a", title: "Invented page", url: "https://invented.example.org/a", category: "official" },
     { id: "src_v", title: "Invented video", url: "https://video.invented.example.org/v", category: "video" },
@@ -166,7 +166,7 @@ test("source items: the attach box only when attaching is wired up, and never on
   assert.equal(without.flatMap((i) => byClass(i, "attach-source")).length, 0);
   const seen = [];
   const items = sourceItems(doc, list, { canAttach: true, onAttach: (s, files) => seen.push([s.id, files]) });
-  assert.deepEqual(items.map((i) => byClass(i, "attach-source").length), [1, 0, 0]);
+  assert.deepEqual(items.map((i) => byClass(i, "attach-source").length), [1, 0, 1]);
   const [box] = byClass(items[0], "attach-source");
   assert.equal(box.tagName, "DETAILS");
   const [input] = box.all((el) => el.tagName === "INPUT");
@@ -375,4 +375,20 @@ test("WP-114i: a card the tutor couldn't open offers Attach a copy instead, whic
   const [box] = byClass(item, "attach-source");
   assert.equal(box.getAttribute("open"), "", "attach box open");
   assert.equal(await panel.openAttach("src_missing"), false);
+});
+
+test("WP-114j: a summarised source with a ready copy offers Summarise again from your copy; every saved card on a task offers Attach a copy", () => {
+  const list = panelSources([{ id: "src_r", title: "Invented repository article", url: "https://repository.invented.example.ac.uk/a", category: "academic", summaryId: "note_r" }]);
+  const seen = [];
+  const [none] = sourceItems(doc, list, { attachOf: () => ({ count: 0, state: "none" }) });
+  assert.equal(byAction(none, "summarise").length, 0, "no copy yet: the page summary stands");
+  const [ready] = sourceItems(doc, list, { attachOf: () => ({ count: 1, state: "ready" }), onSummarise: (s) => seen.push(s.id) });
+  const [again] = byAction(ready, "summarise");
+  assert.equal(again.textContent, PANEL_MESSAGES.summariseFromCopy);
+  again.listeners.click();
+  assert.deepEqual(seen, ["src_r"]);
+  const turn = { id: "turn_r", reply: "Invented reply.", sources: [{ index: 0, title: "Invented repository article", url: "https://repository.invented.example.ac.uk/a", site: "repository.invented.example.ac.uk", category: "academic" }] };
+  const summarised = { sourceId: "src_r", summary: { kind: "summary", id: "note_r", text: "Invented summary of the abstract.", section: null, source: { url: null } } };
+  const [b] = byAction(sourceList(doc, turn, { stateOf: () => summarised, onAttach: () => {} }), "attach");
+  assert.equal(b.textContent, "Attach a copy");
 });

@@ -90,6 +90,17 @@ export function sourceItems(doc, sources, {
       if (state.summary) box.append(summaryCard(doc, state.summary, key));
       else if (state.summaryOpen) box.append(make(doc, "p", { className: "hint", text: PANEL_MESSAGES.loading }));
       item.append(box);
+      // WP-114j: the page may have given only a landing page or abstract, so a copy he attaches can be
+      // summarised too; the new summary becomes the source's summary and the earlier one stays saved
+      if (source.canSummarise && copies.state === "ready" && !state.asked) {
+        const again = make(doc, "button", { className: "secondary", text: state.working ? SOURCE_MESSAGES.summarising : PANEL_MESSAGES.summariseFromCopy, attrs: { type: "button" } });
+        again.dataset.action = "summarise";
+        again.disabled = !ready || working;
+        again.addEventListener("click", () => onSummarise(source));
+        const actions = make(doc, "div", { className: "actions source-actions" });
+        actions.append(again);
+        item.append(actions);
+      }
     } else if (source.canSummarise) {
       // a ready copy is read instead of the page (WP-114f), so it can be summarised with or without a link
       if ((source.url || copies.state === "ready") && !state.asked) {
@@ -126,7 +137,8 @@ export function sourceItems(doc, sources, {
       item.append(actions);
     }
     const left = MAX_ATTACHMENTS - copies.count;
-    if (canAttach && source.canSummarise && !summarised && left > 0 && !state.sending && !(state.retry > 0)) {
+    // WP-114j: also once summarised, so a full copy can follow a summary of a landing page
+    if (canAttach && source.canSummarise && left > 0 && !state.sending && !(state.retry > 0)) {
       item.append(attachBox(doc, {
         key,
         left,

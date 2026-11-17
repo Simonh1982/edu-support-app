@@ -132,6 +132,8 @@ export const SOURCE_MESSAGES = Object.freeze({
   summariseAgain: "Try the summary again",
   // WP-114i: beside "Paste the text instead" on a card the tutor couldn't open, on a task
   attachInstead: "Attach a copy instead",
+  // WP-114j: on any saved card on a task, for example when only a landing page or abstract was read
+  attachCopy: "Attach a copy",
   summarising: "Summarising… This can take a minute or two.",
   summaryLabel: "AI summary",
   summaryNote: "Written by the AI from this source. Read the original to check it, and quote from the original, not this summary.",
