@@ -19,13 +19,21 @@ export function gitEnv({ token, env = process.env, host = 'github.com' } = {}) {
     LC_ALL: 'C',
   };
   for (const key of ['PATH', 'HOME']) if (env[key]) out[key] = env[key];
+  const config = [];
   if (token) {
     // the same header actions/checkout uses for HTTPS access with a token
     const basic = Buffer.from(`x-access-token:${token}`).toString('base64');
-    out.GIT_CONFIG_COUNT = '1';
-    out.GIT_CONFIG_KEY_0 = `http.https://${host}/.extraheader`;
-    out.GIT_CONFIG_VALUE_0 = `AUTHORIZATION: basic ${basic}`;
+    config.push([`http.https://${host}/.extraheader`, `AUTHORIZATION: basic ${basic}`]);
   }
+  // WP-114g: when the server's commit empties inbox/ (every capture moved to uploads/), git would
+  // otherwise treat the folder as renamed and move a capture the Worker added meanwhile into uploads/
+  // under its inbox name, so it was never taken in. Seen live 17 Nov 2026 with three quick captures.
+  config.push(['merge.directoryRenames', 'false']);
+  out.GIT_CONFIG_COUNT = String(config.length);
+  config.forEach(([key, value], i) => {
+    out[`GIT_CONFIG_KEY_${i}`] = key;
+    out[`GIT_CONFIG_VALUE_${i}`] = value;
+  });
   return out;
 }
 

@@ -134,7 +134,9 @@ test('makeEvent: small facts only, never text content', () => {
 // ---------- git helpers ----------
 test('gitEnv: the token only travels as an auth header in the environment; Codespace git settings ignored', () => {
   const env = gitEnv({ token: FAKE_TOKEN, env: { PATH: '/bin', HOME: '/h', GITHUB_TOKEN: 'codespace-own', GIT_TRACE: '1' } });
-  assert.equal(env.GIT_CONFIG_COUNT, '1');
+  assert.equal(env.GIT_CONFIG_COUNT, '2');
+  assert.equal(env.GIT_CONFIG_KEY_1, 'merge.directoryRenames');
+  assert.equal(env.GIT_CONFIG_VALUE_1, 'false');
   assert.equal(env.GIT_CONFIG_KEY_0, 'http.https://github.com/.extraheader');
   assert.equal(env.GIT_CONFIG_VALUE_0, `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${FAKE_TOKEN}`).toString('base64')}`);
   assert.equal(env.GIT_CONFIG_GLOBAL, '/dev/null');
@@ -144,7 +146,8 @@ test('gitEnv: the token only travels as an auth header in the environment; Codes
   assert.equal(env.GIT_TRACE, undefined);
   assert.equal(env.GIT_AUTHOR_NAME, IDENTITY.name);
   const plain = gitEnv({ env: { PATH: '/bin' } });
-  assert.equal(plain.GIT_CONFIG_COUNT, undefined);
+  assert.equal(plain.GIT_CONFIG_COUNT, '1', 'no token: only the directory-rename setting');
+  assert.equal(plain.GIT_CONFIG_KEY_0, 'merge.directoryRenames');
   assert.ok(!Object.values(env).some((v) => v.includes(FAKE_TOKEN)), 'raw token must not appear');
 });
 
@@ -399,6 +402,40 @@ async function bareRemote() {
   sh(seed, 'push', '--quiet', 'origin', 'HEAD');
   return { base, remote };
 }
+
+test('real git: a capture added while the server empties inbox/ stays in inbox/ (no folder-rename guess)', realGit, async () => {
+  // WP-114g live check, 17 Nov 2026: three quick captures; the server moved the first two out of
+  // inbox/ while the third arrived, and git moved the third into uploads/ as a "renamed folder".
+  const { base, remote } = await bareRemote();
+  try {
+    const seed = path.join(base, 'seed');
+    await mkdir(path.join(seed, 'inbox'), { recursive: true });
+    await writeFile(path.join(seed, 'inbox', 'cap-first001.jpg'), 'a'.repeat(3000));
+    await writeFile(path.join(seed, 'inbox', 'cap-first001.json'), '{"invented":1}\n');
+    sh(seed, 'add', '-A');
+    sh(seed, 'commit', '--quiet', '-m', 'first capture');
+    sh(seed, 'push', '--quiet', 'origin', 'HEAD');
+    const store = createStore({ dir: path.join(base, 'server-clone'), remoteUrl: remote, env: gitEnv({ token: FAKE_TOKEN, env: process.env }), log: silent });
+    assert.equal(await store.init(), true);
+    // the server takes the first capture in, emptying inbox/ in its own commit ...
+    await store.move('inbox/cap-first001.jpg', 'uploads/up_cap-first001.jpg');
+    await store.remove('inbox/cap-first001.json', { allowInbox: true });
+    await store.put('uploads/up_cap-first001.json', newRecord('up', { status: 'processing' }, { createdBy: 'learner' }));
+    await store.commitLocal();
+    // ... while the Worker adds a second one on GitHub
+    await writeFile(path.join(seed, 'inbox', 'cap-second02.jpg'), 'b'.repeat(5000));
+    await writeFile(path.join(seed, 'inbox', 'cap-second02.json'), '{"invented":2}\n');
+    sh(seed, 'add', '-A');
+    sh(seed, 'commit', '--quiet', '-m', 'second capture');
+    sh(seed, 'push', '--quiet', 'origin', 'HEAD');
+    const result = await store.flush();
+    assert.equal(result.pushed, true, result.error);
+    const files = sh(remote, 'ls-tree', '-r', '--name-only', 'HEAD').split('\n');
+    assert.ok(files.includes('inbox/cap-second02.jpg') && files.includes('inbox/cap-second02.json'), files.join(', '));
+    assert.ok(!files.some((f) => f.startsWith('uploads/cap-second02')), 'not moved into uploads/');
+    assert.ok(files.includes('uploads/up_cap-first001.jpg'));
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
 
 test('real git: clone, write, batch-commit and push to a bare repository', realGit, async () => {
   const { base, remote } = await bareRemote();
