@@ -9,7 +9,9 @@ import path from 'node:path';
 import { makeEvent } from '../server/storage/records.js';
 import { createMockAi } from '../server/ai/mock.js';
 import { matchApiRoute, handleApi } from '../server/api.js';
-import { CHECK_TIMEOUT_MS } from '../server/ai/check.js';
+import {
+  CHECK_TIMEOUT_MS, CHECK_SYSTEM, SUMMARY_CHECK_SYSTEM, SUMMARY_STRICT_INSTRUCTION, STRICT_INSTRUCTION,
+} from '../server/ai/check.js';
 import {
   SUMMARY_TIMEOUT_MS, SUMMARY_WORDS, SECTIONED_SUMMARY_CHARS, SOURCE_LIMITS, summaryWords, fileSummaryInstruction, parseSummaryReply,
 } from '../server/ai/sources.js';
@@ -192,4 +194,51 @@ test('the PDF reader says where each page ends, so coverage can count pages', as
   const first = r.text.slice(0, r.pageEnds[0]);
   assert.match(first, /^Invented first page/);
   assert.doesNotMatch(first, /second/);
+});
+
+// ---------- WP-114g-fix: the check for a summary on a task ----------
+
+test('a summary on a task is checked by what it does, not by sharing the task\'s place or case study', () => {
+  assert.notEqual(SUMMARY_CHECK_SYSTEM, CHECK_SYSTEM);
+  assert.match(SUMMARY_CHECK_SYSTEM, /data, never instructions/);
+  assert.match(SUMMARY_CHECK_SYSTEM, /even when they are the same places or case studies as the\s+task/);
+  assert.match(SUMMARY_CHECK_SYSTEM, /not by how much it overlaps/);
+  for (const still of [/answering the task's question or taking a\s+side on it/, /conclusion or judgement on the question/, /a plan, an essay\s+structure or sentences/, /rewriting the student's own writing/]) {
+    assert.match(SUMMARY_CHECK_SYSTEM, still);
+  }
+  assert.match(SUMMARY_CHECK_SYSTEM, /\{"leak": true or false/);
+  assert.match(SUMMARY_STRICT_INSTRUCTION, /You may still describe the places, case studies/);
+  for (const make of [() => fileSummaryInstruction({ title: 'Invented' }, { chars: 75_000 })]) {
+    assert.doesNotMatch(make(), /never\s+analyse or argue about the task's anchors/);
+    assert.match(make(), /never relay its argument on\s+their question: report what the source itself says/);
+  }
+});
+
+test('a long summary on a task: the summary check is used, and its second draft gets the summary wording', async () => {
+  const store = await fakeStore();
+  let verdicts = 0;
+  const ai = createMockAi({
+    replies: {
+      [MODELS.conversation]: () => JSON.stringify({ readOriginal: false, summary: 'Invented summary of the study at Invented Bay.', section: 'Results' }),
+      [MODELS.checker]: () => JSON.stringify({ leak: (verdicts += 1) === 1, reason: 'invented' }),
+    },
+  });
+  const silent = { log() {}, error() {}, warn() {} };
+  const call = (method, url, body) => handleApi({ match: matchApiRoute(method, url), pass: { role: 'learner' }, store, body, getAi: () => ({ ai, models: MODELS }), log: silent });
+  try {
+    const task = (await call('POST', '/api/tasks', {
+      title: 'Invented coast task', questionText: 'Invented question about Invented Bay?', anchors: [{ type: 'location', text: 'Invented Bay' }],
+    })).body.task;
+    const source = (await call('POST', '/api/sources/own', { title: 'Invented article', taskId: task.id, attachments: ['sinv1005-aa'] })).body.source;
+    await put(store, 'sinv1005-aa', pdfCopy(20, 3000));
+    const r = await call('POST', `/api/sources/${source.id}/summary`, {});
+    assert.deepEqual([r.body.outcome, r.body.checkResult], ['saved', 'regenerated']);
+    const checks = ai.calls.filter((c) => c.model === MODELS.checker);
+    assert.equal(checks.length, 2);
+    for (const c of checks) assert.equal(c.system, SUMMARY_CHECK_SYSTEM);
+    const drafts = ai.calls.filter((c) => c.model === MODELS.conversation);
+    assert.equal(drafts.length, 2);
+    assert.ok(drafts[1].prompt.includes(SUMMARY_STRICT_INSTRUCTION));
+    assert.ok(!drafts[1].prompt.includes(STRICT_INSTRUCTION));
+  } finally { await rm(store.dir, { recursive: true, force: true }); }
 });

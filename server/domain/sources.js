@@ -15,7 +15,7 @@ import {
   SUMMARY_CONTRACT, summaryInstruction, askSummary, summaryText, SOURCE_LIMITS,
   pastedSummaryInstruction, fileSummaryInstruction, PASTED_SOURCE_MAX_CHARS, cleanUrl,
 } from '../ai/sources.js';
-import { liveCheck, askChecker, STRICT_INSTRUCTION, CHECK_FEATURE } from '../ai/check.js';
+import { liveCheck, askChecker, SUMMARY_CHECK_SYSTEM, SUMMARY_STRICT_INSTRUCTION, CHECK_FEATURE } from '../ai/check.js';
 import { CONVERSATION_MESSAGES } from '../ai/conversation.js';
 import { DomainError, bad, notFound, plainObject, onlyKeys, recordId, wholeNumber, shortString } from './fields.js';
 import { readTask, withTaskLock } from './tasks.js';
@@ -290,9 +290,10 @@ export async function summariseSource(store, id, ctx = {}, body = {}) {
       route: 'research',
       check: (reply) => askChecker({
         ai: handle.ai, model: handle.models?.checker, task: taskForPrompt(task), reply, ceiling: ctx.aiCeiling, log,
+        system: SUMMARY_CHECK_SYSTEM,
       }),
       regenerate: async () => {
-        second = await ask(STRICT_INSTRUCTION);
+        second = await ask(SUMMARY_STRICT_INSTRUCTION);
         calls.push(second);
         if (second.result.kind !== 'summary') throw Object.assign(new Error('no summary'), { status: 502 });
         return { reply: summaryText(second.result), taskSpecific: false, model: second.model, ms: second.ms };

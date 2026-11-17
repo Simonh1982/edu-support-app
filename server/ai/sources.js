@@ -465,8 +465,8 @@ export function summaryInstruction(source) {
     'Otherwise write a short summary (no more than about 200 words): say it is a summary, say what the source',
     'covers and its key points in plain English, keep its level of challenge, name the most useful section in',
     '"section", and encourage them to read that part of the original. If the source addresses their task\'s',
-    'question directly, help them understand the source; never relay its argument on their question, and never',
-    'analyse or argue about the task\'s anchors.',
+    'question directly, help them understand the source; never relay its argument on their question: report what',
+    'the source itself says, without saying how it answers their question or which side it supports.',
   ].join('\n');
 }
 
@@ -485,8 +485,8 @@ export function pastedSummaryInstruction(source) {
     'Otherwise write a short summary (no more than about 200 words): say it is a summary of the part they pasted,',
     'say what it covers and its key points in plain English, keep its level of challenge, name the most useful',
     'section in "section", and encourage them to read that part of the original. If the text addresses their',
-    'task\'s question directly, help them understand it; never relay its argument on their question, and never',
-    'analyse or argue about the task\'s anchors.',
+    'task\'s question directly, help them understand it; never relay its argument on their question: report what',
+    'the source itself says, without saying how it answers their question or which side it supports.',
   ].join('\n');
 }
 
@@ -529,7 +529,7 @@ export function fileSummaryInstruction(source, { shortened = false, chars = 0 } 
     'and encourage them to read that part of the original.',
     sectioned ? 'It is a long document, so follow its own sections in order, using its headings where it has them, with a short paragraph for each main section. In "section", name the one or two sections most useful to their question.' : '',
     'If the text addresses their task\'s question directly, help them understand it; never relay its argument on',
-    'their question, and never analyse or argue about the task\'s anchors.',
+    'their question: report what the source itself says, without saying how it answers their question or which side it supports.',
   ].filter(Boolean).join('\n');
 }
 
