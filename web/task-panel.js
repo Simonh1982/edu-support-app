@@ -28,6 +28,10 @@ import {
 } from "./shared/task-panel.js";
 import { CAPTURE_MESSAGES, FILE_ACCEPT, newClientId, prepareCapture, sendCapture } from "./shared/capture.js";
 import { make, pasteBox, sourceLink, summaryCard } from "./source-parts.js";
+// WP-115b: the notes part, and "Add a quote" under each saved source
+import { NOTEBOOK_TEXT, checkQuote } from "./shared/notebook.js";
+import { quoteForm } from "./notebook-parts.js";
+import { createTaskNotes } from "./task-notes.js";
 
 const READY_STATES = new Set(["ready", "readyNoAi"]);
 const NO_COPIES = Object.freeze({ count: 0, state: "none" });
@@ -66,7 +70,7 @@ function attachBox(doc, { key, left, open = false, disabled = false, onToggle = 
  */
 export function sourceItems(doc, sources, {
   stateOf = () => ({}), ready = true, onSummarise = () => {}, onPaste = () => {}, onChange = () => {}, onOpenSummary = () => {},
-  attachOf = () => NO_COPIES, canAttach = false, onAttach = () => {}, onRetry = () => {},
+  attachOf = () => NO_COPIES, canAttach = false, onAttach = () => {}, onRetry = () => {}, onQuote = null,
 } = {}) {
   return sources.map((source) => {
     const state = stateOf(source.id) ?? {};
@@ -148,6 +152,18 @@ export function sourceItems(doc, sources, {
         onSubmit: (files) => onAttach(source, files),
       }));
     }
+    // WP-115b: a passage from this source, kept with its citation (§29)
+    if (onQuote && ready) {
+      item.append(quoteForm(doc, {
+        key,
+        form: state,
+        open: state.quoteOpen === true,
+        busy: state.quoteBusy === true,
+        status: state.quoteStatus ?? "",
+        onChange: (changes) => onChange(source, changes),
+        onSave: (values) => onQuote(source, values),
+      }));
+    }
     return item;
   });
 }
@@ -194,6 +210,8 @@ export function createTaskPanel({
   const hasStage = Object.values(stageEls).every(Boolean);
   const ownFiles = byId("own-source-files");
   const canAttach = Boolean(attach?.workerUrl && typeof attach.getToken === "function");
+  // WP-115b: optional, so the panel still works on a page without the notes part
+  const notes = createTaskNotes({ api, doc, failed: (result) => failedCall(result) ?? "" });
   const prepare = attach?.prepare ?? prepareCapture;
   const send = attach?.send ?? sendCapture;
 
@@ -264,6 +282,7 @@ export function createTaskPanel({
       canAttach,
       onAttach: attachTo,
       onRetry: (s) => sendCopies(s.id),
+      onQuote: notes ? saveQuote : null,
     }));
     els.ownAdd.disabled = !ready || busy;
   }
@@ -304,6 +323,28 @@ export function createTaskPanel({
     if (mine.failed && [task, sources].some((r) => ["network", "no-address", "not-json"].includes(r.kind))) onUnreachable?.();
     render();
     schedulePoll();
+  }
+
+  /** WP-115b: saves a quote from a saved source, then shows it in the notes part. */
+  async function saveQuote(source, values) {
+    if (!ready || stateOf(source.id).quoteBusy) return;
+    const checked = checkQuote(values);
+    if (checked.error) {
+      setState(source.id, { quoteStatus: checked.error });
+      renderSources();
+      return;
+    }
+    setState(source.id, { quoteBusy: true, quoteStatus: "" });
+    renderSources();
+    const result = await api.createQuote({ sourceId: source.id, text: checked.text, page: checked.page });
+    if (result.kind !== "ok") {
+      setState(source.id, { quoteBusy: false, quoteStatus: failedCall(result) || NOTEBOOK_TEXT.failed });
+      renderSources();
+      return;
+    }
+    setState(source.id, { quoteBusy: false, quoteText: "", quotePage: "", quoteOpen: true, quoteStatus: NOTEBOOK_TEXT.quoteSaved });
+    renderSources();
+    await notes?.refresh();
   }
 
   async function openSummary(source, open) {
@@ -554,8 +595,10 @@ export function createTaskPanel({
     if (!item || typeof item.taskId !== "string") {
       current = null;
       els.panel.hidden = true;
+      notes?.clear();
       return undefined;
     }
+    notes?.show(item.taskId);
     current = { item, task: null, sources: null, failed: false };
     // each part starts closed, so the conversation stays near the top on a phone
     for (const box of [els.question, els.sources, els.own, hasStage ? stageEls.box : null]) if (box) box.open = false;
@@ -583,6 +626,7 @@ export function createTaskPanel({
     const wasReady = ready;
     ready = READY_STATES.has(state);
     if (!ready) stopPolling();
+    notes?.setTutor(ready);
     render();
     if (ready && !wasReady && current && (!current.task || !current.sources)) return load();
     if (ready && !wasReady) schedulePoll();
@@ -590,6 +634,7 @@ export function createTaskPanel({
   }
 
   function clear() {
+    notes?.clear();
     current = null;
     busy = false;
     stageBusy = false;

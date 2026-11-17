@@ -61,6 +61,7 @@
             <button type="button" id="go-work" class="big">Help me with some work</button>
             <button type="button" id="go-learn" class="big">Learn or revise</button>
             <button type="button" id="go-upcoming" class="big">See what's coming up</button>
+            <button type="button" id="go-notebook" class="big">Your notebook</button>
           </nav>
 
           <button type="button" id="go-more" class="link">More</button>
@@ -316,6 +317,17 @@
                   <p id="own-source-status" class="status" role="status" aria-live="polite"></p>
                 </details>
               </details>
+              <!-- WP-115b: his notes, quotes and AI summaries for this task, and earlier research (build spec §29) -->
+              <div id="task-panel-earlier" class="earlier" hidden></div>
+              <details id="task-panel-notes" class="more" hidden>
+                <summary id="task-panel-notes-label">Your notes for this task</summary>
+                <p id="task-panel-notes-status" class="hint" role="status" aria-live="polite"></p>
+                <ul id="task-panel-notes-list" class="source-cards"></ul>
+                <details class="more">
+                  <summary>Write a note</summary>
+                  <div id="task-panel-note-editor"></div>
+                </details>
+              </details>
             </section>
 
             <div id="talk-routes" class="route-switch" hidden>
@@ -368,6 +380,32 @@
           <section aria-labelledby="learn-heading">
             <h2 id="learn-heading" tabindex="-1">Learn or revise</h2>
             <p>This is coming soon. For now, use "Help me with some work" for anything you've been set.</p>
+          </section>
+        </div>
+
+        <div id="view-notebook" class="view" hidden>
+          <button type="button" class="back" data-back>Back</button>
+
+          <section aria-labelledby="notebook-heading">
+            <h2 id="notebook-heading" tabindex="-1">Your notebook</h2>
+            <form id="notebook-search" class="notebook-search" role="search" novalidate>
+              <label for="notebook-q">Search your notebook</label>
+              <p class="hint" id="notebook-q-hint">Words from a title, a note or a source.</p>
+              <input type="search" id="notebook-q" maxlength="100" autocomplete="off" aria-describedby="notebook-q-hint">
+              <label for="notebook-kind">Show</label>
+              <select id="notebook-kind"></select>
+              <label for="notebook-task">Task</label>
+              <select id="notebook-task"></select>
+              <div class="actions">
+                <button type="submit" class="primary">Search</button>
+              </div>
+            </form>
+            <div class="actions">
+              <button type="button" id="notebook-write" class="secondary" hidden>Write a note</button>
+            </div>
+            <div id="notebook-editor" hidden></div>
+            <p id="notebook-status" class="status" role="status" aria-live="polite"></p>
+            <ul id="notebook-list" class="source-cards" aria-label="Your notebook"></ul>
           </section>
         </div>
 

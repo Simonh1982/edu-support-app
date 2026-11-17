@@ -3,9 +3,10 @@
 // own view with a Back button, so there is one decision at a time. Views are added to the browser's
 // history, so the phone's own back gesture returns home too. WP-111b adds the conversation view
 // ("talk"), which is opened from "Help me with some work" rather than from a home button.
-export const VIEWS = Object.freeze(["home", "work", "upcoming", "learn", "more", "talk"]);
+export const VIEWS = Object.freeze(["home", "work", "upcoming", "learn", "more", "talk", "notebook"]);
 // The views with their own button on the home view
-export const HOME_OPENERS = Object.freeze(["work", "upcoming", "learn", "more"]);
+// WP-115b: "Your notebook" has its own home button (owner's choice, 17 Nov 2026)
+export const HOME_OPENERS = Object.freeze(["work", "upcoming", "learn", "more", "notebook"]);
 const DEFAULT_HEADING = "Home";
 const DEFAULT_TITLE = "Study";
 const SIGNED_OUT_TITLE = "Sign in";

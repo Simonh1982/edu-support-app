@@ -102,6 +102,13 @@ export function createApi({
     // body: {} to fetch the page, or { text } with text he pasted from it (A-010)
     summariseSource: (id, body = {}) =>
       call(`api/sources/${encodeURIComponent(id)}/summary`, { method: "POST", body, timeout: summaryTimeoutMs }),
+    // WP-115b: the notebook (server routes from WP-115a); query is notebookQuery() from shared/notebook.js
+    listNotebook: (query = "") => call(`api/notebook${query}`),
+    earlierResearch: (taskId) => call(`api/notebook/earlier?taskId=${encodeURIComponent(taskId)}`),
+    createNote: (body) => call("api/notebook/notes", { method: "POST", body }),
+    updateNote: (id, body) => call(`api/notebook/notes/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    createQuote: (body) => call("api/notebook/quotes", { method: "POST", body }),
+    pinEntry: (id, body) => call(`api/notebook/${encodeURIComponent(id)}/pin`, { method: "POST", body }),
     openItem: (type, id) => call(`api/item?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`),
     // WP-114e: the task panel (the full task and its saved sources) and sources he adds himself (A-010)
     getTask: (id) => call(`api/tasks/${encodeURIComponent(id)}`),
