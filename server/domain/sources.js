@@ -32,6 +32,7 @@ export const SOURCE_MESSAGES = Object.freeze({
   notFound: 'Source not found.',
   cardNotFound: "That source isn't available to save any more.",
   readOriginal: "This one's short and readable, so it's worth reading the original. Open the link and take a look.",
+  readOriginalNoLink: "This one's short and readable, so it's worth reading the original yourself.",
   unavailable: "I couldn't open that page just now. Some sites don't let the tutor read them. Open the link and read it yourself, or copy the part you need and paste it below.",
   subscription: "This one needs a subscription, so I can't read it. Ask {parents} if they can get you a copy, then paste the part you need below.",
   video: "Videos can't be summarised. Watch it, and jot down the key points as you go.",
@@ -254,7 +255,7 @@ export async function summariseSource(store, id, ctx = {}, body = {}) {
   const topicId = Array.isArray(source.topicIds) ? source.topicIds[0] ?? null : null;
   const instructionFor = () => {
     if (pasted) return pastedSummaryInstruction(source);
-    if (fileText) return fileSummaryInstruction(source, { shortened: files.shortened === true });
+    if (fileText) return fileSummaryInstruction(source, { shortened: files.shortened === true, chars: fileText.length });
     return summaryInstruction(source);
   };
   const ask = async (extra = '') => {
@@ -328,7 +329,8 @@ export async function summariseSource(store, id, ctx = {}, body = {}) {
   if (outcome !== 'saved') {
     await event();
     const message = {
-      'read-original': SOURCE_MESSAGES.readOriginal,
+      // "Open the link" only when there is one (WP-114g): an attached copy or a source with no link
+      'read-original': fileText ? ATTACH_MESSAGES.readOriginal : source.url ? SOURCE_MESSAGES.readOriginal : SOURCE_MESSAGES.readOriginalNoLink,
       unavailable: SOURCE_MESSAGES.unavailable,
       subscription: SOURCE_MESSAGES.subscription.replaceAll('{parents}', settings.labels.parents),
       'too-close': SOURCE_MESSAGES.tooClose,
@@ -341,7 +343,8 @@ export async function summariseSource(store, id, ctx = {}, body = {}) {
   const entry = newRecord('note', {
     type: 'summary',
     title: source.title,
-    text: { value: r.summary, author: 'ai' },
+    // A-011: a copy that wasn't read in full says which part the summary covers (the app's words)
+    text: { value: fileText && files.coverage ? `${r.summary}\n\n${files.coverage}` : r.summary, author: 'ai' },
     section: r.section ? { value: r.section, author: 'ai' } : null,
     taskId: source.taskId ?? null,
     topicIds: Array.isArray(source.topicIds) ? source.topicIds : [],

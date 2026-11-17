@@ -17,7 +17,8 @@ export const MARKERS = Object.freeze({
   pdfOne: 'Invented river study, page one',
   pdfTwo: 'Second page marker: estuary',
 });
-export const LONG_PAGES = 60;
+// past MAX_PAGES (100 since WP-114g), so the page limit is exercised
+export const LONG_PAGES = 120;
 
 export const USAGE = `Usage: npm run spike:docs [-- --only docx,pdf,scan,broken,long] [--file <path to .pdf or .docx>]
 --file prints counts only (pages, characters, scan verdict), never the document's text.`;

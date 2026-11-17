@@ -100,7 +100,7 @@ test('the attached text: waiting until every copy is read; parts joined in order
   await upload(store, 'sinv0002-aa', { status: 'processing' });
   assert.deepEqual(await attachmentText(store, source), { state: 'waiting' }, 'still being read');
   await upload(store, 'sinv0002-aa', { status: 'done', extractedText: { value: 'Page two', author: 'source' } });
-  assert.deepEqual(await attachmentText(store, source), { state: 'ready', text: '[Part 1 of 2]\nPage one\n\n[Part 2 of 2]\nPage two', shortened: false });
+  assert.deepEqual(await attachmentText(store, source), { state: 'ready', text: '[Part 1 of 2]\nPage one\n\n[Part 2 of 2]\nPage two', shortened: false, coverage: null });
   await upload(store, 'sinv0003-aa', { status: 'done', extractedText: { value: 'x'.repeat(ATTACHED_SOURCE_MAX_CHARS + 5), author: 'source' } });
   const long = await attachmentText(store, { uploadIds: ['up_sinv0003-aa'] });
   assert.deepEqual([long.text.length, long.shortened], [ATTACHED_SOURCE_MAX_CHARS, true]);
@@ -124,13 +124,13 @@ test('copies of the server rules match the screen and the Worker', () => {
   assert.deepEqual(items.map((i) => i.clientId), ['pinv0006-aa'], 'copies of a source show in the task panel, not in "Your photos and files"');
 });
 
-test('the prompt takes a longer source only when asked, and never more than 40,000 characters', () => {
-  const long = 'y'.repeat(50_000);
+test('the prompt takes a longer source only when asked, and never more than 75,000 characters (A-011)', () => {
+  const long = 'y'.repeat(100_000);
   assert.match(buildPrompt({ sourceText: 'z'.repeat(LIMITS.sourceChars + 1) }), /\(shortened\)/);
   assert.doesNotMatch(buildPrompt({ sourceText: 'z'.repeat(30_000), sourceLimit: ATTACHED_SOURCE_MAX_CHARS }), /\(shortened\)/);
   const capped = buildPrompt({ sourceText: long, sourceLimit: 999_999 });
   assert.match(capped, /\(shortened\)/);
-  assert.ok(capped.length < 41_000);
+  assert.ok(capped.length < 76_000 && capped.length > 74_000);
   assert.match(fileSummaryInstruction({ title: 'Invented', url: null, publisher: 'A. Inventor' }, { shortened: true }), /stops part-way/);
   assert.doesNotMatch(fileSummaryInstruction({ title: 'Invented' }), /stops part-way/);
 });
