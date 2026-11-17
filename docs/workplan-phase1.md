@@ -1,6 +1,6 @@
 # Workplan: phase 1 (MVP: Work and Learn): APPROVED
-**Version:** 1.9, 17 November 2026. **Status:** **approved by Simon (31 Oct)**, and this is the working document. Updated after WP-114f (public STATE **v42**) and the switch to Claude Code as the main developer.
-**Starts from:** public STATE **v19** (phase 0 closed). **Now at:** STATE **v42**, last package WP-114f (PR #42), **703 tests passing**. Build spec generated from master **v3.7**. Current amendments (in `docs/build-spec-amendments.md`): A-008, A-009, A-010 and **A-011** (long documents). **Next amendment: A-012.** Blueprint **v1.4** (unchanged).
+**Version:** 1.9, 17 November 2026. **Status:** **approved by Simon (31 Oct)**, and this is the working document. Updated after WP-114g (public STATE **v45**) and the switch to Claude Code as the main developer.
+**Starts from:** public STATE **v19** (phase 0 closed). **Now at:** STATE **v45**, last package WP-114g, **721 tests passing**. Build spec generated from master **v3.7**. Current amendments (in `docs/build-spec-amendments.md`): A-008, A-009, A-010 and **A-011** (long documents). **Next amendment: A-012.** Blueprint **v1.4** (unchanged).
 **Scope source:** build spec §47.1 phase 1 row, plus A-005 and A-008 to A-011, plus items carried from phase 0.
 
 ## How Claude Code uses this document
@@ -111,7 +111,7 @@
 | 114d (part) | public | Tiers, preferred sites, paywalls | A-009; `fetchWatcher`; `scripts/source-check.js`; reply wait 210 s | 114 | **Done** (v40; live check 6 Nov) |
 | 114e | public | Task panel, pasted text, own sources | A-010: task panel; paste the text instead; add a source he found himself | 114d | **Done** (v41; live check 6 Nov) |
 | 114f | public | Attach a copy; change the stage | A-010 3B: attach a PDF, Word file or up to 5 photos to a source (Worker inbox kind `source`); "Change the stage" in the task panel; Worker tidy-ups | 114e | **Done** (PR #42, v42, 703 tests; live check 17 Nov in part, see below) |
-| 114g | public | Long documents (**A-011**) | 20 MB file limit everywhere (Worker, server, `server/documents.js`, `web/shared/`), **verified live first**; attached copies read to 75,000 characters with a plain "covers the first … pages" note when longer; summaries that grow with the document. **Folded in:** the "Open the link" wording when a copy has no link. **Check first:** whether source summaries count towards the per-task tally (decision 11); if they do, ask Simon before changing it | 114f | **In progress.** Part 1 (17 Nov, option 1 chosen by Simon): files over 8 MB streamed through the Worker; 20 MB limit in the Worker, server and page; `scripts/inbox-size-check.js` for the live check (STATE v43; PR #43). Live check 17 Nov: 7.9, 14.0 and 19.9 MB all passed the Worker and GitHub; the server missed the 20 MB one because of a git folder-rename guess, fixed in part 1b (STATE v44). Part 2 (75,000 characters, longer summaries, 100 pages, "Open the link" wording) after the size check passes |
+| 114g | public | Long documents (**A-011**) | 20 MB file limit everywhere (Worker, server, `server/documents.js`, `web/shared/`), **verified live first**; attached copies read to 75,000 characters with a plain "covers the first … pages" note when longer; summaries that grow with the document. **Folded in:** the "Open the link" wording when a copy has no link. **Check first:** whether source summaries count towards the per-task tally (decision 11); if they do, ask Simon before changing it | 114f | **Done** (STATE v45). Part 1 (option 1 chosen by Simon): files over 8 MB streamed through the Worker; 20 MB limit everywhere (PR #43). Part 1b: no git folder-rename guess (PR #44); size check passed 17 Nov. Part 2: 75,000 characters with a coverage note, summaries of about 150–900 words following the document's sections, 100 pages, "Open the link" wording fixed. Source summaries don't count towards the per-task tally (saved with no text, not task-specific), so no change was needed |
 | 115 | public | Notebook | Entries with author; quotes with citation; AI text pin-only; history and search; surfacing earlier research; notebook titles in the snapshot; the task panel's **Your notes** part. **Must use the notebook record shape fixed by WP-103** (`type: 'summary'` entries already exist) | 114 | To do (after 114g) |
 | 116 | public | Plan my answer | Plan record (his words only); pinned entries; gaps; main-point attempt; thesis added as an anchor (§23.6) | 115 | To do |
 | 117 | public | Review my work | Opus content review beside the spelling panel; paste check; feedback titles in the snapshot | 107, 113, 115 | To do |
@@ -143,11 +143,11 @@
 | ~~Record the WP-108b and WP-109 live checks~~ | `docs/STATE.md` | **Done** (WP-110) |
 | ~~Record the WP-114c live check~~ | `docs/STATE.md` | **Done** (v40–42) |
 | ~~`/repo-file` catch logs `err?.name`; drop the weekly-wake comment~~ | `wake/worker.js` | **Done** (WP-114f) |
-| Record the WP-114f live check (table above) in "Verify steps passed" | `docs/STATE.md` | Next public package (WP-115) |
+| ~~Record the WP-114f live check (table above) in "Verify steps passed"~~ | `docs/STATE.md` | **Done** (WP-114g) |
 | Loader also reads `structure.optionalGroups` | `server/curriculum.js` | WP-120, or any earlier package that edits that file |
 | Tighten the wellbeing level wording in `ROUTE_SYSTEM`; add light-model route-choice eval cases at levels 0–3 | `server/ai/conversation.js`, `evals/cases` | WP-125 |
 | Extend `BLOCKED_SOURCE_HOSTS` as essay-bank sites are found | `server/ai/sources.js` | Any package touching sources |
-| A "read the original" answer about an attached copy says "Open the link", even when there is no link | `server/domain/attachments.js` / summary messages | WP-114g |
+| ~~A "read the original" answer about an attached copy says "Open the link", even when there is no link~~ | `server/domain/attachments.js` / summary messages | **Done** (WP-114g) |
 
 ### Open items (no package yet)
 | Item | Notes |
@@ -169,9 +169,9 @@
 
 **Private commits since v1.7:** none recorded here. WP-114p status to confirm; live-check test records (the test task, its sources and attached copies) are now in the storage repository and may want a later clear-out like WP-114r.
 
-**Order:** ~~101 → … → 114 → 114d/e/f~~ → **114g** → 115 → 116 → 117 → 118 → 119 → 120 → 121 → 122 → 123 → 124 → 125 → 126. WP-119, WP-123 and WP-124 are unblocked and can go earlier if Simon prefers. Private packages slot in when their information arrives; WP-142 can go at any time.
+**Order:** ~~101 → … → 114 → 114d/e/f → 114g~~ → **115** → 116 → 117 → 118 → 119 → 120 → 121 → 122 → 123 → 124 → 125 → 126. WP-119, WP-123 and WP-124 are unblocked and can go earlier if Simon prefers. Private packages slot in when their information arrives; WP-142 can go at any time.
 
-**Progress:** 15 of 26 public packages done, plus one hotfix (WP-108, 111 and 114 were split; WP-114d became 114d, 114e and 114f). Public tests: 327 at phase start → 640 (v39) → **703** (v42).
+**Progress:** 15 of 26 public packages done, plus one hotfix (WP-108, 111 and 114 were split; WP-114d became 114d, 114e and 114f; WP-114g was added for A-011 and is done). Public tests: 327 at phase start → 640 (v39) → 703 (v42) → **721** (v45).
 
 ## Risks
 | Risk | Handling |

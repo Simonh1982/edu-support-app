@@ -289,7 +289,9 @@ async function readDocument(ctx) {
   const readBy = { role: 'text', model: null };
 
   if (kind !== 'brief') {
-    return saveDone(ctx, { method: 'text', text, truncated: result.truncated === true, uncertain: pages, corrections: [], proposal: null, readBy, reread: false });
+    // page facts (WP-114g) let a summary of a long copy say which pages it covers
+    const pageFacts = Number.isInteger(result.pageCount) ? { pageCount: result.pageCount, pageEnds: Array.isArray(result.pageEnds) ? result.pageEnds : [] } : {};
+    return saveDone(ctx, { method: 'text', text, truncated: result.truncated === true, uncertain: pages, corrections: [], proposal: null, readBy, reread: false, extra: pageFacts });
   }
 
   const qualifications = qualificationsFor(curriculum);

@@ -30,7 +30,8 @@ export const SOURCE_CARDS = 5;
 // Copy of PASTED_SOURCE_MAX_CHARS in server/ai/sources.js (A-010; checked by test/task-panel.test.js).
 export const PASTED_SOURCE_MAX_CHARS = 12_000;
 // A summary opens the page and, on a task, passes the live check, which may write it a second time.
-export const SUMMARY_TIMEOUT_MS = 210_000;
+// two summaries and two checks at the server's limits (120 s and 20 s each; A-011, WP-114g), plus a margin
+export const SUMMARY_TIMEOUT_MS = 300_000;
 
 // A research reply may run several searches (A-009 tiers: up to 110 s), then a retry and the live
 // check, so the browser waits longer than for other calls.

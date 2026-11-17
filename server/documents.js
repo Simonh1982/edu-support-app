@@ -12,10 +12,11 @@ export const DOCUMENT_TYPES = Object.freeze([DOCX_TYPE, PDF_TYPE]);
 
 // Same ceiling as the inbox, so anything the Worker accepts can be read.
 export const MAX_DOCUMENT_BYTES = INBOX_MAX_BYTES;
-// Briefs and drafts are short; a long PDF is read up to this many pages and marked truncated.
-export const MAX_PAGES = 40;
-export const MAX_TEXT_CHARS = 100_000;
-export const EXTRACT_TIMEOUT_MS = 20_000;
+// A long PDF is read up to this many pages and marked truncated. A-011 (WP-114g): long documents
+// attached to a source, such as a journal article, so at least 100 pages and a longer reading time.
+export const MAX_PAGES = 100;
+export const MAX_TEXT_CHARS = 300_000;
+export const EXTRACT_TIMEOUT_MS = 60_000;
 // A-003: a PDF counts as a scan when it has almost no text. Measured as non-space characters per page
 // read, so a scan with a printed page number or footer still counts as a scan.
 export const SCANNED_CHARS_PER_PAGE = 40;
@@ -206,7 +207,7 @@ export async function extractDocument({
       const raw = await withTimeout(readDocx(loaded.lib, bytes), timeoutMs);
       const capped = capText(cleanText(raw.text));
       return {
-        ok: true, kind, text: capped.text, pageCount: null, pagesRead: null, pageChars: null,
+        ok: true, kind, text: capped.text, pageCount: null, pagesRead: null, pageChars: null, pageEnds: null,
         scanned: false, lowTextPages: [], truncated: capped.cut, warnings: raw.warnings, ms: elapsed(),
       };
     } catch (err) {
@@ -227,9 +228,14 @@ export async function extractDocument({
     const judged = judgePages(pageChars);
     const joined = judged.scanned ? '' : result.pages.join('\n\n');
     const capped = capText(joined);
+    // where each page read ends in the text (WP-114g), so a summary can say which pages it covers
+    let at = 0;
+    const pageEnds = judged.scanned ? [] : result.pages
+      .map((page, i) => (at += (i ? 2 : 0) + page.length))
+      .filter((end) => end <= capped.text.length);
     return {
       ok: true, kind, text: capped.text, pageCount: result.pageCount, pagesRead: result.pages.length,
-      pageChars, scanned: judged.scanned, lowTextPages: judged.lowTextPages,
+      pageChars, pageEnds, scanned: judged.scanned, lowTextPages: judged.lowTextPages,
       truncated: capped.cut || result.pages.length < result.pageCount, warnings: 0, ms: elapsed(),
     };
   } catch (err) {

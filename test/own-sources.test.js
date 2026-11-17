@@ -172,7 +172,7 @@ test('pasted text that is short and readable: read the original; unreadable: unc
   const env = await setup({ summaries: [{ readOriginal: true }, { unavailable: true }, { unavailable: true, subscription: true }] });
   const source = await ownSource(env);
   const first = await env.call('POST', `/api/sources/${source.id}/summary`, { text: PASTED });
-  assert.deepEqual([first.status, first.body.outcome, first.body.message], [200, 'read-original', SOURCE_MESSAGES.readOriginal]);
+  assert.deepEqual([first.status, first.body.outcome, first.body.message], [200, 'read-original', SOURCE_MESSAGES.readOriginalNoLink], 'no link, so not "Open the link" (WP-114g)');
   const second = await env.call('POST', `/api/sources/${source.id}/summary`, { text: PASTED });
   assert.deepEqual([second.body.outcome, second.body.message], ['unclear', SOURCE_MESSAGES.pasteUnclear]);
   const third = await env.call('POST', `/api/sources/${source.id}/summary`, { text: PASTED });
