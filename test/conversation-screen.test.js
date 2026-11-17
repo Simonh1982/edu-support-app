@@ -299,7 +299,8 @@ test("the work view starts with Get help with a task; the conversation view has 
 test("home knows the conversation view, with no button of its own on the home view", async () => {
   const { VIEWS, HOME_OPENERS } = await import("../web/home.js");
   assert.ok(VIEWS.includes("talk"));
-  assert.deepEqual([...HOME_OPENERS], ["work", "upcoming", "learn", "more"]);
+  // WP-115b adds "Your notebook" (owner's choice)
+  assert.deepEqual([...HOME_OPENERS], ["work", "upcoming", "learn", "more", "notebook"]);
 });
 
 test("the page wires the conversation and the coloured status panel", () => {

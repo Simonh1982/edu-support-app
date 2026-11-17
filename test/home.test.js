@@ -452,15 +452,15 @@ test("only device-store.js touches IndexedDB, and only own devices open it", () 
   assert.doesNotMatch(readFileSync(join(WEB, "home.js"), "utf8"), /localStorage|sessionStorage|indexedDB|innerHTML/);
 });
 
-test("the home view has the three large actions, Recommended next and a smaller More", () => {
+test("the home view has the large actions (WP-115b adds Your notebook), Recommended next and a smaller More", () => {
   const html = readFileSync(join(WEB, "index.html"), "utf8");
   const home = html.slice(html.indexOf('<div id="view-home"'), html.indexOf('<div id="view-work"'));
   const big = [...home.matchAll(/<button type="button" id="go-(\w+)" class="big">([^<]+)<\/button>/g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(big, [["work", "Help me with some work"], ["learn", "Learn or revise"], ["upcoming", "See what's coming up"]]);
+  assert.deepEqual(big, [["work", "Help me with some work"], ["learn", "Learn or revise"], ["upcoming", "See what's coming up"], ["notebook", "Your notebook"]]);
   assert.match(home, /<button type="button" id="go-more" class="link">More<\/button>/);
   assert.match(home, /<section id="recommend"[^>]*hidden>/);
   assert.match(home, /<h2 id="recommend-heading">Recommended next<\/h2>/);
-  for (const view of ["work", "upcoming", "learn", "more"]) {
+  for (const view of ["work", "upcoming", "learn", "more", "notebook"]) {
     assert.match(html, new RegExp(`<div id="view-${view}" class="view" hidden>\\s*<button type="button" class="back" data-back>Back</button>`), view);
   }
   const work = html.slice(html.indexOf('<div id="view-work"'), html.indexOf('<div id="view-upcoming"'));

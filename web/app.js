@@ -19,6 +19,7 @@ import { createTaskEntry } from "./check.js";
 import { createUpcoming } from "./upcoming.js";
 import { createHome } from "./home.js";
 import { createConversation } from "./conversation.js";
+import { createNotebook } from "./notebook.js";
 import { openDeviceStore } from "./device-store.js";
 import { createApi } from "./shared/api.js";
 import { createAccessibility } from "./shared/accessibility.js";
@@ -74,6 +75,8 @@ function init() {
   let conversation = null;
   let latestItems = [];
   let tutorState = "waiting";
+  // WP-115b: "Your notebook"
+  let notebook = null;
 
   // Text size, spacing, theme and contrast from the snapshot (blueprint §10.6). Read through the
   // Worker, so they apply while the tutor is still waking.
@@ -90,6 +93,7 @@ function init() {
     onRecommend: (taskId) => upcoming?.focusTask(taskId),
     onShow: (view) => {
       if (view === "work") conversation?.refreshTasks();
+      if (view === "notebook") notebook?.show();
     },
   });
   offline.onChange((count) => home?.setQueueNote(queueNote(count, { shared: sharedComputer })));
@@ -143,6 +147,14 @@ function init() {
     onTaskChanged: () => upcoming?.refresh(),
   });
 
+  notebook = createNotebook({
+    api,
+    workerUrl: config.workerUrl,
+    getTasks: () => latestItems,
+    onSignedOut: signedOut,
+    onUnreachable: wakeAgain,
+  });
+
   function wakeAgain() {
     if (!READY_STATES.has(tutorState)) return;
     const pass = loadPass({ role: ROLE, local, session });
@@ -155,6 +167,7 @@ function init() {
     capture?.setTutor(state);
     taskEntry?.setTutor(state);
     upcoming?.setTutor(state);
+    notebook?.setTutor(state);
   }
 
   function stopWaking() {
@@ -170,6 +183,7 @@ function init() {
     taskEntry?.stop();
     upcoming?.stop();
     conversation?.stop();
+    notebook?.stop();
     latestItems = [];
     els.wakeStatus.removeAttribute("data-tutor");
     setTutor("waiting");
@@ -250,6 +264,7 @@ function init() {
     taskEntry?.start();
     upcoming?.start(pass.token);
     conversation?.start();
+    notebook?.start(pass.token);
   }
 
   els.form.addEventListener("submit", (event) => {

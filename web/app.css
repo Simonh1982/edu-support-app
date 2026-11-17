@@ -1030,3 +1030,35 @@ button.vote[aria-pressed="true"]::after {
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+/* WP-115b: the notebook (build spec §29) */
+.notebook-excerpt {
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+.notebook-full .read-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.quote-picks {
+  list-style: none;
+  padding: 0;
+}
+.quote-picks li {
+  margin: 0.5rem 0;
+  overflow-wrap: anywhere;
+}
+.earlier-research {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: var(--border-width) solid var(--muted);
+  border-radius: 0.5rem;
+}
+.note-form textarea,
+.note-form input,
+.note-form select,
+.notebook-search input,
+.notebook-search select {
+  width: 100%;
+  box-sizing: border-box;
+}
