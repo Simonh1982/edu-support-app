@@ -41,6 +41,7 @@ import {
   taskChoices,
   turnFromReply,
   turnsFromServer,
+  conversationDay,
 } from "./shared/conversation.js";
 
 const READY_STATES = new Set(["ready", "readyNoAi"]);
@@ -167,6 +168,9 @@ export function createConversation({
     error: byId("talk-error"),
   };
   if (Object.values(els).some((el) => !el) || !home) return null;
+  // WP-114h: optional, so a page without it still works
+  const newChat = byId("talk-new");
+  const newChatRow = byId("talk-new-actions");
 
   let ready = false;
   let active = false;
@@ -265,9 +269,10 @@ export function createConversation({
   function openTalk({ taskId, title, route, draft = "" }) {
     const same = session && session.taskId === taskId && session.route === route && session.conversationId;
     if (!same) {
-      session = { route, taskId, title, conversationId: null, view: null, turns: [], asked: false };
+      session = { route, taskId, title, conversationId: null, view: null, turns: [], asked: false, lookedUp: false };
       els.text.value = draft;
       setText(els.status, "");
+      if (ready) lookUp(session);
     } else if (draft && !els.text.value) {
       els.text.value = draft;
     }
@@ -281,10 +286,36 @@ export function createConversation({
   /** Switching route before the conversation starts keeps whatever he has written. */
   function switchRoute(route) {
     if (!session || session.conversationId || busy) return;
-    session = { ...session, route };
+    session = { ...session, route, lookedUp: false };
     render();
     els.heading.focus();
+    if (ready) lookUp(session);
   }
+
+  /** WP-114h: carry on from his latest conversation for this task and route, if there is one. */
+  async function lookUp(mine) {
+    if (!mine?.taskId || mine.lookedUp || mine.conversationId) return;
+    mine.lookedUp = true;
+    const result = await api.latestConversation?.({ taskId: mine.taskId, route: mine.route });
+    if (session !== mine || mine.conversationId || result?.kind !== "ok") return;
+    const conversation = result.body?.conversation;
+    if (!conversation || typeof conversation.id !== "string") return;
+    mine.conversationId = conversation.id;
+    mine.view = conversation;
+    mine.turns = turnsFromServer(conversation);
+    mine.asked = mine.turns.some((t) => t.action === "support");
+    render();
+    setText(els.status, TALK_MESSAGES.carriedOn(conversationDay(conversation.updatedAt, now())));
+  }
+
+  newChat?.addEventListener("click", () => {
+    if (!session || busy) return;
+    session = { ...session, conversationId: null, view: null, turns: [], asked: false, lookedUp: true };
+    setText(els.error, "");
+    render();
+    setText(els.status, TALK_MESSAGES.newStarted);
+    els.text.focus();
+  });
 
   function voteButtons(turn) {
     const group = make(doc, "div", { className: "votes", attrs: { role: "group", "aria-label": "Was this reply helpful?" } });
@@ -361,6 +392,8 @@ export function createConversation({
 
     els.turns.replaceChildren(...session.turns.map(turnItem));
     els.turns.hidden = session.turns.length === 0;
+    if (newChatRow) newChatRow.hidden = !session.conversationId || session.turns.length === 0;
+    if (newChat) newChat.disabled = busy;
 
     const prompt = promptFor(view, route, { asked: session.asked });
     setText(els.label, prompt.label);
@@ -645,7 +678,7 @@ export function createConversation({
   /** After the tutor wakes again, carry on from the saved turns (blueprint §9.2). */
   async function resume() {
     const mine = session;
-    if (!mine?.conversationId) return;
+    if (!mine?.conversationId) return lookUp(mine);
     const result = await api.openConversation(mine.conversationId);
     if (session !== mine || result.kind !== "ok" || !result.body?.conversation) return;
     const conversation = result.body.conversation;

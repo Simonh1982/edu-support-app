@@ -89,6 +89,10 @@ export const TALK_MESSAGES = Object.freeze({
   failed: "The tutor couldn't answer just now. Your words are still here, so try again.",
   unreachable: "Can't reach the tutor. It may be resting. Your words are still here.",
   resumed: "Picked up where you left off.",
+  // WP-114h: an earlier conversation for this task, loaded again after a reload
+  carriedOn: (day) => `Carrying on with your conversation ${day}.`,
+  newChat: "Start a new conversation",
+  newStarted: "New conversation. Your earlier one is still saved.",
   voteFailed: "That didn't save. Please try again.",
   careHeading: "If you need to talk to someone now:",
   noTasks: "No tasks yet. Add one below, or choose Something else.",
@@ -381,4 +385,17 @@ export function talkErrorMessage(result) {
   if (result.status === 429) return { message: "That's a lot in a short time. Please wait a minute, then try again." };
   if (result.status === 404) return { message: "That conversation couldn't be found. Please start again." };
   return { message: TALK_MESSAGES.failed };
+}
+
+const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" });
+const LONG_DAY = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "long", day: "numeric", month: "long" });
+
+/** WP-114h: when a conversation was last used, in UK time: "today", "yesterday" or "on Tuesday 4 November". */
+export function conversationDay(iso, now = new Date()) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "from before";
+  const day = DAY_FORMAT.format(at);
+  if (day === DAY_FORMAT.format(now)) return "from today";
+  if (day === DAY_FORMAT.format(new Date(now.getTime() - 86_400_000))) return "from yesterday";
+  return `on ${LONG_DAY.format(at)}`;
 }
