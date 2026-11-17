@@ -1,6 +1,6 @@
-STATE version: 43
-Updated: 2026-11-17 12:31 (UK time)
-Last work package applied: WP-114g part 1 (20 MB through the Worker; A-011)
+STATE version: 44
+Updated: 2026-11-17 16:02 (UK time)
+Last work package applied: WP-114g part 1b (no folder-rename guess when the server syncs; A-011 verify)
 
 ## File tree
 ```
@@ -402,6 +402,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - WP-114e live check passed 6 Nov 2026: the task panel fields showed; the question and sources were collapsed and opened on tap; pasted summaries worked (one short paste gave 'read the original', and one gave the too-close fallback); adding his own source worked; the phone check passed; the log lines held code words only.
 
 ## Deviations in effect
+- `server/storage/git.js` (WP-114g part 1b): `gitEnv` always sets `merge.directoryRenames=false` (as `GIT_CONFIG_KEY_n`, after the token header). Found by the WP-114g live check: when the server's commit emptied `inbox/` while the Worker added a capture, `git pull --rebase` treated `inbox/` as renamed to `uploads/` and moved the new capture there under its inbox name, so it was never taken in. Reproduced with real git and covered by a real-git test.
 - `test/codespace.test.js` (WP-114g): "CLAUDE.md carries the assigned-branch rule" now checks the main-developer `CLAUDE.md` wording (17 Nov 2026: "**Branch:** use the branch your session is given."). It pinned the old reviewer-era wording, so it failed on `main` after the new `CLAUDE.md` was uploaded.
 - `test/wellbeing.test.js` (WP-112): the level-3 label check is `assert.match(system, /I'll let\s+Test Carers know/)` instead of `includes("I'll let Test Carers know")`, because that sentence wraps onto a new line in `skills/core/SKILL.md` (the same allowance `test/prompt.test.js` makes). Test only; no wording changed.
 - `test/task-check.test.js` (WP-111b): the "every control labelled" check now accepts a label with other attributes (`<label\b[^>]*\bfor="<id>"`) instead of exactly `<label for="<id>">`, because the new `<label id="talk-prompt-label" for="talk-text">` needs its `id` (`web/conversation.js` changes the prompt; `test/conversation-screen.test.js` expects that markup). Every control still needs a label. Test pattern only.
@@ -414,7 +415,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - `test/evals.test.js` (WP-018): the invented token in "an AI error becomes verdict 'error' with a redacted reason" is lengthened from 16 to 36 characters after `ghp_`, because the real `redact()` in `server/ai/copilot.js` matches 20 or more (real tokens have 36). The server is unchanged.
 
 ## Known issues
-- **20 MB uploads not yet proven live (A-011).** Measured locally, holding a 20 MB file would use about 160 MB, over the Worker free plan's 128 MB, so files over 8 MB are now streamed. Until `node scripts/inbox-size-check.js` passes in the Codespace (with the new Worker pasted), treat anything over 8 MB as unverified. The `FixedLengthStream` Content-Length is a VERIFY item in `wake/worker.js`. If it fails, A-011 says to report it and propose the highest limit that works.
+- **20 MB: the Worker and GitHub are proven; the server's take-in is to be re-checked (A-011).** The live size check (17 Nov 2026) sent 7.9, 14.0 and 19.9 MB through the Worker (streamed above 8 MB) in 4.9, 8.0 and 7.5 s. The server took in the first two, but git's folder-rename guess put the third in `uploads/` under its inbox name (fixed in part 1b, below). Re-run `node scripts/inbox-size-check.js` after part 1b. `FixedLengthStream` sends a Content-Length GitHub accepts (proven by that run).
 - `BLOCKED_SOURCE_HOSTS` (`server/ai/sources.js`) now marks answer sites (every page counts as an answer page, dropped only when it matches an open task), not blocked sites; a starting list, to extend as sites are found.
 - Sites that refuse `web_fetch` (403, seen on a council site and a revision site with a paywall) can't be read by the tutor; the learner pastes the text (A-010, WP-114e) or attaches a copy (WP-114f) instead.
 - WP-123 must also remove copies of a source (Uploads with `contentKind: 'source'`, listed in a Source's `uploadIds`). They use the task clock through the Source's `taskId`, or 60 days without a task (A-008).
