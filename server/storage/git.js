@@ -37,9 +37,14 @@ export function gitEnv({ token, env = process.env, host = 'github.com' } = {}) {
   return out;
 }
 
-/** Token-free, single-line text for logs and /api/health. */
-export function cleanGitText(text, max = 300) {
-  return redact(String(text ?? ''))
+/**
+ * Token-free, single-line text for logs and /api/health. hide: a name (the storage repository's) to
+ * replace with <storage-repo> everywhere, before the text is shortened, so it can't show cut part-way.
+ */
+export function cleanGitText(text, max = 300, hide = '') {
+  let raw = String(text ?? '');
+  if (hide) raw = raw.split(hide).join('<storage-repo>');
+  return redact(raw)
     .replace(/basic\s+[A-Za-z0-9+/=]{16,}/gi, 'basic [redacted]')
     .replace(/https:\/\/[^@\s/]+@/g, 'https://[redacted]@')
     .replace(/\s+/g, ' ')

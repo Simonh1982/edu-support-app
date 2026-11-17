@@ -99,8 +99,8 @@ export function createStore({
   // git errors quote the remote URL; /api/health is public, so the repository's name is hidden
   const repoName = String(remoteUrl ?? '').replace(/^https:\/\/[^/]+\//, '').replace(/\.git$/, '');
   const fail = (what, result) => {
-    let text = cleanGitText(result.stderr || result.stdout);
-    if (repoName) text = text.split(repoName).join('<storage-repo>');
+    // hidden before shortening: a name cut part-way at the end could not be matched afterwards
+    const text = cleanGitText(result.stderr || result.stdout, 300, repoName);
     const detail = `${what} failed: ${text || `exit ${result.code}`}`;
     log.error(`[storage] ${detail}`);
     return detail;

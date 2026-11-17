@@ -1,6 +1,6 @@
 # Workplan: phase 1 (MVP: Work and Learn): APPROVED
 **Version:** 1.9, 17 November 2026. **Status:** **approved by Simon (31 Oct)**, and this is the working document. Updated after WP-114g (public STATE **v45**) and the switch to Claude Code as the main developer.
-**Starts from:** public STATE **v19** (phase 0 closed). **Now at:** STATE **v48**, last package WP-114g-fix part 3, **726 tests passing**. Build spec generated from master **v3.7**. Current amendments (in `docs/build-spec-amendments.md`): A-008, A-009, A-010, A-011 (long documents) and **A-012** (120,000 characters; try a summary again). **Next amendment: A-013.** Blueprint **v1.4** (unchanged).
+**Starts from:** public STATE **v19** (phase 0 closed). **Now at:** STATE **v49**, last change a storage-log fix, **727 tests passing**. Build spec generated from master **v3.7**. Current amendments (in `docs/build-spec-amendments.md`): A-008, A-009, A-010, A-011 (long documents) and **A-012** (120,000 characters; try a summary again). **Next amendment: A-013.** Blueprint **v1.4** (unchanged).
 **Scope source:** build spec §47.1 phase 1 row, plus A-005 and A-008 to A-011, plus items carried from phase 0.
 
 ## How Claude Code uses this document
@@ -171,7 +171,7 @@
 
 **Order:** ~~101 → … → 114 → 114d/e/f → 114g~~ → **115** → 116 → 117 → 118 → 119 → 120 → 121 → 122 → 123 → 124 → 125 → 126. WP-119, WP-123 and WP-124 are unblocked and can go earlier if Simon prefers. Private packages slot in when their information arrives; WP-142 can go at any time.
 
-**Progress:** 15 of 26 public packages done, plus one hotfix (WP-108, 111 and 114 were split; WP-114d became 114d, 114e and 114f; WP-114g was added for A-011 and is done). Public tests: 327 at phase start → 640 (v39) → 703 (v42) → 721 (v45) → 723 (v46) → 724 (v47) → **726** (v48).
+**Progress:** 15 of 26 public packages done, plus one hotfix (WP-108, 111 and 114 were split; WP-114d became 114d, 114e and 114f; WP-114g was added for A-011 and is done). Public tests: 327 at phase start → 640 (v39) → 703 (v42) → 721 (v45) → 723 (v46) → 724 (v47) → 726 (v48) → **727** (v49).
 
 ## Risks
 | Risk | Handling |

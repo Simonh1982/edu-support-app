@@ -514,3 +514,14 @@ test('real git: an event appended during a sync does not block the pull (autosta
     assert.match(await readFile(events, 'utf8'), /ev_unsaved/);
   } finally { await rm(base, { recursive: true, force: true }); }
 });
+
+test('git error text hides the storage repository everywhere, even where the text is cut short', async () => {
+  const { cleanGitText } = await import('../server/storage/git.js');
+  const repo = 'example-owner/example-data';
+  const raw = `To https://github.com/${repo}.git ! [remote rejected] HEAD -> main (cannot lock ref) ${'x'.repeat(170)} error: failed to push some refs to 'https://github.com/${repo}.git'`;
+  for (const max of [200, 220, 230, 240, 300]) {
+    const text = cleanGitText(raw, max, repo);
+    assert.ok(!text.includes('example-owner') && !text.includes('example-data'), `leaked at ${max}`);
+  }
+  assert.match(cleanGitText(raw, 300, repo), /<storage-repo>/);
+});
