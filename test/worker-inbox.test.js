@@ -124,7 +124,7 @@ test('POST /inbox: only the learner, only with a pass, only allowed IDs, types a
   assert.equal(calls.length, 0, 'GitHub is never called for a refused capture');
 });
 
-test('POST /inbox refuses anything over 8 MB before reading it', async () => {
+test('POST /inbox refuses anything over 20 MB before reading it', async () => {
   const tooBig = await post(QUERY, 'AAAA', { headers: { 'Content-Length': String(INBOX_MAX_BASE64 + 4) } });
   assert.equal(tooBig.status, 413);
   assert.equal(calls.length, 0);
@@ -148,6 +148,79 @@ test('POST /inbox: a retry overwrites the same file using its sha; a moved branc
   const filePuts = calls.filter((c) => c.key === `PUT ${CONTENTS}/inbox/cap-test0001.jpg`);
   assert.equal(JSON.parse(filePuts[1].init.body).sha, 'abc123');
   assert.equal(calls.filter((c) => c.key === `PUT ${CONTENTS}/inbox/cap-test0001.json`).length, 2);
+});
+
+// ---------- files over 8 MB are streamed through (A-011, WP-114g) ----------
+const MB = 1024 * 1024;
+// Invented bytes; the length decides the base64 padding (n % 3 === 1 gives "==", 2 gives "=").
+const bigFile = (bytes) => Buffer.alloc(bytes, 'invented filler ').toString('base64');
+const length = (text) => ({ 'Content-Length': String(text.length) });
+
+function streamRoutes({ sha = null, put = () => reply(201, {}) } = {}) {
+  const seen = {};
+  routes[`GET ${CONTENTS}/inbox/cap-test0001.jpg`] = () => (sha ? reply(200, { sha, content: '', encoding: 'none' }) : reply(404, {}));
+  routes[`PUT ${CONTENTS}/inbox/cap-test0001.jpg`] = async (init, n) => {
+    seen.streamed = typeof init.body !== 'string';
+    seen.body = await new Response(init.body).text();
+    return put(n);
+  };
+  routes[`PUT ${CONTENTS}/inbox/cap-test0001.json`] = () => reply(201, {});
+  return seen;
+}
+
+test('POST /inbox streams a full 20 MB file to GitHub without holding it as one string', async () => {
+  const seen = streamRoutes();
+  const text = bigFile(20 * MB - 1);
+  const response = await post(QUERY, text, { headers: length(text) });
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).bytes, 20 * MB - 1, 'padding counted from the last bytes');
+  assert.equal(seen.streamed, true, 'the PUT body is a stream');
+  const body = JSON.parse(seen.body);
+  assert.equal(body.content, text);
+  assert.equal(body.message, 'inbox: add capture');
+  assert.equal(body.sha, undefined);
+  assert.deepEqual(calls.map((c) => c.key), [
+    `GET ${CONTENTS}/inbox/cap-test0001.jpg`, `PUT ${CONTENTS}/inbox/cap-test0001.jpg`, `PUT ${CONTENTS}/inbox/cap-test0001.json`,
+  ], 'the existing-file check first, then the file, then its metadata');
+  const meta = JSON.parse(Buffer.from(JSON.parse(calls[2].init.body).content, 'base64').toString('utf8'));
+  assert.equal(meta.bytes, 20 * MB - 1);
+  assert.ok(checkInboxMetadata(meta, 'cap-test0001').meta, 'the server accepts a 20 MB capture');
+});
+
+test('POST /inbox: a streamed retry overwrites the file using the sha it looked up first', async () => {
+  const seen = streamRoutes({ sha: 'abc123' });
+  const text = bigFile(9 * MB + 2);
+  assert.equal((await post(QUERY, text, { headers: length(text) })).status, 201);
+  assert.equal(JSON.parse(seen.body).sha, 'abc123');
+});
+
+test('POST /inbox: a streamed body that could break out of the JSON is refused, with no metadata', async () => {
+  streamRoutes();
+  const text = bigFile(9 * MB);
+  const injected = `${text.slice(0, 4 * MB)}","sha":"x${text.slice(4 * MB + 10)}`;
+  const response = await post(QUERY, injected, { headers: length(injected) });
+  assert.equal(response.status, 400);
+  assert.equal(calls.some((c) => c.key.endsWith('cap-test0001.json')), false, 'no metadata without its file');
+  const odd = `${text}A`;
+  assert.equal((await post(QUERY, odd, { headers: length(odd) })).status, 400, 'not a whole number of base64 blocks');
+});
+
+test('POST /inbox: a streamed write GitHub refuses (for example 409) goes back to the device as 502', async () => {
+  streamRoutes({ put: () => reply(409, { message: 'conflict' }) });
+  const text = bigFile(9 * MB);
+  const response = await post(QUERY, text, { headers: length(text) });
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).githubStatus, 409);
+  assert.equal(calls.filter((c) => c.key === `PUT ${CONTENTS}/inbox/cap-test0001.jpg`).length, 1, 'a stream is sent once');
+  assert.doesNotMatch(logs.join('\n'), new RegExp(`${REPO}|${ENV.STORAGE_TOKEN}`));
+});
+
+test('POST /inbox: a body with no length is held to the 8 MB route', async () => {
+  acceptPuts();
+  const nine = bigFile(9 * MB);
+  const response = await post(QUERY, nine, { headers: { 'Content-Length': '0' } });
+  assert.equal(response.status, 413);
+  assert.equal(calls.length, 0);
 });
 
 test('POST /inbox: GitHub refusals become 502 without secrets or the repository name in logs', async () => {
