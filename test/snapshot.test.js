@@ -88,7 +88,7 @@ test('snapshot of an empty or missing clone is valid and empty', async () => {
   const snap = await buildSnapshot({ dir });
   assert.deepEqual(snap.learner, {
     appName: null, upcoming: [], planStatus: null, nextSession: null,
-    settings: { accessibility: {}, presentation: {} }, recent: [], inboxPending: 0,
+    settings: { accessibility: {}, presentation: {} }, recent: [], notebook: [], inboxPending: 0,
   });
   assert.deepEqual(snap.parent, { appName: null, upcoming: [], planStatus: null, shared: [] });
 });

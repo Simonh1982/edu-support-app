@@ -11,6 +11,7 @@ import {
 } from './domain/conversations.js';
 import { listSources, saveSource, summariseSource, addOwnSource, attachToSource } from './domain/sources.js';
 import { withAttachments } from './domain/attachments.js';
+import { listNotebook, createNote, updateNote, createQuote, pinEntry, earlierResearch } from './domain/notebook.js';
 
 const ID = '([A-Za-z0-9][A-Za-z0-9_-]{0,99})';
 const LEARNER = Object.freeze(['learner']);
@@ -46,6 +47,13 @@ export const API_ROUTES = Object.freeze([
   route('POST', '/api/sources/own', 'addOwnSource'),
   // WP-114f (A-010): copies of a source attached as files or photos (the page sends them to the Worker inbox)
   route('POST', `/api/sources/${ID}/attachments`, 'attachSource'),
+  // WP-115a: the research notebook (build spec §29)
+  route('GET', '/api/notebook', 'listNotebook'),
+  route('GET', '/api/notebook/earlier', 'earlierResearch'),
+  route('POST', '/api/notebook/notes', 'createNote'),
+  route('PATCH', `/api/notebook/notes/${ID}`, 'updateNote'),
+  route('POST', '/api/notebook/quotes', 'createQuote'),
+  route('POST', `/api/notebook/${ID}/pin`, 'pinEntry'),
 ]);
 
 export const API_MESSAGES = Object.freeze({
@@ -122,6 +130,25 @@ const HANDLERS = {
   async latestConversation({ store, query, ctx }) {
     const conversation = await latestConversation(store, { taskId: query.get('taskId'), route: query.get('route') }, ctx);
     return { status: 200, body: { conversation } };
+  },
+  async listNotebook({ store, query }) {
+    const q = (k) => query.get(k) ?? undefined;
+    return { status: 200, body: { entries: await listNotebook(store, { taskId: q('taskId'), topicId: q('topicId'), subject: q('subject'), type: q('type'), q: q('q') }) } };
+  },
+  async earlierResearch({ store, query }) {
+    return { status: 200, body: await earlierResearch(store, query.get('taskId')) };
+  },
+  async createNote({ store, body, curriculum }) {
+    return { status: 201, body: { entry: await createNote(store, object(body), { curriculum }) } };
+  },
+  async updateNote({ store, params: [id], body, curriculum }) {
+    return { status: 200, body: { entry: await updateNote(store, id, object(body), { curriculum }) } };
+  },
+  async createQuote({ store, body }) {
+    return { status: 201, body: { entry: await createQuote(store, object(body)) } };
+  },
+  async pinEntry({ store, params: [id], body }) {
+    return { status: 200, body: { entry: await pinEntry(store, id, object(body)) } };
   },
   async getConversation({ store, params: [id], ctx }) {
     const conversation = await openConversation(store, id, ctx);

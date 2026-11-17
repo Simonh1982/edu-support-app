@@ -11,6 +11,9 @@ import { ITEM_ID_PATTERN } from './items.js';
 export const UPCOMING_LIMIT = 20;
 export const RECENT_LIMIT = 10;
 export const SHARED_LIMIT = 20;
+// WP-115a: the notebook's titles, so it can be browsed while the tutor rests (no text, ever)
+export const NOTEBOOK_LIMIT = 100;
+const NOTEBOOK_KINDS = new Set(['note', 'quote', 'summary']);
 const TITLE_MAX = 80;
 const APP_NAME_MAX = 60;
 const SETTING_MAX = 40;
@@ -162,6 +165,16 @@ export async function buildSnapshot({ dir, now = new Date() }) {
     .sort(byNewest('updatedAt'))
     .slice(0, RECENT_LIMIT);
 
+  const notebook = items
+    .filter((item) => item.type === 'notebook' && !item.record.deletedAt && NOTEBOOK_KINDS.has(item.record.type))
+    .map((item) => itemRef(item, {
+      kind: item.record.type,
+      taskId: cleanText(item.record.taskId, 100),
+      updatedAt: cleanDate(item.record.updatedAt),
+    }))
+    .sort(byNewest('updatedAt'))
+    .slice(0, NOTEBOOK_LIMIT);
+
   // The same rule the Worker and the server use to open items, so the list never offers more.
   const shared = items
     .filter((item) => canReadItem('parent', item.type, item.record))
@@ -178,6 +191,7 @@ export async function buildSnapshot({ dir, now = new Date() }) {
       nextSession: null,
       settings: { accessibility, presentation },
       recent,
+      notebook,
       inboxPending,
     },
     parent: {
