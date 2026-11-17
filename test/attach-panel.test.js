@@ -338,3 +338,12 @@ test("a stage change that fails keeps the old stage and says why", async () => {
   assert.ok(els["task-panel-stage-status"].textContent.length > 0);
   assert.equal(els["task-panel-meta"].textContent, "Invented Geography · Researching");
 });
+
+test('A-012: after "too close" the Summarise button stays, as "Try the summary again"', () => {
+  const list = panelSources([{ id: "src_t", title: "Invented article", url: null, category: "other" }]);
+  const copies = () => ({ count: 1, state: "ready" });
+  const [plain] = sourceItems(doc, list, { attachOf: copies });
+  assert.equal(byAction(plain, "summarise")[0].textContent, "Summarise this");
+  const [again] = sourceItems(doc, list, { attachOf: copies, stateOf: () => ({ again: true, note: "Invented too-close note." }) });
+  assert.equal(byAction(again, "summarise")[0].textContent, "Try the summary again");
+});

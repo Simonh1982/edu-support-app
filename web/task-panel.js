@@ -93,7 +93,7 @@ export function sourceItems(doc, sources, {
     } else if (source.canSummarise) {
       // a ready copy is read instead of the page (WP-114f), so it can be summarised with or without a link
       if ((source.url || copies.state === "ready") && !state.asked) {
-        const b = make(doc, "button", { className: "secondary", text: state.working ? SOURCE_MESSAGES.summarising : SOURCE_MESSAGES.summarise, attrs: { type: "button" } });
+        const b = make(doc, "button", { className: "secondary", text: state.working ? SOURCE_MESSAGES.summarising : state.again ? SOURCE_MESSAGES.summariseAgain : SOURCE_MESSAGES.summarise, attrs: { type: "button" } });
         b.dataset.action = "summarise";
         b.disabled = !ready || working || copies.state === "waiting";
         b.addEventListener("click", () => onSummarise(source));
@@ -331,6 +331,7 @@ export function createTaskPanel({
     } else {
       setState(source.id, {
         asked: FINAL_SUMMARY_OUTCOMES.includes(summary.outcome),
+        again: summary.outcome === "too-close",
         canPaste: PASTE_OUTCOMES.includes(summary.outcome) || stateOf(source.id).canPaste === true,
         note: summary.text,
       });

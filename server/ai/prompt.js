@@ -269,9 +269,9 @@ const wrap = (tag, text, max) => {
  * @param {string} [parts.instruction] a fixed server instruction (never learner text)
  */
 export function buildPrompt({ task, curriculum, notebook, conversation, attempt, draft, sourceText, sourceLimit, message, instruction, contract = REPLY_CONTRACT } = {}) {
-  // sourceLimit (WP-114f): a longer limit for a copy of a source he attached; never above 75,000
+  // sourceLimit (WP-114f): a longer limit for a copy of a source he attached; never above 120,000 (A-012)
   // characters (A-011, WP-114g)
-  const sourceMax = Math.min(Number.isInteger(sourceLimit) && sourceLimit > 0 ? sourceLimit : LIMITS.sourceChars, 75_000);
+  const sourceMax = Math.min(Number.isInteger(sourceLimit) && sourceLimit > 0 ? sourceLimit : LIMITS.sourceChars, 120_000);
   return [
     taskBlock(task),
     curriculumBlock(curriculum),

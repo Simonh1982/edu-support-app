@@ -125,6 +125,7 @@ export const SOURCE_MESSAGES = Object.freeze({
   saving: "Saving…",
   saved: "Saved to your sources.",
   summarise: "Summarise this",
+  summariseAgain: "Try the summary again",
   summarising: "Summarising… This can take a minute or two.",
   summaryLabel: "AI summary",
   summaryNote: "Written by the AI from this source. Read the original to check it, and quote from the original, not this summary.",
@@ -306,8 +307,9 @@ export function canSummarise(card) {
   return card?.category !== "video";
 }
 
-/** Summary outcomes that won't change if asked again, so Summarise goes. "Couldn't open" can be retried. */
-export const FINAL_SUMMARY_OUTCOMES = Object.freeze(["read-original", "too-close", "subscription"]);
+/** Summary outcomes that won't change if asked again, so Summarise goes. "Couldn't open" can be retried,
+ * and so can "too close" (A-012): Summarise becomes "Try the summary again". */
+export const FINAL_SUMMARY_OUTCOMES = Object.freeze(["read-original", "subscription"]);
 /** After these, "Paste the text instead" is offered (A-010): the tutor couldn't read the page itself. */
 export const PASTE_OUTCOMES = Object.freeze(["unavailable", "subscription", "unclear"]);
 

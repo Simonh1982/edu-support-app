@@ -1,4 +1,4 @@
-// WP-114g part 2 (A-011): long documents attached to a source. Read to 75,000 characters; a copy that
+// WP-114g part 2 (A-011, A-012): long documents attached to a source. Read to 120,000 characters; a copy that
 // wasn't read in full gets the app's note on which part the summary covers; summaries grow with the
 // document; "read the original" only says "Open the link" when there is one. Invented data only.
 import { test } from 'node:test';
@@ -19,7 +19,9 @@ import { ATTACHED_SOURCE_MAX_CHARS, ATTACH_MESSAGES, attachmentText, coverageNot
 import { SOURCE_MESSAGES } from '../server/domain/sources.js';
 import { MAX_PAGES, MAX_TEXT_CHARS, EXTRACT_TIMEOUT_MS, PDF_TYPE, extractDocument } from '../server/documents.js';
 import { makePdf } from '../scripts/make-documents.js';
-import { SUMMARY_TIMEOUT_MS as SCREEN_SUMMARY_TIMEOUT_MS } from '../web/shared/conversation.js';
+import {
+  SUMMARY_TIMEOUT_MS as SCREEN_SUMMARY_TIMEOUT_MS, FINAL_SUMMARY_OUTCOMES, SOURCE_MESSAGES as SCREEN_SOURCE_MESSAGES,
+} from '../web/shared/conversation.js';
 
 const MODELS = Object.freeze({
   conversation: 'mock-conversation', review: 'mock-review', light: 'mock-light',
@@ -80,8 +82,8 @@ const put = (store, clientId, fields) => store.put(`uploads/up_${clientId}.json`
 
 // ---------- limits ----------
 
-test('A-011 limits: 75,000 characters attached, at least 100 pages, a longer read, and waits that fit', () => {
-  assert.equal(ATTACHED_SOURCE_MAX_CHARS, 75_000);
+test('A-011 and A-012 limits: 120,000 characters attached, at least 100 pages, a longer read, and waits that fit', () => {
+  assert.equal(ATTACHED_SOURCE_MAX_CHARS, 120_000);
   assert.ok(MAX_PAGES >= 100);
   assert.ok(MAX_TEXT_CHARS >= ATTACHED_SOURCE_MAX_CHARS * 2, 'the reader keeps more than a summary reads');
   assert.ok(EXTRACT_TIMEOUT_MS >= 60_000);
@@ -114,13 +116,13 @@ test('coverage: Word files by share; photos by count; an unknown length says "th
   assert.match(coverageNote([{ length: 90_000, image: true }, { length: 10, image: false }], { cut: 75_000, headers: [14, 14] }), /only the start of the first part/);
 });
 
-test('attachmentText cuts a long copy at 75,000 characters and gives its coverage note', async () => {
+test('attachmentText cuts a long copy at 120,000 characters and gives its coverage note', async () => {
   const store = await fakeStore();
   try {
-    await put(store, 'sinv1001-aa', pdfCopy(40, 3000));
+    await put(store, 'sinv1001-aa', pdfCopy(60, 3000));
     const r = await attachmentText(store, { uploadIds: ['up_sinv1001-aa'] });
-    assert.deepEqual([r.state, r.text.length, r.shortened], ['ready', 75_000, true]);
-    assert.match(r.coverage, /first 24 of 40 pages/);
+    assert.deepEqual([r.state, r.text.length, r.shortened], ['ready', 120_000, true]);
+    assert.match(r.coverage, /first 39 of 60 pages/);
     await put(store, 'sinv1002-aa', pdfCopy(8, 3000));
     const whole = await attachmentText(store, { uploadIds: ['up_sinv1002-aa'] });
     assert.deepEqual([whole.shortened, whole.coverage], [false, null]);
@@ -147,20 +149,20 @@ test('summaries grow with the document: about 150 words for a few pages, up to 9
 
 // ---------- through the route ----------
 
-test('a long attached copy: 75,000 characters sent, a long summary asked for, and the coverage note saved with it', async () => {
+test('a long attached copy: 120,000 characters sent, a long summary asked for, and the coverage note saved with it', async () => {
   const { store, ai, call } = await setup();
   try {
     const source = (await call('POST', '/api/sources/own', { title: 'Invented long article', attachments: ['sinv1003-aa'] })).body.source;
-    await put(store, 'sinv1003-aa', pdfCopy(40, 3000));
+    await put(store, 'sinv1003-aa', pdfCopy(60, 3000));
     const r = await call('POST', `/api/sources/${source.id}/summary`, {});
     assert.deepEqual([r.status, r.body.outcome], [201, 'saved']);
     const prompt = ai.calls.find((c) => c.model === MODELS.conversation).prompt;
     const sent = prompt.match(/<source_text>([\s\S]*?)<\/source_text>/)[1].trim();
-    assert.ok(sent.length >= 74_000 && sent.length <= 75_000, `sent ${sent.length}`);
-    assert.match(prompt, /about 880 words/);
+    assert.ok(sent.length >= 119_000 && sent.length <= 120_000, `sent ${sent.length}`);
+    assert.match(prompt, /about 900 words/);
     const entry = await store.read(`notebook/${r.body.entry.id}.json`);
     assert.equal(entry.text.author, 'ai');
-    assert.match(entry.text.value, /^Invented long summary\.\n\nThis summary covers roughly the first 24 of 40 pages\./);
+    assert.match(entry.text.value, /^Invented long summary\.\n\nThis summary covers roughly the first 39 of 60 pages\./);
   } finally { await rm(store.dir, { recursive: true, force: true }); }
 });
 
@@ -248,16 +250,24 @@ test('a long summary on a task: the summary check is used, and its second draft 
 test('the same copy attached twice counts once, so the note gives pages; other parts still say which pages', async () => {
   const store = await fakeStore();
   try {
-    const copy = pdfCopy(25, 3270);
+    const copy = pdfCopy(40, 3270);
     await put(store, 'sinv1006-aa', copy);
     await put(store, 'sinv1006-bb', copy);
     const r = await attachmentText(store, { uploadIds: ['up_sinv1006-aa', 'up_sinv1006-bb'] });
-    assert.equal(r.text.length, 75_000);
+    assert.equal(r.text.length, 120_000);
     assert.doesNotMatch(r.text, /\[Part /, 'one part, so no part headers');
-    assert.match(r.coverage, /^This summary covers roughly the first 22 of 25 pages\. /);
+    assert.match(r.coverage, /^This summary covers roughly the first 36 of 40 pages\. /);
     // two different copies, the first too long on its own
     await put(store, 'sinv1006-cc', pdfCopy(3, 1000));
     const two = await attachmentText(store, { uploadIds: ['up_sinv1006-aa', 'up_sinv1006-cc'] });
-    assert.match(two.coverage, /first 22 of 25 pages of the first part, and none of the other part\./);
+    assert.match(two.coverage, /first 36 of 40 pages of the first part, and none of the other part\./);
   } finally { await rm(store.dir, { recursive: true, force: true }); }
+});
+
+// ---------- A-012: "too close" can be tried again ----------
+
+test('after "too close", Summarise stays as "Try the summary again"; "read the original" still ends it', () => {
+  assert.equal(FINAL_SUMMARY_OUTCOMES.includes('too-close'), false);
+  assert.ok(FINAL_SUMMARY_OUTCOMES.includes('read-original'));
+  assert.equal(SCREEN_SOURCE_MESSAGES.summariseAgain, 'Try the summary again');
 });

@@ -20,7 +20,7 @@ export const WEB_ROUTES = Object.freeze(['research']);
 // A search takes about 36 seconds (WP-007), and A-009's tiers can mean up to four searches in one
 // reply. The screen waits up to 210 seconds: this, a 45-second retry and a 20-second check fit inside.
 export const WEB_TUTOR_TIMEOUT_MS = 110_000;
-// A-011 (WP-114g): a summary of a long attached copy (75,000 characters in, up to about 900 words out)
+// A-011 (WP-114g): a summary of a long attached copy (up to 120,000 characters in since A-012, up to about 900 words out)
 export const SUMMARY_TIMEOUT_MS = 120_000;
 // A-010: text he pastes from a source, summarised with no tools. Matches prompt.js LIMITS.sourceChars,
 // so nothing he pastes is cut short in the prompt.

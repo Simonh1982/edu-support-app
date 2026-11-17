@@ -102,7 +102,7 @@ export function sourceList(doc, turn, {
       buttons.push(save);
     }
     if (!state.summary && !state.asked && canSummarise(card)) {
-      const summarise = button(doc, state.summarising ? SOURCE_MESSAGES.summarising : SOURCE_MESSAGES.summarise);
+      const summarise = button(doc, state.summarising ? SOURCE_MESSAGES.summarising : state.again ? SOURCE_MESSAGES.summariseAgain : SOURCE_MESSAGES.summarise);
       summarise.dataset.action = "summarise";
       summarise.disabled = !ready || working;
       summarise.addEventListener("click", () => onSummarise(card));
@@ -606,6 +606,7 @@ export function createConversation({
       setCard(turnId, card.index, {
         summarising: false,
         asked: FINAL_SUMMARY_OUTCOMES.includes(summary.outcome),
+        again: summary.outcome === "too-close",
         canPaste: PASTE_OUTCOMES.includes(summary.outcome) || cardOf(turnId, card.index).canPaste === true,
         note: summary.text,
       });
