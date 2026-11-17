@@ -592,5 +592,22 @@ export function createTaskPanel({
     if (hasStage) setText(stageEls.status, "");
   }
 
-  return { show, setTutor, refresh, clear };
+  /**
+   * WP-114i: from a research card the tutor couldn't open, go to that source here with its attach box
+   * open. Loads the sources again first, since the card's source may have just been saved.
+   */
+  async function openAttach(sourceId) {
+    if (!current || !canAttach) return false;
+    await refresh();
+    if (!current || !(current.sources ?? []).some((s) => s?.id === sourceId)) return false;
+    els.sources.open = true;
+    setState(sourceId, { attachOpen: true });
+    renderSources();
+    const item = byId(`source-panel-${sourceId}`);
+    item?.scrollIntoView?.({ block: "start" });
+    item?.focus();
+    return true;
+  }
+
+  return { show, setTutor, refresh, clear, openAttach, canAttach };
 }

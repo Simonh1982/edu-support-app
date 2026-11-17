@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { MAX_ATTACHMENTS, PANEL_MESSAGES, attachInfo, attachNote, panelSources, panelStage } from "../web/shared/task-panel.js";
 import { UPCOMING_MESSAGES } from "../web/shared/upcoming.js";
 import { ATTACH_POLL, createTaskPanel, sourceItems } from "../web/task-panel.js";
+import { sourceList } from "../web/conversation.js";
 
 class FakeElement {
   constructor(tag) {
@@ -346,4 +347,32 @@ test('A-012: after "too close" the Summarise button stays, as "Try the summary a
   assert.equal(byAction(plain, "summarise")[0].textContent, "Summarise this");
   const [again] = sourceItems(doc, list, { attachOf: copies, stateOf: () => ({ again: true, note: "Invented too-close note." }) });
   assert.equal(byAction(again, "summarise")[0].textContent, "Try the summary again");
+});
+
+test("WP-114i: a card the tutor couldn't open offers Attach a copy instead, which opens that source's attach box in the panel", async () => {
+  const turn = { id: "turn_i", reply: "Invented reply.", sources: [{ index: 0, title: "Invented journal article", url: "https://journal.invented.example.org/a", site: "journal.invented.example.org", category: "academic" }] };
+  const saved = { sourceId: "src_j", canPaste: true, note: "Invented couldn't-open note." };
+  const opened = [];
+  // no button without a panel that can attach, or before the source is saved
+  assert.equal(byAction(sourceList(doc, turn, { stateOf: () => saved }), "attach").length, 0);
+  assert.equal(byAction(sourceList(doc, turn, { stateOf: () => ({ canPaste: true }), onAttach: () => {} }), "attach").length, 0);
+  const [b] = byAction(sourceList(doc, turn, { stateOf: () => saved, onAttach: (card, id) => opened.push(id) }), "attach");
+  assert.equal(b.textContent, "Attach a copy instead");
+  b.listeners.click();
+  assert.deepEqual(opened, ["src_j"]);
+
+  const { els, doc: page } = pageDoc();
+  const sources = [{ id: "src_j", title: "Invented journal article", url: "https://journal.invented.example.org/a", category: "academic" }];
+  const { api } = fakeApi({ getTask: ok({ task: TASK }), listSources: () => ok({ sources }) });
+  const panel = createTaskPanel({ api, doc: page, attach: fakeAttach([]).attach });
+  panel.setTutor("ready");
+  await panel.show(ITEM);
+  assert.equal(panel.canAttach, true);
+  assert.equal(els["task-panel-sources"].open, false);
+  assert.equal(await panel.openAttach("src_j"), true);
+  assert.equal(els["task-panel-sources"].open, true);
+  const [item] = els["task-panel-sources-list"].children;
+  const [box] = byClass(item, "attach-source");
+  assert.equal(box.getAttribute("open"), "", "attach box open");
+  assert.equal(await panel.openAttach("src_missing"), false);
 });

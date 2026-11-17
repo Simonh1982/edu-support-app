@@ -72,9 +72,12 @@ function button(doc, text, { className = "secondary", label } = {}) {
  * stateOf(index) → { sourceId?, saving?, summarising?, summary?, asked?, note?, canPaste?, pasteText?, pasteOpen? }.
  * WP-114e: once the tutor couldn't open a page, "Paste the text instead" appears (onPaste(card, text));
  * onPasteChange(card, changes) keeps what he has typed across redraws.
+ * WP-114i: with onAttach (a task panel that can attach), "Attach a copy instead" appears beside the
+ * paste box and takes him to that source's attach box in the task panel.
  */
 export function sourceList(doc, turn, {
   stateOf = () => ({}), onSave = () => {}, onSummarise = () => {}, onPaste = () => {}, onPasteChange = () => {}, ready = true,
+  onAttach = null,
 } = {}) {
   const list = Array.isArray(turn?.sources) ? turn.sources : [];
   if (list.length === 0 || !turn.reply) return null;
@@ -124,6 +127,15 @@ export function sourceList(doc, turn, {
         onChange: (changes) => onPasteChange(card, changes),
         onSubmit: (text) => onPaste(card, text),
       }));
+      if (onAttach && state.sourceId) {
+        const attach = button(doc, SOURCE_MESSAGES.attachInstead);
+        attach.dataset.action = "attach";
+        attach.disabled = !ready || working;
+        attach.addEventListener("click", () => onAttach(card, state.sourceId));
+        const row = make(doc, "div", { className: "actions source-actions" });
+        row.append(attach);
+        item.append(row);
+      }
     }
     if (state.summary) item.append(summaryCard(doc, state.summary, key));
     cards.append(item);
@@ -365,6 +377,8 @@ export function createConversation({
       onPaste: (card, text) => pasteCard(turn.id, card, text),
       onPasteChange: (card, changes) => setCard(turn.id, card.index, changes),
       ready,
+      // WP-114i: only on a task, where the panel lists the saved source with its attach box
+      onAttach: panel?.canAttach && session?.taskId ? (card, sourceId) => panel.openAttach(sourceId) : null,
     });
     if (sources) tutor.append(sources);
     if (turn.reply) tutor.append(voteButtons(turn));
