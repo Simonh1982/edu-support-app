@@ -127,15 +127,16 @@ export function sourceList(doc, turn, {
         onChange: (changes) => onPasteChange(card, changes),
         onSubmit: (text) => onPaste(card, text),
       }));
-      if (onAttach && state.sourceId) {
-        const attach = button(doc, SOURCE_MESSAGES.attachInstead);
-        attach.dataset.action = "attach";
-        attach.disabled = !ready || working;
-        attach.addEventListener("click", () => onAttach(card, state.sourceId));
-        const row = make(doc, "div", { className: "actions source-actions" });
-        row.append(attach);
-        item.append(row);
-      }
+    }
+    // WP-114j: on any saved card on a task, including after a summary of only its landing page
+    if (onAttach && state.sourceId && canSummarise(card)) {
+      const attach = button(doc, state.canPaste && !state.summary ? SOURCE_MESSAGES.attachInstead : SOURCE_MESSAGES.attachCopy);
+      attach.dataset.action = "attach";
+      attach.disabled = !ready || working;
+      attach.addEventListener("click", () => onAttach(card, state.sourceId));
+      const row = make(doc, "div", { className: "actions source-actions" });
+      row.append(attach);
+      item.append(row);
     }
     if (state.summary) item.append(summaryCard(doc, state.summary, key));
     cards.append(item);

@@ -26,6 +26,8 @@ export const PANEL_MESSAGES = Object.freeze({
   wasDue: (when, date) => `${when} (${date})`,
   ownKind: "Your source",
   aiSummary: "AI summary",
+  // WP-114j: a summarised source with a copy attached can be summarised again from the copy
+  summariseFromCopy: "Summarise again from your copy",
   openSummary: "Show the AI summary",
   added: "Added to your sources.",
   needTitle: "Give the source a title.",
