@@ -184,5 +184,6 @@ test("the page has the Coming up section, and the page code stores nothing in th
   assert.match(app, /upcoming\?\.stop\(\)/);
   assert.match(app, /onTaskAdded:/);
   const check = readFileSync(join(WEB, "check.js"), "utf8");
-  assert.equal((check.match(/onTaskAdded\?\.\(\)/g) ?? []).length, 2, "after a typed task and after a confirmed one");
+  // WP-115c: typed tasks go through Check the details too, so only a confirmed task is added
+  assert.equal((check.match(/onTaskAdded\?\.\(\)/g) ?? []).length, 1, "after a confirmed task");
 });

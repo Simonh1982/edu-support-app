@@ -15,6 +15,7 @@ import { INBOX_TYPES } from './storage/inbox.js';
 import { checkImage, loadImageLimits } from './ai/limits.js';
 import { updateRecord, ukIso } from './storage/records.js';
 import { saveAiTurn } from './domain/work.js';
+import { listTasks, taskPath, withTaskLock } from './domain/tasks.js';
 import { DOCUMENT_TYPES, extractDocument } from './documents.js';
 import {
   READ_SYSTEM, MATCH_SYSTEM, DOC_SYSTEM, READ_RETRY_BELOW, TOPIC_UNSURE_BELOW, readPrompt, documentPrompt,
@@ -168,6 +169,10 @@ async function addTopics({ ask, proposal, curriculum }) {
 
 async function saveDone(ctx, { method, text, truncated, uncertain, corrections, proposal, readBy, reread, extra = {} }) {
   const { store, record, now, kind, textAuthor } = ctx;
+  // WP-115c: a due date picked on the "Type or paste it" form wins over one read from the text
+  if (proposal && typeof record.givenDeadline === 'string') {
+    proposal = { ...proposal, deadline: record.givenDeadline, uncertainFields: (proposal.uncertainFields ?? []).filter((f) => f !== 'deadline') };
+  }
   const changes = {
     ...extra,
     status: 'done',
@@ -377,6 +382,47 @@ export async function processBacklog({
   return summary;
 }
 
+// WP-115c: tasks saved before topic matching reached them (typed tasks, or older ones) get it once,
+// so earlier research on the same topics can be found (build spec §29). A few per run, newest first.
+export const TOPIC_BACKFILL_PER_RUN = 3;
+export const TOPIC_BACKFILL_EVERY_MS = 10 * 60_000;
+
+/**
+ * Matches topics once for each task with none that hasn't been tried. Sets topicsCheckedAt either way,
+ * so a task is never asked about twice. Fills the qualification and subject only when they're empty.
+ * Returns { matched, tried }. Never sends more than `limit` AI calls.
+ */
+export async function matchMissingTopics({ store, handle, curriculum = null, aiCeiling = null, now = () => new Date(), limit = TOPIC_BACKFILL_PER_RUN, timeoutMs = READ_TIMEOUT_MS }) {
+  const out = { matched: 0, tried: 0 };
+  if (!curriculum || !handle?.ai) return out;
+  const waiting = (await listTasks(store))
+    .filter((t) => !t.deletedAt && !t.topicsCheckedAt && !(Array.isArray(t.topicIds) && t.topicIds.length))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const ask = makeAsk({ store, handle, aiCeiling, timeoutMs });
+  for (const task of waiting.slice(0, limit)) {
+    const proposal = {
+      title: task.title ?? null, subject: task.subject ?? null, qualificationId: task.qualificationId ?? null,
+      question: task.questionText?.value ? { corrected: task.questionText.value } : null, topicIds: [], uncertainFields: [],
+    };
+    const found = await addTopics({ ask, curriculum, proposal });
+    out.tried += 1;
+    await withTaskLock(task.id, async () => {
+      const current = await store.read(taskPath(task.id));
+      if (!current || (Array.isArray(current.topicIds) && current.topicIds.length)) return;
+      const topicIds = Array.isArray(found.topicIds) ? found.topicIds : [];
+      const changes = { topicIds, topicsCheckedAt: ukIso(now()) };
+      if (topicIds.length) {
+        if (!current.qualificationId && found.qualificationId) changes.qualificationId = found.qualificationId;
+        if (!current.subject && found.subject) changes.subject = found.subject;
+        out.matched += 1;
+      }
+      await store.put(taskPath(task.id), updateRecord(current, changes, { now: now() }));
+    });
+  }
+  if (out.tried) await store.logEvent('task.topics-backfilled', { payload: { tried: out.tried, matched: out.matched } });
+  return out;
+}
+
 /**
  * Check for waiting uploads every 10 seconds once isReady() says storage, the curriculum and the AI
  * are all up; back off for a minute when the AI doesn't answer. Never throws.
@@ -391,6 +437,7 @@ export function startReader({
   let stopped = false;
   let running = null;
   let lastReason = null;
+  let lastBackfill = -Infinity;
 
   function runOnce() {
     if (running) return running;
@@ -400,6 +447,16 @@ export function startReader({
         const summary = await processBacklog({
           store: getStore(), handle: getAi(), curriculum: getCurriculum(), aiCeiling, limitsFor, extract, now, log,
         });
+        // WP-115c: then, now and then, topics for tasks that have none (never while the AI is pausing)
+        if (!summary.reason && Date.now() - lastBackfill >= TOPIC_BACKFILL_EVERY_MS) {
+          lastBackfill = Date.now();
+          try {
+            const b = await matchMissingTopics({ store: getStore(), handle: getAi(), curriculum: getCurriculum(), aiCeiling, now });
+            if (b.tried) log.log(`[reader] matched topics for ${b.matched} of ${b.tried} task${b.tried === 1 ? '' : 's'} without any`);
+          } catch (err) {
+            log.error(`[reader] topic matching failed: ${err?.name || 'Error'}`);
+          }
+        }
         const read = summary.done + summary.failed;
         if (read > 0) log.log(`[reader] read ${summary.done} upload${summary.done === 1 ? '' : 's'}; ${summary.failed} could not be read`);
         // say why reading has paused once, not every 10 seconds

@@ -84,6 +84,15 @@ async function allEntries(store) {
   return out;
 }
 
+/**
+ * WP-115c: an entry's topics are its own and its task's current ones, so research saved before its
+ * task had topics (or before they were matched) is still found by topic.
+ */
+async function topicsLookup(store) {
+  const byTask = new Map((await listTasks(store)).map((t) => [t.id, Array.isArray(t.topicIds) ? t.topicIds : []]));
+  return (entry) => new Set([...(entry.topicIds ?? []), ...(byTask.get(entry.taskId) ?? [])]);
+}
+
 const newest = (a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? ''));
 const fold = (s) => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 
@@ -101,10 +110,11 @@ export async function listNotebook(store, query = {}) {
   const q = shortString(query.q, 'q', { max: NOTEBOOK_LIMITS.search });
   const words = q ? fold(q).split(' ').filter(Boolean) : [];
   const subjects = subject ? new Map((await listTasks(store)).map((t) => [t.id, fold(t.subject)])) : null;
+  const topicsOf = topic ? await topicsLookup(store) : null;
   const out = [];
   for (const entry of await allEntries(store)) {
     if (taskId && entry.taskId !== taskId && !(entry.pinnedTo ?? []).includes(taskId)) continue;
-    if (topic && !(entry.topicIds ?? []).includes(topic)) continue;
+    if (topic && !topicsOf(entry).has(topic)) continue;
     if (type && entry.type !== type) continue;
     if (subjects && subjects.get(entry.taskId) !== fold(subject)) continue;
     if (words.length) {
@@ -265,9 +275,10 @@ export async function earlierResearch(store, taskId, { limit = NOTEBOOK_LIMITS.e
   const task = await taskFor(store, id);
   const topics = new Set(Array.isArray(task.topicIds) ? task.topicIds : []);
   if (!topics.size) return { entries: [], count: 0, since: null };
+  const topicsOf = await topicsLookup(store);
   const found = (await allEntries(store))
     .filter((e) => e.taskId !== id && !(e.pinnedTo ?? []).includes(id))
-    .filter((e) => (e.topicIds ?? []).some((t) => topics.has(t)))
+    .filter((e) => [...topicsOf(e)].some((t) => topics.has(t)))
     .sort(newest);
   return {
     entries: found.slice(0, limit).map(entryView),

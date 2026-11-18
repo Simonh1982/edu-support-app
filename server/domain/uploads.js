@@ -2,7 +2,7 @@
 // what was read from a brief and confirms its draft task (only then does it become a Task), or pastes
 // a brief's text, which the reader then reads like a Word file's text. Learner only (server/api.js).
 // Events hold ids, counts and field names, never text.
-import { DomainError, bad, notFound, plainObject, onlyKeys, textField } from './fields.js';
+import { DomainError, bad, notFound, plainObject, onlyKeys, textField, ukDate } from './fields.js';
 import { createTask, withTaskLock, TASK_LIMITS, ANCHOR_AUTHORS } from './tasks.js';
 import { SCHEMA_VERSION, updateRecord, ukIso } from '../storage/records.js';
 import { CLIENT_ID_PATTERN, uploadIdFor } from '../storage/inbox.js';
@@ -181,7 +181,9 @@ export async function confirmUpload(store, id, body, { curriculum = null, now = 
  */
 export async function addPastedBrief(store, body, { now = new Date() } = {}) {
   plainObject(body, 'paste');
-  onlyKeys(body, ['clientId', 'text'], 'paste');
+  // WP-115c: one "Type or paste it" form; a due date he picks there wins over one read from the text
+  onlyKeys(body, ['clientId', 'text', 'deadline'], 'paste');
+  const givenDeadline = ukDate(body.deadline, 'deadline');
   if (typeof body.clientId !== 'string' || !CLIENT_ID_PATTERN.test(body.clientId)) throw bad('clientId is not valid');
   if (body.text === undefined || body.text === null) throw bad('text is required');
   if (typeof body.text !== 'string') throw bad('text must be text');
@@ -216,6 +218,7 @@ export async function addPastedBrief(store, body, { now = new Date() } = {}) {
       sizeCheck: 'not-checked',
       // he pasted it, but the words are the brief's (A-001), so it gets shown, undoable corrections
       extractedText: { value: text, author: 'source' },
+      givenDeadline,
       uncertain: [],
       corrections: [],
       spellingCorrections: [],

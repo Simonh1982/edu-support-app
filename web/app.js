@@ -23,7 +23,7 @@ import { createNotebook } from "./notebook.js";
 import { openDeviceStore } from "./device-store.js";
 import { createApi } from "./shared/api.js";
 import { createAccessibility } from "./shared/accessibility.js";
-import { OFFLINE_MESSAGES, createOffline, memoryKeyValue, queueNote, signOutMessage } from "./shared/offline.js";
+import { createOffline, memoryKeyValue, queueNote, signOutMessage } from "./shared/offline.js";
 import { recommendNext } from "./shared/recommend.js";
 import { ukToday } from "./shared/upcoming.js";
 
@@ -127,12 +127,12 @@ function init() {
     },
   });
 
-  // A typed task made while the tutor wakes waits in the edit queue (WP-110).
-  async function queueTask(body) {
-    const added = await offline.add({ type: "add", body });
-    return added.ok ? { kind: "queued", message: OFFLINE_MESSAGES.taskQueued } : { kind: "queue-error", message: added.error };
+  // WP-115c: a task typed or pasted while the tutor wakes waits in the edit queue, then is read
+  async function queuePaste(body) {
+    const added = await offline.add({ type: "paste", body });
+    return added.ok ? { kind: "queued" } : { kind: "queue-error", message: added.error };
   }
-  taskEntry = createTaskEntry({ api, capture, onSignedOut: signedOut, onTaskAdded: () => upcoming?.refresh(), queueTask });
+  taskEntry = createTaskEntry({ api, capture, onSignedOut: signedOut, onTaskAdded: () => upcoming?.refresh(), queuePaste });
 
   // WP-111b: "Get help with a task" and the conversation. A call that can't reach the tutor wakes it
   // again, and the conversation carries on from the saved turns once it answers (blueprint §9.2).

@@ -107,35 +107,24 @@
 
             <p id="capture-status" class="status" role="status" aria-live="polite"></p>
 
+            <!-- WP-115c: one form for typing or pasting a task, with its due date -->
             <div class="actions">
-              <button type="button" id="paste-open" class="secondary" aria-controls="paste-form" aria-expanded="false" disabled>Paste the task</button>
-              <button type="button" id="type-open" class="secondary" aria-controls="type-form" aria-expanded="false" disabled>Type it in</button>
+              <button type="button" id="paste-open" class="secondary" aria-controls="paste-form" aria-expanded="false" disabled>Type or paste it</button>
             </div>
-            <p id="tutor-needed" class="hint">Pasting works once the tutor's ready. You can type a task in now.</p>
+            <p id="tutor-needed" class="hint">You can type or paste a task now. It's read once the tutor's ready.</p>
 
             <form id="paste-form" class="panel" aria-labelledby="paste-heading" novalidate hidden>
-              <h3 id="paste-heading">Paste the task</h3>
+              <h3 id="paste-heading">Type or paste it</h3>
               <label for="paste-text">The task or question</label>
-              <textarea id="paste-text" rows="8" maxlength="20000"></textarea>
+              <p class="hint" id="paste-text-hint">Type it or paste it in: the whole task, with any instructions. The tutor reads it, then asks you to check the details.</p>
+              <textarea id="paste-text" rows="8" maxlength="20000" aria-describedby="paste-text-hint"></textarea>
+              <label for="paste-deadline">When is it due?</label>
+              <p class="hint" id="paste-deadline-hint">Leave it blank if you don't know yet.</p>
+              <input type="date" id="paste-deadline" aria-describedby="paste-deadline-hint paste-deadline-uk">
+              <p class="hint" id="paste-deadline-uk"></p>
               <div class="actions">
                 <button type="submit" class="primary">Read this</button>
                 <button type="button" id="paste-cancel" class="secondary">Cancel</button>
-              </div>
-            </form>
-
-            <form id="type-form" class="panel" aria-labelledby="type-heading" novalidate hidden>
-              <h3 id="type-heading">Type it in</h3>
-              <label for="type-title">What's it called?</label>
-              <input type="text" id="type-title" maxlength="120" autocomplete="off">
-              <label for="type-deadline">When is it due?</label>
-              <p class="hint" id="type-deadline-hint">Leave it blank if you don't know yet.</p>
-              <input type="date" id="type-deadline" aria-describedby="type-deadline-hint type-deadline-uk">
-              <p class="hint" id="type-deadline-uk"></p>
-              <label for="type-question">The question, if you have it</label>
-              <textarea id="type-question" rows="4" maxlength="4000"></textarea>
-              <div class="actions">
-                <button type="submit" class="primary">Add this task</button>
-                <button type="button" id="type-cancel" class="secondary">Cancel</button>
               </div>
             </form>
 
