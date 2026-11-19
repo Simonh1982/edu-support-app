@@ -32,6 +32,7 @@ import { make, pasteBox, sourceLink, summaryCard } from "./source-parts.js";
 import { NOTEBOOK_TEXT, checkQuote } from "./shared/notebook.js";
 import { quoteForm } from "./notebook-parts.js";
 import { createTaskNotes } from "./task-notes.js";
+import { createTaskPlan } from "./task-plan.js";
 
 const READY_STATES = new Set(["ready", "readyNoAi"]);
 const NO_COPIES = Object.freeze({ count: 0, state: "none" });
@@ -212,6 +213,8 @@ export function createTaskPanel({
   const canAttach = Boolean(attach?.workerUrl && typeof attach.getToken === "function");
   // WP-115b: optional, so the panel still works on a page without the notes part
   const notes = createTaskNotes({ api, doc, failed: (result) => failedCall(result) ?? "" });
+  // WP-116: optional too
+  const plan = createTaskPlan({ api, doc, failed: (result) => failedCall(result) ?? "" });
   const prepare = attach?.prepare ?? prepareCapture;
   const send = attach?.send ?? sendCapture;
 
@@ -581,7 +584,8 @@ export function createTaskPanel({
   }
 
   // ---------- public ----------
-  function show(item) {
+  /** opts.openPlan: open "Your plan" at once (Plan my answer, WP-116). */
+  function show(item, { openPlan = false } = {}) {
     states.clear();
     unsent.clear();
     stopPolling();
@@ -596,9 +600,11 @@ export function createTaskPanel({
       current = null;
       els.panel.hidden = true;
       notes?.clear();
+      plan?.clear();
       return undefined;
     }
     notes?.show(item.taskId);
+    plan?.show(item.taskId, { open: openPlan });
     current = { item, task: null, sources: null, failed: false };
     // each part starts closed, so the conversation stays near the top on a phone
     for (const box of [els.question, els.sources, els.own, hasStage ? stageEls.box : null]) if (box) box.open = false;
@@ -627,6 +633,7 @@ export function createTaskPanel({
     ready = READY_STATES.has(state);
     if (!ready) stopPolling();
     notes?.setTutor(ready);
+    plan?.setTutor(ready);
     render();
     if (ready && !wasReady && current && (!current.task || !current.sources)) return load();
     if (ready && !wasReady) schedulePoll();
@@ -635,6 +642,7 @@ export function createTaskPanel({
 
   function clear() {
     notes?.clear();
+    plan?.clear();
     current = null;
     busy = false;
     stageBusy = false;
@@ -666,5 +674,9 @@ export function createTaskPanel({
     return true;
   }
 
-  return { show, setTutor, refresh, clear, openAttach, canAttach };
+  // WP-116: after a Plan my answer attempt, the plan may have its main point; quotes and notes can be pinned
+  const refreshPlan = () => plan?.refresh();
+  const openPlan = () => plan?.open();
+
+  return { show, setTutor, refresh, clear, openAttach, canAttach, refreshPlan, openPlan };
 }

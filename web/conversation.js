@@ -291,7 +291,8 @@ export function createConversation({
     }
     setText(els.error, "");
     // WP-114e: the panel shows the list entry at once, then the full task once the tutor's ready
-    if (!same) panel?.show(taskId ? taskItem(taskId, title) : null);
+    // WP-116: Plan my answer opens "Your plan" at once
+    if (!same) panel?.show(taskId ? taskItem(taskId, title) : null, { openPlan: route === "plan" });
     render();
     home.show("talk");
   }
@@ -300,6 +301,7 @@ export function createConversation({
   function switchRoute(route) {
     if (!session || session.conversationId || busy) return;
     session = { ...session, route, lookedUp: false };
+    if (route === "plan") panel?.openPlan?.();
     render();
     els.heading.focus();
     if (ready) lookUp(session);
@@ -495,6 +497,8 @@ export function createConversation({
     mine.view = result.body?.conversation ?? mine.view;
     const turn = turnFromReply(result.body?.turn, { learnerText: text });
     if (turn) mine.turns.push(turn);
+    // WP-116: his first attempt here is his main point, which starts the plan
+    if (mine.route === "plan") panel?.refreshPlan?.();
     els.text.value = "";
     render();
     if (turn) focusTurn(turn.id);
