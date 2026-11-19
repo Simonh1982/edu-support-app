@@ -20,6 +20,9 @@ const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
 const TITLE_MAX = 120;
 const APP_NAME_MAX = 60;
 const ADD_KEYS = Object.freeze(["title", "deadline", "questionText", "anchors"]);
+// WP-115c: a task typed or pasted while the tutor wakes (copies of web/shared/capture.js and task-check.js)
+const PASTE_CLIENT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$/;
+export const PASTE_QUEUE_MAX_CHARS = 20000;
 // Answers that can never succeed if sent again (a bad change, or a task that has gone).
 const DROP_STATUSES = new Set([400, 403, 404, 409, 413]);
 
@@ -102,6 +105,14 @@ function cleanChanges(raw) {
   return Object.keys(out).length > 0 ? out : null;
 }
 
+function cleanPasteBody(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (typeof raw.clientId !== "string" || !PASTE_CLIENT_ID.test(raw.clientId)) return null;
+  if (typeof raw.text !== "string" || raw.text.trim() === "" || raw.text.length > PASTE_QUEUE_MAX_CHARS) return null;
+  if (raw.deadline !== undefined && raw.deadline !== null && validDate(raw.deadline) !== raw.deadline) return null;
+  return { clientId: raw.clientId, text: raw.text, ...(raw.deadline ? { deadline: raw.deadline } : {}) };
+}
+
 function cleanAddBody(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   if (typeof raw.title !== "string" || raw.title.trim() === "" || raw.title.length > TITLE_MAX) return null;
@@ -120,7 +131,8 @@ function cleanAddBody(raw) {
 /**
  * One queued edit, checked (also used for edits read back from the device):
  * { id, at, type: "update", taskId, changes: { stage?, deadline? } } or
- * { id, at, type: "add", body } (the typed-task body). Null if unusable.
+ * { id, at, type: "add", body } (the typed-task body, from before WP-115c) or
+ * { id, at, type: "paste", body: { clientId, text, deadline? } } (WP-115c). Null if unusable.
  */
 export function cleanEdit(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -134,6 +146,10 @@ export function cleanEdit(raw) {
   if (raw.type === "add") {
     const body = cleanAddBody(raw.body);
     return body ? { id: raw.id, at: raw.at, type: "add", body } : null;
+  }
+  if (raw.type === "paste") {
+    const body = cleanPasteBody(raw.body);
+    return body ? { id: raw.id, at: raw.at, type: "paste", body } : null;
   }
   return null;
 }
@@ -253,7 +269,7 @@ export function createOffline({ now = () => Date.now(), random = Math.random, lo
     if (old) await safely(() => old.clear(), undefined);
   }
 
-  /** Queues { type: "update", taskId, changes } or { type: "add", body }. */
+  /** Queues { type: "update", taskId, changes }, { type: "add", body } or { type: "paste", body }. */
   async function add(input) {
     await loading;
     if (!store) return { error: OFFLINE_MESSAGES.notStarted };
@@ -269,7 +285,7 @@ export function createOffline({ now = () => Date.now(), random = Math.random, lo
   }
 
   /**
-   * Sends the queue in order through api.updateTask / api.addTask (shared/api.js). Stops at the
+   * Sends the queue in order through api.updateTask / api.addTask / api.pasteBrief (shared/api.js). Stops at the
    * first edit that can't be sent yet, leaving it and the rest queued.
    * @returns {Promise<{ sent, dropped, stop: null | "auth" | "later", reason? }>}
    */
@@ -284,7 +300,9 @@ export function createOffline({ now = () => Date.now(), random = Math.random, lo
         inFlight = edit.id;
         let result;
         try {
-          result = edit.type === "add" ? await api.addTask(edit.body) : await api.updateTask(edit.taskId, edit.changes);
+          if (edit.type === "paste") result = await api.pasteBrief(edit.body);
+          else if (edit.type === "add") result = await api.addTask(edit.body);
+          else result = await api.updateTask(edit.taskId, edit.changes);
         } catch (err) {
           log.error?.("[offline] sending failed:", err?.name ?? "Error");
           result = { kind: "network" };

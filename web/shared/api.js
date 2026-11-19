@@ -81,7 +81,8 @@ export function createApi({
   const talk = (path, body) => call(path, { method: "POST", body, timeout: talkTimeoutMs });
   return {
     call,
-    pasteBrief: ({ clientId, text }) => call("api/uploads/paste", { method: "POST", body: { clientId, text } }),
+    // WP-115c: with the due date he picked on the "Type or paste it" form, if any
+    pasteBrief: ({ clientId, text, deadline }) => call("api/uploads/paste", { method: "POST", body: { clientId, text, ...(deadline ? { deadline } : {}) } }),
     openUpload: (id) => call(uploadPath(id)),
     confirmUpload: (id, body) => call(`${uploadPath(id)}/confirm`, { method: "POST", body }),
     addTask: (body) => call("api/tasks", { method: "POST", body }),

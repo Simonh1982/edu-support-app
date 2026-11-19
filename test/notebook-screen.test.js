@@ -261,3 +261,14 @@ test("the page has the notebook view, its home button and the task panel's notes
   assert.doesNotMatch(shared, /^import /m);
   assert.doesNotMatch(shared, /\b(document|window|localStorage)\b/);
 });
+
+test("WP-115c fix: Insert a quote is shown openly under the note box, not folded away (seen in the live check)", async () => {
+  const { noteForm } = await import("../web/notebook-parts.js");
+  const { doc } = pageDoc();
+  const form = noteForm(doc, { key: "t", quotes: [{ id: "note_q", title: "Quote: Invented", excerpt: "Invented passage." }] });
+  assert.equal(form.all((e) => e.tagName === "DETAILS").length, 0, "nothing to unfold");
+  const group = form.all((e) => e.className === "insert-quote")[0];
+  assert.equal(group.getAttribute("role"), "group");
+  assert.match(group.textContent, /^Insert a quote/);
+  assert.equal(byAction(group, "insert").length, 1);
+});

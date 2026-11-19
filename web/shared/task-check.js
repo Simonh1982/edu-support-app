@@ -60,7 +60,9 @@ export const CHECK_MESSAGES = Object.freeze({
   badMarks: `Marks must be a whole number up to ${TASK_LIMITS.marks.toLocaleString("en-GB")}.`,
   badWordCount: `The word count must be a whole number up to ${TASK_LIMITS.wordCount.toLocaleString("en-GB")}.`,
   questionTooLong: `Please keep the question to ${TASK_LIMITS.questionText.toLocaleString("en-GB")} characters.`,
-  pasteEmpty: "Paste the task or question first.",
+  pasteEmpty: "Type or paste the task or question first.",
+  // WP-115c: saved on the device while the tutor wakes, then read like a photo taken while it rested
+  pasteQueued: "Saved on this device. It'll be read once the tutor's ready, then it'll ask you to check the details in Your photos and files.",
   pasteTooLong: `That's too long to read in one go. Please paste up to ${PASTE_MAX_CHARS.toLocaleString("en-GB")} characters.`,
   chipEmpty: "Type something first.",
   chipTooLong: `Please keep it to ${TASK_LIMITS.anchorText.toLocaleString("en-GB")} characters.`,
@@ -340,6 +342,17 @@ export function typedTaskBody({ title, deadline, question }) {
       anchors: text ? [{ type: "question", text: text.slice(0, TASK_LIMITS.anchorText) }] : [],
     },
   };
+}
+
+/**
+ * WP-115c: the "Type or paste it" form: the text (typed or pasted), and a due date if he picked one.
+ * → { text, deadline } or { error, field }.
+ */
+export function pasteBody({ text, deadline }) {
+  const checked = pasteCheck(text);
+  if (checked.error) return { error: checked.error, field: "text" };
+  if (!blank(deadline) && !realDate(deadline)) return { error: CHECK_MESSAGES.badDate, field: "deadline" };
+  return { text: checked.text, deadline: blank(deadline) ? null : deadline };
 }
 
 /** Pasted text ready to send, or { error }. */

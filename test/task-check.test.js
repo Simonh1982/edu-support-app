@@ -531,12 +531,12 @@ test("check.js builds the page with text only, keeps nothing in the browser and 
   assert.doesNotMatch(source, /console\./, "brief text must never reach the console");
 });
 
-test("learner page has the paste and type forms and the check screen, every control labelled", () => {
+test("learner page has the Type or paste it form (WP-115c) and the check screen, every control labelled", () => {
   const html = readFileSync(join(WEB, "index.html"), "utf8");
-  assert.match(html, /<button type="button" id="paste-open"[^>]*disabled>Paste the task<\/button>/);
-  assert.match(html, /<button type="button" id="type-open"[^>]*disabled>Type it in<\/button>/);
+  assert.match(html, /<button type="button" id="paste-open"[^>]*disabled>Type or paste it<\/button>/);
+  assert.doesNotMatch(html, /id="type-open"|id="type-form"/, "one form for typing and pasting");
   assert.match(html, new RegExp(`<textarea id="paste-text"[^>]*maxlength="${PASTE_MAX_CHARS}"`));
-  assert.match(html, /<input type="date" id="type-deadline"/);
+  assert.match(html, /<input type="date" id="paste-deadline" aria-describedby="paste-deadline-hint paste-deadline-uk">/);
   assert.match(html, /<input type="date" id="check-deadline"/);
   assert.match(html, /<section id="check-screen"[^>]*hidden>/);
   assert.match(html, /<h2 id="check-heading" tabindex="-1">Check the details<\/h2>/);

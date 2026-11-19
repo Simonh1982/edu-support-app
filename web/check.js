@@ -16,12 +16,11 @@ import {
   formatDeadline,
   initialChips,
   initialUndone,
-  pasteCheck,
+  pasteBody,
   previewQuestion,
   readNotes,
   removeChip,
   textSegments,
-  typedTaskBody,
 } from "./shared/task-check.js";
 
 function setText(element, text) {
@@ -45,29 +44,24 @@ function button(doc, text, { className = "secondary", label } = {}) {
 const short = (text, max = 40) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /**
- * Wires up the paste and type forms and the "Check the details" screen. Returns
+ * Wires up the "Type or paste it" form and the "Check the details" screen. Returns
  * { setTutor(state), open(uploadId), start(), stop() }, or null if the page doesn't have them.
- * WP-110: with queueTask(body) → { kind: "queued", message } | { kind: "queue-error", message }, a typed
- * task can be added while the tutor wakes; it waits in the edit queue on the device.
+ * WP-115c: with queuePaste(body) → { kind: "queued" } | { kind: "queue-error", message }, a task can be
+ * typed or pasted while the tutor wakes; it waits in the edit queue on the device and is read later.
  */
-export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, queueTask = null, doc = document }) {
+export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, queuePaste = null, doc = document }) {
   const byId = (id) => doc.getElementById(id);
   const els = {
     capture: byId("capture"),
     capturesHeading: byId("captures-heading"),
     pasteOpen: byId("paste-open"),
-    typeOpen: byId("type-open"),
     tutorNeeded: byId("tutor-needed"),
     entryStatus: byId("entry-status"),
     pasteForm: byId("paste-form"),
     pasteText: byId("paste-text"),
     pasteCancel: byId("paste-cancel"),
-    typeForm: byId("type-form"),
-    typeTitle: byId("type-title"),
-    typeDeadline: byId("type-deadline"),
-    typeDeadlineUk: byId("type-deadline-uk"),
-    typeQuestion: byId("type-question"),
-    typeCancel: byId("type-cancel"),
+    pasteDeadline: byId("paste-deadline"),
+    pasteDeadlineUk: byId("paste-deadline-uk"),
     check: byId("check-screen"),
     checkHeading: byId("check-heading"),
     checkStatus: byId("check-status"),
@@ -107,98 +101,68 @@ export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, queueT
     onSignedOut?.(reason);
   }
 
-  // ---------- paste and type ----------
-  function showForm(form, opener) {
-    const other = form === els.pasteForm ? [els.typeForm, els.typeOpen] : [els.pasteForm, els.pasteOpen];
-    hideForm(...other);
-    form.hidden = false;
-    opener.setAttribute("aria-expanded", "true");
-    form.querySelector("textarea, input")?.focus();
+  // ---------- type or paste it (WP-115c: one form) ----------
+  function showForm() {
+    els.pasteForm.hidden = false;
+    els.pasteOpen.setAttribute("aria-expanded", "true");
+    els.pasteText.focus();
   }
 
-  function hideForm(form, opener) {
-    form.hidden = true;
-    opener.setAttribute("aria-expanded", "false");
+  function hideForm() {
+    els.pasteForm.hidden = true;
+    els.pasteOpen.setAttribute("aria-expanded", "false");
   }
 
-  // WP-110: typing a task works while the tutor wakes, because it is queued on the device.
-  const canType = () => ready || (active && typeof queueTask === "function");
+  // While the tutor wakes, the text waits in the edit queue on this device (WP-110, WP-115c).
+  const canSend = () => ready || (active && typeof queuePaste === "function");
 
   function setTutor(state) {
     ready = state === "ready" || state === "readyNoAi";
-    els.pasteOpen.disabled = !ready;
-    els.typeOpen.disabled = !canType();
+    els.pasteOpen.disabled = !canSend();
     els.tutorNeeded.hidden = ready;
-    if (!ready) hideForm(els.pasteForm, els.pasteOpen);
-    if (!canType()) hideForm(els.typeForm, els.typeOpen);
+    if (!canSend()) hideForm();
   }
 
-  els.pasteOpen.addEventListener("click", () => (els.pasteForm.hidden ? showForm(els.pasteForm, els.pasteOpen) : hideForm(els.pasteForm, els.pasteOpen)));
-  els.typeOpen.addEventListener("click", () => (els.typeForm.hidden ? showForm(els.typeForm, els.typeOpen) : hideForm(els.typeForm, els.typeOpen)));
+  els.pasteOpen.addEventListener("click", () => (els.pasteForm.hidden ? showForm() : hideForm()));
   els.pasteCancel.addEventListener("click", () => {
-    hideForm(els.pasteForm, els.pasteOpen);
+    hideForm();
     els.pasteOpen.focus();
   });
-  els.typeCancel.addEventListener("click", () => {
-    hideForm(els.typeForm, els.typeOpen);
-    els.typeOpen.focus();
-  });
-  els.typeDeadline.addEventListener("input", () => setText(els.typeDeadlineUk, formatDeadline(els.typeDeadline.value)));
+  els.pasteDeadline.addEventListener("input", () => setText(els.pasteDeadlineUk, formatDeadline(els.pasteDeadline.value)));
 
   els.pasteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (busy || !ready) return;
-    const checked = pasteCheck(els.pasteText.value);
+    if (busy || !canSend()) return;
+    const checked = pasteBody({ text: els.pasteText.value, deadline: els.pasteDeadline.value });
     if (checked.error) {
       setText(els.entryStatus, checked.error);
-      els.pasteText.focus();
+      (checked.field === "deadline" ? els.pasteDeadline : els.pasteText).focus();
       return;
     }
     if (pendingPaste?.text !== checked.text) pendingPaste = { text: checked.text, clientId: newClientId({ source: "paste" }) };
     const { clientId } = pendingPaste;
+    const body = { clientId, text: checked.text, ...(checked.deadline ? { deadline: checked.deadline } : {}) };
     busy = true;
     setText(els.entryStatus, CHECK_MESSAGES.sending);
-    const result = await api.pasteBrief({ clientId, text: checked.text });
-    busy = false;
-    if (result.kind === "auth") return signedOut(result.reason);
-    if (result.kind !== "ok") {
-      setText(els.entryStatus, apiErrorMessage(result));
-      return;
-    }
-    pendingPaste = null;
-    els.pasteText.value = "";
-    hideForm(els.pasteForm, els.pasteOpen);
-    setText(els.entryStatus, "");
-    capture?.addPasted({ clientId });
-    open(result.body?.upload?.id ?? uploadIdFor(clientId));
-  });
-
-  els.typeForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (busy || !canType()) return;
-    const built = typedTaskBody({ title: els.typeTitle.value, deadline: els.typeDeadline.value, question: els.typeQuestion.value });
-    if (built.errors) {
-      const [first] = built.errors;
-      setText(els.entryStatus, first.message);
-      ({ title: els.typeTitle, deadline: els.typeDeadline, question: els.typeQuestion })[first.field]?.focus();
-      return;
-    }
-    busy = true;
-    setText(els.entryStatus, CHECK_MESSAGES.saving);
-    // WP-110: while the tutor wakes, the task waits in the edit queue on this device
-    const result = ready ? await api.addTask(built.body) : await queueTask(built.body);
+    const result = ready ? await api.pasteBrief(body) : await queuePaste(body);
     busy = false;
     if (result.kind === "auth") return signedOut(result.reason);
     if (result.kind !== "ok" && result.kind !== "queued") {
       setText(els.entryStatus, result.kind === "queue-error" ? result.message : apiErrorMessage(result));
       return;
     }
-    els.typeForm.reset();
-    setText(els.typeDeadlineUk, "");
-    hideForm(els.typeForm, els.typeOpen);
-    setText(els.entryStatus, result.kind === "queued" ? result.message : CHECK_MESSAGES.added);
-    els.typeOpen.focus();
-    onTaskAdded?.(); // WP-109: "Coming up" shows the new task
+    pendingPaste = null;
+    els.pasteForm.reset();
+    setText(els.pasteDeadlineUk, "");
+    hideForm();
+    if (result.kind === "queued") {
+      setText(els.entryStatus, CHECK_MESSAGES.pasteQueued);
+      els.pasteOpen.focus();
+      return;
+    }
+    setText(els.entryStatus, "");
+    capture?.addPasted({ clientId });
+    open(result.body?.upload?.id ?? uploadIdFor(clientId));
   });
 
   // ---------- the check screen ----------
@@ -458,8 +422,7 @@ export function createTaskEntry({ api, capture, onSignedOut, onTaskAdded, queueT
     pendingPaste = null;
     busy = false;
     els.pasteForm.reset();
-    els.typeForm.reset();
-    setText(els.typeDeadlineUk, "");
+    setText(els.pasteDeadlineUk, "");
     setText(els.entryStatus, "");
     setTutor("waiting");
   }
