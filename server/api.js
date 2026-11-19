@@ -12,6 +12,7 @@ import {
 import { listSources, saveSource, summariseSource, addOwnSource, attachToSource } from './domain/sources.js';
 import { withAttachments } from './domain/attachments.js';
 import { listNotebook, createNote, updateNote, createQuote, pinEntry, earlierResearch } from './domain/notebook.js';
+import { readPlan, planView, updatePlan, findGaps } from './domain/plan.js';
 
 const ID = '([A-Za-z0-9][A-Za-z0-9_-]{0,99})';
 const LEARNER = Object.freeze(['learner']);
@@ -54,6 +55,10 @@ export const API_ROUTES = Object.freeze([
   route('PATCH', `/api/notebook/notes/${ID}`, 'updateNote'),
   route('POST', '/api/notebook/quotes', 'createQuote'),
   route('POST', `/api/notebook/${ID}/pin`, 'pinEntry'),
+  // WP-116: Plan my answer (build spec §9.2)
+  route('GET', `/api/tasks/${ID}/plan`, 'getPlan'),
+  route('PATCH', `/api/tasks/${ID}/plan`, 'updatePlan'),
+  route('POST', `/api/tasks/${ID}/plan/gaps`, 'findGaps'),
 ]);
 
 export const API_MESSAGES = Object.freeze({
@@ -130,6 +135,17 @@ const HANDLERS = {
   async latestConversation({ store, query, ctx }) {
     const conversation = await latestConversation(store, { taskId: query.get('taskId'), route: query.get('route') }, ctx);
     return { status: 200, body: { conversation } };
+  },
+  async getPlan({ store, params: [id] }) {
+    const task = await readTask(store, id);
+    if (!task) return { status: 404, body: { error: 'Task not found.' } };
+    return { status: 200, body: { plan: await planView(store, await readPlan(store, id), id) } };
+  },
+  async updatePlan({ store, params: [id], body }) {
+    return { status: 200, body: { plan: await updatePlan(store, id, object(body)) } };
+  },
+  async findGaps({ store, params: [id], ctx }) {
+    return { status: 200, body: await findGaps(store, id, ctx) };
   },
   async listNotebook({ store, query }) {
     const q = (k) => query.get(k) ?? undefined;

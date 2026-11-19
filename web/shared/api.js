@@ -110,6 +110,10 @@ export function createApi({
     updateNote: (id, body) => call(`api/notebook/notes/${encodeURIComponent(id)}`, { method: "PATCH", body }),
     createQuote: (body) => call("api/notebook/quotes", { method: "POST", body }),
     pinEntry: (id, body) => call(`api/notebook/${encodeURIComponent(id)}/pin`, { method: "POST", body }),
+    // WP-116: his plan for a task; "What's missing?" waits for the tutor and its check
+    getPlan: (taskId) => call(`api/tasks/${encodeURIComponent(taskId)}/plan`),
+    updatePlan: (taskId, body) => call(`api/tasks/${encodeURIComponent(taskId)}/plan`, { method: "PATCH", body }),
+    findGaps: (taskId) => talk(`api/tasks/${encodeURIComponent(taskId)}/plan/gaps`, {}),
     openItem: (type, id) => call(`api/item?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`),
     // WP-114e: the task panel (the full task and its saved sources) and sources he adds himself (A-010)
     getTask: (id) => call(`api/tasks/${encodeURIComponent(id)}`),

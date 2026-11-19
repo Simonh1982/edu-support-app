@@ -1073,3 +1073,41 @@ button.vote[aria-pressed="true"]::after {
   padding: 0.5rem 0;
   border-top: var(--border-width) solid var(--muted);
 }
+
+/* WP-116: Plan my answer */
+.plan-form textarea,
+.note-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+}
+.plan-pins,
+.plan-gaps {
+  list-style: none;
+  padding: 0;
+}
+.plan-pins li,
+.plan-gaps li {
+  padding: 0.5rem 0;
+  border-top: var(--border-width) solid var(--muted);
+  overflow-wrap: anywhere;
+}
+.gap-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-height: var(--tap);
+}
+.gap-line input[type="checkbox"] {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+}
+.gap-done .gap-label {
+  text-decoration: line-through;
+}
+.gap-form input {
+  width: 100%;
+  box-sizing: border-box;
+}

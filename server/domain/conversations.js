@@ -28,6 +28,7 @@ import {
   DomainError, bad, notFound, plainObject, onlyKeys, oneOf, recordId, topicId, flag, textField, idDate,
 } from './fields.js';
 import { readTask, withTaskLock, FINISHED_STAGES } from './tasks.js';
+import { mainPointFromAttempt } from './plan.js';
 import {
   recordAttempt, readAttempt, logSupport, logSupportOutcome, saveAiTurn, aiTurnPath, listTaskTurns, SUPPORT_TYPES,
   WORK_LIMITS,
@@ -447,6 +448,14 @@ export async function sendMessage(store, id, body, ctx = {}) {
       state = advance(conv, { action: 'attempt' });
       if (conv.lastSupportEventId) await logSupportOutcome(store, { supportEventId: conv.lastSupportEventId, outcome: 'tried-again' });
       attemptId = (await recordAttempt(store, { ...base, text: text.value }, { curriculum: ctx.curriculum, now })).id;
+      // WP-116: in Plan my answer his attempt is his main point (§21.1); it starts the plan if empty
+      if (conv.route === 'plan' && conv.taskId && conv.pair === 0) {
+        try {
+          await mainPointFromAttempt(store, conv.taskId, text.value, { now });
+        } catch (err) {
+          (ctx.log ?? console).error(`[plan] main point not saved: ${err?.name ?? 'Error'}`);
+        }
+      }
     }
     const turn = await saveAiTurn(store, {
       feature: conv.route, role: 'conversation', model: answer.model, taskId: conv.taskId, topicId: conv.topicId, attemptId,
