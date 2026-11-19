@@ -96,8 +96,9 @@ export function noteForm(doc, {
     box.append(select);
   }
   // quotes go in with their citation (§29); AI text is never offered here
-  const insert = make(doc, "details", { className: "more insert-quote" });
-  insert.append(make(doc, "summary", { text: NOTEBOOK_TEXT.insertHeading }));
+  // WP-115d: shown open, not folded away: a folded section looked like a plain heading (live check)
+  const insert = make(doc, "div", { className: "insert-quote", attrs: { role: "group", "aria-labelledby": `${id}-insert` } });
+  insert.append(make(doc, "p", { className: "insert-heading", text: NOTEBOOK_TEXT.insertHeading, attrs: { id: `${id}-insert` } }));
   insert.append(make(doc, "p", { className: "hint", text: quotes.length ? NOTEBOOK_TEXT.insertHint : NOTEBOOK_TEXT.noQuotes }));
   if (quotes.length) {
     const list = make(doc, "ul", { className: "quote-picks" });

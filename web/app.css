@@ -1062,3 +1062,14 @@ button.vote[aria-pressed="true"]::after {
   width: 100%;
   box-sizing: border-box;
 }
+.insert-quote {
+  margin: 1rem 0;
+}
+.insert-heading {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.quote-picks li {
+  padding: 0.5rem 0;
+  border-top: var(--border-width) solid var(--muted);
+}
