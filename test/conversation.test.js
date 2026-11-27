@@ -244,8 +244,9 @@ test('second pair only after a fresh attempt; outcome logged; support turns carr
 });
 
 test('a free message after the first pair is offered is not an attempt and changes nothing', async () => {
-  const { call, store } = await setup();
-  const c = await start(call, { route: 'learn', topicId: 'demo-geo-1a' });
+  const { call, store, task } = await setup();
+  // on set work (WP-130b: a chat with no task doesn't wait for an attempt)
+  const c = await start(call, { route: 'learn', taskId: task.id, topicId: 'demo-geo-1a' });
   await call('POST', `/api/conversations/${c.id}/messages`, { text: 'Nothing yet' });
   const r = await call('POST', `/api/conversations/${c.id}/messages`, { text: 'what is a groyne?' });
   assert.equal(r.body.attemptId, null);
@@ -349,8 +350,8 @@ test('AI not ready, AI failing or the daily ceiling reached: nothing saved, stat
 });
 
 test('resume: the conversation comes back with its turns; missing ones 404', async () => {
-  const { call, store } = await setup();
-  const c = await start(call, { route: 'learn' });
+  const { call, store, task } = await setup();
+  const c = await start(call, { route: 'learn', taskId: task.id });
   await call('POST', `/api/conversations/${c.id}/messages`, { text: 'invented first go' });
   await call('POST', `/api/conversations/${c.id}/support`, { type: 'breakdown' });
   const r = await call('GET', `/api/conversations/${c.id}`);

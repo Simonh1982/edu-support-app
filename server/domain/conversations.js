@@ -436,14 +436,16 @@ export async function sendMessage(store, id, body, ctx = {}) {
     const log = ctx.log ?? console;
 
     // WP-130 (A-013 §7): the invisible ladder. What he wrote decides the step; the server keeps the rules.
-    const step = ladderStep(conv, helpKind(text.value));
-    // stuck before any attempt counts as "I don't know where to start": a breakdown only (§21.1)
-    const escapeState = step === 'escape' ? advance(conv, { action: 'attempt', escape: true }) : null;
-    const offered = step === 'support' ? offeredSupport(conv) : step === 'escape' ? offeredSupport(escapeState) : [];
+    const step = ladderStep(conv, helpKind(text.value), { taskLinked: Boolean(conv.taskId) });
+    // stuck before any attempt counts as "I don't know where to start": a breakdown only (§21.1);
+    // stuck again after help counts as his next try (WP-130b), so the next help opens at once
+    const escapeState = step === 'escape' ? advance(conv, { action: 'attempt', escape: true })
+      : step === 'retry' ? advance(conv, { action: 'attempt' }) : null;
+    const offered = step === 'support' ? offeredSupport(conv) : escapeState ? offeredSupport(escapeState) : [];
     const attemptText = conv.lastAttemptId ? (await readAttempt(store, conv.lastAttemptId))?.text?.value ?? '' : '';
     const ask = (choice) => answerFor(store, conv, {
       ctx,
-      action: step === 'escape' || step === 'support' ? 'support' : step,
+      action: ['escape', 'retry', 'support'].includes(step) ? 'support' : step,
       type: choice?.length === 1 ? choice[0] : null,
       choice: choice?.length > 1 ? choice : null,
       message: text.value,
@@ -472,13 +474,13 @@ export async function sendMessage(store, id, body, ctx = {}) {
     // Levels 2–3 (build spec §32.1): his words, the reply and anything made from them are dropped
     // before anything is saved. A disclosure isn't a go at the work, so it makes no Attempt record and
     // opens no help; he still sees the reply.
-    const counts = (step === 'attempt' || step === 'escape') && !disclosure;
+    const counts = ['attempt', 'escape', 'retry'].includes(step) && !disclosure;
     const supported = Boolean(supportType) && !isDisclosure(answer.wellbeingLevel);
     const action = supported ? 'support' : step === 'attempt' && counts ? 'attempt' : 'message';
     let state = { pair: conv.pair, waiting: conv.waiting, escape: conv.escape };
     let attemptId = null;
     if (counts) {
-      state = step === 'escape' ? escapeState : advance(conv, { action: 'attempt' });
+      state = escapeState ?? advance(conv, { action: 'attempt' });
       if (conv.lastSupportEventId) await logSupportOutcome(store, { supportEventId: conv.lastSupportEventId, outcome: 'tried-again' });
       const attempt = step === 'escape'
         ? await recordAttempt(store, { ...base, escape: true }, { curriculum: ctx.curriculum, now })

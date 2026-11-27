@@ -28,7 +28,7 @@ test('help requests: short "stuck" messages, idk-style answers, and longer messa
   for (const t of ['The defences protect the town', 'nothing yet', 'Sea walls stop erosion in the centre', '']) assert.equal(helpKind(t), null, t);
 });
 
-test('the step table keeps the old rules: attempt first, then help, then a fresh try before more', () => {
+test('the step table: attempt first on set work; stuck again after help is the next try; no task, no ladder', () => {
   const start = { pair: 0, waiting: true };
   const open = { pair: 1, waiting: false };
   const afterHelp = { pair: 1, waiting: true };
@@ -38,8 +38,9 @@ test('the step table keeps the old rules: attempt first, then help, then a fresh
   assert.equal(ladderStep(open, 'stuck'), 'support');
   assert.equal(ladderStep(open, 'ask'), 'support');
   assert.equal(ladderStep(open, null), 'message');
-  assert.equal(ladderStep(afterHelp, 'stuck'), 'nudge', 'no more help until he tries again');
+  assert.equal(ladderStep(afterHelp, 'stuck'), 'retry', 'WP-130b: stuck again opens the next help');
   assert.equal(ladderStep(afterHelp, null), 'attempt');
+  for (const kind of ['stuck', 'ask', null]) assert.equal(ladderStep(start, kind, { taskLinked: false }), 'message', 'no task: just help');
 });
 
 test('the tutor is told which kinds are allowed, and to say which it gave', () => {
@@ -92,10 +93,13 @@ async function setup({ claims = ['other'], level = 0 } = {}) {
     assert.ok(match?.route, `route ${method} ${url}`);
     return handleApi({ match, pass: { role: 'learner' }, store, body, getAi: () => ({ ai, models: MODELS }), log: silent });
   };
-  const conv = (await call('POST', '/api/conversations', { route: 'learn' })).body.conversation;
+  const task = (await call('POST', '/api/tasks', { title: 'Invented coast task', questionText: 'Explain an invented spit.' })).body.task;
+  const conv = (await call('POST', '/api/conversations', { route: 'learn', taskId: task.id })).body.conversation;
+  const free = (await call('POST', '/api/conversations', { route: 'learn' })).body.conversation;
+  const sayFree = async (text) => (await call('POST', `/api/conversations/${free.id}/messages`, { text })).body;
   const say = async (text) => (await call('POST', `/api/conversations/${conv.id}/messages`, { text })).body;
   const supports = () => store.events.filter((e) => e.type === 'support.requested').map((e) => e.payload.type);
-  return { store, prompts, say, supports, done: () => rm(store.dir, { recursive: true, force: true }) };
+  return { store, prompts, say, sayFree, supports, done: () => rm(store.dir, { recursive: true, force: true }) };
 }
 
 test('stuck at the start: like "I don\'t know where to start", a breakdown only, recorded as an escape', async () => {
@@ -112,8 +116,8 @@ test('stuck at the start: like "I don\'t know where to start", a breakdown only,
   } finally { await s.done(); }
 });
 
-test('after a go, "I\'m stuck" gets the tutor\'s choice of the first pair; stuck again gets a nudge, not more help', async () => {
-  const s = await setup({ claims: ['other', 'hint', 'other'] });
+test('after a go, "I\'m stuck" gets the first pair; stuck again counts as the next try and opens the second', async () => {
+  const s = await setup({ claims: ['other', 'hint', 'pointer'] });
   try {
     const a = await s.say('Waves move sand along the beach I think');
     assert.equal(a.turn.action, 'attempt');
@@ -121,9 +125,10 @@ test('after a go, "I\'m stuck" gets the tutor\'s choice of the first pair; stuck
     assert.deepEqual([b.turn.action, b.turn.type], ['support', 'hint']);
     assert.match(s.prompts[1], /"hint" or "breakdown"/);
     const c = await s.say('still stuck');
-    assert.equal(c.turn.action, 'message');
-    assert.ok(s.prompts[2].includes(ACTION_INSTRUCTIONS.nudge));
-    assert.deepEqual(s.supports(), ['hint'], 'the nudge is not help');
+    assert.deepEqual([c.turn.action, c.turn.type], ['support', 'pointer']);
+    assert.match(s.prompts[2], /"pointer" or "explanation"/);
+    assert.ok(c.attemptId, 'recorded as his next try');
+    assert.deepEqual(s.supports(), ['hint', 'pointer']);
   } finally { await s.done(); }
 });
 
@@ -151,5 +156,18 @@ test('a level-3 message asking for help is care, not coursework: no attempt and 
     assert.equal(r.attemptId, null);
     assert.deepEqual(s.supports(), []);
     assert.equal(r.conversation.needsAttempt, true);
+  } finally { await s.done(); }
+});
+
+test('a chat with no task is not set work: no attempt first, and the tutor just helps', async () => {
+  const s = await setup();
+  try {
+    const r = await s.sayFree('what is osmosis?');
+    assert.equal(r.turn.action, 'message');
+    assert.equal(r.attemptId, null);
+    assert.ok(!s.prompts[0].includes(ACTION_INSTRUCTIONS.attempt), 'not treated as his go');
+    const stuck = await s.sayFree("I'm stuck");
+    assert.equal(stuck.turn.action, 'message');
+    assert.deepEqual(s.supports(), []);
   } finally { await s.done(); }
 });
