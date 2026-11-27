@@ -6,13 +6,14 @@ import { listTasks, readTask, createTask, updateTask, addAnchor, updateAnchor, r
 import { recordAttempt } from './domain/work.js';
 import { openUpload, uploadView, confirmUpload, addPastedBrief, UPLOAD_MESSAGES } from './domain/uploads.js';
 import {
-  startConversation, openConversation, latestConversation, conversationView, sendMessage, requestSupport, voteOnTurn, suggestRoute,
+  startConversation, openConversation, latestConversation, conversationView, renameChat, sendMessage, requestSupport, voteOnTurn, suggestRoute,
   STATE_MESSAGES,
 } from './domain/conversations.js';
 import { listSources, saveSource, summariseSource, addOwnSource, attachToSource } from './domain/sources.js';
 import { withAttachments } from './domain/attachments.js';
 import { listNotebook, createNote, updateNote, createQuote, pinEntry, earlierResearch } from './domain/notebook.js';
 import { readPlan, planView, updatePlan, findGaps } from './domain/plan.js';
+import { buildMenu } from './domain/menu.js';
 
 const ID = '([A-Za-z0-9][A-Za-z0-9_-]{0,99})';
 const LEARNER = Object.freeze(['learner']);
@@ -56,6 +57,9 @@ export const API_ROUTES = Object.freeze([
   route('POST', '/api/notebook/quotes', 'createQuote'),
   route('POST', `/api/notebook/${ID}/pin`, 'pinEntry'),
   // WP-116: Plan my answer (build spec §9.2)
+  // WP-131a (A-013): the side menu's lists, and renaming a chat with no task
+  route('GET', '/api/menu', 'getMenu'),
+  route('PATCH', `/api/conversations/${ID}`, 'renameChat'),
   route('GET', `/api/tasks/${ID}/plan`, 'getPlan'),
   route('PATCH', `/api/tasks/${ID}/plan`, 'updatePlan'),
   route('POST', `/api/tasks/${ID}/plan/gaps`, 'findGaps'),
@@ -135,6 +139,12 @@ const HANDLERS = {
   async latestConversation({ store, query, ctx }) {
     const conversation = await latestConversation(store, { taskId: query.get('taskId'), route: query.get('route') }, ctx);
     return { status: 200, body: { conversation } };
+  },
+  async getMenu({ store, curriculum }) {
+    return { status: 200, body: { menu: await buildMenu(store, { curriculum }) } };
+  },
+  async renameChat({ store, params: [id], body, ctx }) {
+    return { status: 200, body: { conversation: conversationView(await renameChat(store, id, object(body)), ctx) } };
   },
   async getPlan({ store, params: [id] }) {
     const task = await readTask(store, id);

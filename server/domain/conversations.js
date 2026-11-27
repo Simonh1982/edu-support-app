@@ -30,6 +30,7 @@ import {
 } from './fields.js';
 import { readTask, withTaskLock, FINISHED_STAGES } from './tasks.js';
 import { mainPointFromAttempt } from './plan.js';
+import { nameChat, MENU_LIMITS, MENU_MESSAGES } from './menu.js';
 import {
   recordAttempt, readAttempt, logSupport, logSupportOutcome, saveAiTurn, aiTurnPath, listTaskTurns, SUPPORT_TYPES,
   WORK_LIMITS,
@@ -118,7 +119,26 @@ export function conversationView(conv, { disengageAfter = DEFAULT_DISENGAGE_AFTE
     disengaged: idkCount(conv.turns) >= disengageAfter,
     createdAt: conv.createdAt,
     updatedAt: conv.updatedAt,
+    // WP-131a: a chat with no task has a name (the AI's, or his); a task chat is named from its task
+    name: typeof conv.name?.value === 'string' ? conv.name.value : null,
   };
+}
+
+/** WP-131a: he renames a chat with no task (a task chat is named after its task). body: { name }. */
+export async function renameChat(store, id, body, { now = new Date() } = {}) {
+  plainObject(body, 'chat');
+  onlyKeys(body, ['name'], 'chat');
+  const name = textField(body.name, 'name', { max: MENU_LIMITS.name, authors: ['learner'], defaultAuthor: 'learner', required: true });
+  const value = name.value.replace(/\s+/g, ' ').trim();
+  if (!value) throw bad('name is required');
+  return withTaskLock(lockKey(id), async () => {
+    const conv = await readConversation(store, id);
+    if (!conv) throw new DomainError(404, MENU_MESSAGES.notFound);
+    if (conv.taskId) throw new DomainError(409, MENU_MESSAGES.taskChat);
+    const saved = await saveConversation(store, conv, { name: { value, author: 'learner' } }, now);
+    await store.logEvent('chat.renamed', { createdBy: 'learner', links: { conversationId: id }, payload: {} });
+    return saved;
+  });
 }
 
 export async function readConversation(store, id) {
@@ -517,6 +537,11 @@ export async function sendMessage(store, id, body, ctx = {}) {
       lastSupportEventId: supportEventId ?? (counts ? null : conv.lastSupportEventId),
       turns: [...conv.turns, { turnId: turn.id, action, ...(supported ? { type: supportType } : {}), idk: idk && !disclosure }],
     };
+    // WP-131a: a chat with no task is named from his first message, unless that was a level 2–3 message
+    if (!conv.taskId && !conv.name && conv.turns.length === 0 && !disclosure) {
+      const name = await nameChat(store, text.value, { ...ctx, now });
+      if (name) changes.name = name;
+    }
     if (disengaged && !disclosure && !conv.disengagedAt) {
       changes.disengagedAt = ukIso(now);
       await store.logEvent('conversation.disengaged', {
