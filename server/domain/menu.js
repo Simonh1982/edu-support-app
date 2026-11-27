@@ -18,6 +18,7 @@ export const NAME_TIMEOUT_MS = 15_000;
 export const MENU_MESSAGES = Object.freeze({
   notFound: 'Chat not found.',
   taskChat: 'A chat on a task is named after the task.',
+  alreadyLinked: 'This chat is already about another task.',
 });
 export const NAME_SYSTEM = [
   'You name a study chat for a student\'s list of chats.',

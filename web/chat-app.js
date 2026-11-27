@@ -15,6 +15,8 @@ import {
 import { MENU_TEXT, cleanMenu, dueLabel, focusLists, statusOf, whenLabel } from "./shared/menu.js";
 import { createSideMenu, make } from "./side-menu.js";
 import { STAGE_LABELS } from "./shared/upcoming.js";
+import { createChatCards, CARD_TEXT } from "./chat-cards.js";
+import { resizeImage } from "./capture.js";
 
 const ROLE = "learner";
 const READY_STATES = new Set(["ready", "readyNoAi"]);
@@ -40,6 +42,10 @@ export const CHAT_TEXT = Object.freeze({
   topicChats: (n) => `Chats (${n})`,
   topicTasks: (n) => `Tasks (${n})`,
   noChatsYet: "No chats yet. Write below to start one.",
+  // WP-132a: the "+" menu
+  pasteChip: "Adding a task",
+  placeholderPaste: "Paste or type the task here: the whole thing, with any instructions…",
+  sourceNeedsTask: "A source belongs to a task. Open the task (or add one with Paste a task) first.",
   sources: "Sources from this reply",
   you: "You",
   tutor: "Tutor",
@@ -56,6 +62,8 @@ export function initChat({ doc = document, win = window } = {}) {
     taskChip: byId("task-chip"), dot: byId("tutor-dot"), view: byId("view"), composer: byId("composer"), message: byId("message"),
     send: byId("send"), typeChip: byId("type-chip"), note: byId("composer-note"), signedOut: byId("signed-out"),
     dialog: byId("sign-out-dialog"), dialogCancel: byId("sign-out-cancel"), dialogConfirm: byId("sign-out-confirm"),
+    plus: byId("plus"), plusMenu: byId("plus-menu"), cameraInput: byId("camera-input"), galleryInput: byId("gallery-input"),
+    fileInput: byId("file-input"), pasteExtra: byId("paste-extra"), pasteDue: byId("paste-due"), pasteCancel: byId("paste-cancel"),
   };
   if (Object.values(els).some((el) => !el)) return null;
 
@@ -71,10 +79,15 @@ export function initChat({ doc = document, win = window } = {}) {
   let pendingRoute = null;
   let busy = false;
   let renaming = false;
+  let pasteMode = false; // WP-132a: the message box takes a task to add
 
   const api = createApi({ getBackendUrl: () => backendUrl, getToken: () => token });
   const accessibility = createAccessibility({ workerUrl: config.workerUrl, root: doc.documentElement, local });
   const phone = () => win.matchMedia?.("(max-width: 719px)").matches === true;
+  const cards = createChatCards({
+    doc, api, workerUrl: config.workerUrl, getToken: () => token, isReady: () => ready, resizeImage,
+    onChange: () => render(), onAdded: (task) => taskAdded(task),
+  });
 
   const side = createSideMenu({
     doc,
@@ -127,6 +140,7 @@ export function initChat({ doc = document, win = window } = {}) {
 
   // ---------- navigation ----------
   function show(next) {
+    if (next.kind !== view.kind || next.id !== view.id) { cards.clear(); pasteMode = false; }
     view = next;
     renaming = false;
     setText(els.note, "");
@@ -173,7 +187,11 @@ export function initChat({ doc = document, win = window } = {}) {
   // ---------- header ----------
   function chatTitle() {
     const known = menuData.chats.find((c) => c.id === conv?.id);
-    return known?.name ?? conv?.name ?? "Chat";
+    if (known?.name) return known.name;
+    // a task chat not yet in the menu (no reply yet) is named as the server will name it
+    const task = conv?.taskId ? menuData.tasks.find((t) => t.id === conv.taskId) : null;
+    if (task) return `${task.title} – ${conv.route ?? "chat"}`;
+    return conv?.name ?? "Chat";
   }
 
   function renderTop() {
@@ -291,12 +309,19 @@ export function initChat({ doc = document, win = window } = {}) {
   }
 
   function renderView() {
+    if (view.kind === "new" && cards.list().length) {
+      const col = make(doc, "div", { className: "column" });
+      const ol = make(doc, "ol", { className: "messages", attrs: { "aria-label": "Your conversation" } });
+      ol.append(...cards.list().map((c) => cards.render(c)));
+      col.append(ol);
+      return [col];
+    }
     if (view.kind === "new") {
       const box = make(doc, "div", { className: "welcome" });
       box.append(make(doc, "h1", { text: MENU_TEXT.greeting, attrs: { tabindex: "-1" } }));
       const chips = make(doc, "div", { className: "chips" });
       const chip = (label, fn) => { const b = make(doc, "button", { className: "chip", text: label, attrs: { type: "button" } }); b.addEventListener("click", fn); chips.append(b); };
-      chip(MENU_TEXT.chipTask, () => show({ kind: "classic", what: "task" }));
+      chip(MENU_TEXT.chipTask, () => startPaste());
       chip(MENU_TEXT.chipLearn, () => { pendingRoute = "learn"; render(); els.message.focus(); });
       chip(MENU_TEXT.chipDue, () => { side.showTasks(); if (phone()) openDrawer(); });
       box.append(chips);
@@ -306,7 +331,9 @@ export function initChat({ doc = document, win = window } = {}) {
       const col = make(doc, "div", { className: "column" });
       if (!ready && !conv?.loaded) col.append(make(doc, "p", { className: "hint", text: CHAT_TEXT.notReadyChat }));
       const ul = make(doc, "ol", { className: "messages", attrs: { "aria-label": "Your conversation" } });
-      ul.append(...(conv?.turns ?? []).map(messageItem));
+      // saved turns, then the cards added here, then the app's own prompt after a task is added
+      const turns = conv?.turns ?? [];
+      ul.append(...turns.filter((t) => !t.local).map(messageItem), ...cards.list().map((c) => cards.render(c)), ...turns.filter((t) => t.local).map(messageItem));
       col.append(ul);
       return [col];
     }
@@ -343,8 +370,10 @@ export function initChat({ doc = document, win = window } = {}) {
     const shown = view.kind === "new" || view.kind === "chat" || view.kind === "task";
     els.composer.hidden = !shown;
     const route = view.kind === "chat" ? conv?.route : pendingRoute;
-    setText(els.typeChip, route ? HELP_LABELS[route] ?? CHAT_TEXT.helpAuto : CHAT_TEXT.helpAuto);
-    els.message.placeholder = view.kind === "chat" ? CHAT_TEXT.placeholderReply
+    setText(els.typeChip, pasteMode ? CHAT_TEXT.pasteChip : route ? HELP_LABELS[route] ?? CHAT_TEXT.helpAuto : CHAT_TEXT.helpAuto);
+    els.pasteExtra.hidden = !pasteMode;
+    els.message.maxLength = pasteMode ? 20000 : 4000;
+    els.message.placeholder = pasteMode ? CHAT_TEXT.placeholderPaste : view.kind === "chat" ? CHAT_TEXT.placeholderReply
       : view.kind === "task" ? CHAT_TEXT.placeholderTask
         : pendingRoute === "learn" ? CHAT_TEXT.placeholderLearn : CHAT_TEXT.placeholderNew;
     els.send.disabled = busy;
@@ -379,6 +408,7 @@ export function initChat({ doc = document, win = window } = {}) {
   els.composer.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (busy) return;
+    if (pasteMode) return sendPaste();
     const checked = checkMessage(els.message.value);
     if (checked.error) { setText(els.note, checked.error); els.message.focus(); return; }
     if (!ready) { setText(els.note, CHAT_TEXT.waiting); return; }
@@ -418,6 +448,106 @@ export function initChat({ doc = document, win = window } = {}) {
     loadMenu();
     return undefined;
   });
+
+  // ---------- the "+" menu (WP-132a) ----------
+  function taskContext() {
+    if (view.kind === "task") return view.id;
+    return view.kind === "chat" ? conv?.taskId ?? null : null;
+  }
+
+  function closePlus({ focus = false } = {}) {
+    if (els.plusMenu.hidden) return;
+    els.plusMenu.hidden = true;
+    els.plus.setAttribute("aria-expanded", "false");
+    if (focus) els.plus.focus();
+  }
+  function openPlus() {
+    const source = els.plusMenu.querySelector('[data-add="source"]');
+    source?.setAttribute("aria-disabled", String(!taskContext()));
+    els.plusMenu.hidden = false;
+    els.plus.setAttribute("aria-expanded", "true");
+    els.plusMenu.querySelector("button")?.focus();
+  }
+  els.plus.addEventListener("click", () => (els.plusMenu.hidden ? openPlus() : closePlus({ focus: true })));
+  els.plusMenu.addEventListener("keydown", (e) => {
+    const items = [...els.plusMenu.querySelectorAll("button")];
+    const at = items.indexOf(doc.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); closePlus({ focus: true }); }
+    if (e.key === "ArrowDown") { e.preventDefault(); items[(at + 1) % items.length]?.focus(); }
+    if (e.key === "ArrowUp") { e.preventDefault(); items[(at - 1 + items.length) % items.length]?.focus(); }
+  });
+  doc.addEventListener("click", (e) => {
+    if (!els.plusMenu.hidden && !els.plusMenu.contains(e.target) && !els.plus.contains(e.target)) closePlus();
+  });
+  els.plusMenu.addEventListener("click", (e) => {
+    const what = e.target?.closest?.("[data-add]")?.dataset.add;
+    if (!what) return;
+    closePlus();
+    if (what === "camera") els.cameraInput.click();
+    else if (what === "gallery") els.galleryInput.click();
+    else if (what === "file") els.fileInput.click();
+    else if (what === "paste") startPaste();
+    else if (what === "source") {
+      const taskId = taskContext();
+      if (!taskId) { setText(els.note, CHAT_TEXT.sourceNeedsTask); els.plus.focus(); return; }
+      const card = cards.addSource(taskId);
+      win.setTimeout(() => doc.getElementById(`${card.key}-title`)?.focus(), 0);
+    }
+  });
+  for (const [input, source] of [[els.cameraInput, "camera"], [els.galleryInput, "gallery"], [els.fileInput, "file"]]) {
+    input.addEventListener("change", () => {
+      const files = Array.from(input.files ?? []);
+      input.value = "";
+      if (!files.length) return;
+      setText(els.note, "");
+      cards.addFiles(files, source);
+    });
+  }
+
+  function startPaste() {
+    pasteMode = true;
+    setText(els.note, "");
+    renderComposer();
+    els.message.focus();
+  }
+  els.pasteCancel.addEventListener("click", () => { pasteMode = false; els.pasteDue.value = ""; renderComposer(); els.message.focus(); });
+
+  async function sendPaste() {
+    if (!ready) { setText(els.note, CHAT_TEXT.waiting); return; }
+    busy = true;
+    renderComposer();
+    const r = await cards.addPaste(els.message.value, els.pasteDue.value);
+    busy = false;
+    if (r.error) { setText(els.note, r.error); renderComposer(); (r.field === "deadline" ? els.pasteDue : els.message).focus(); return; }
+    els.message.value = "";
+    els.pasteDue.value = "";
+    pasteMode = false;
+    autosize();
+    render();
+    els.view.scrollTop = els.view.scrollHeight;
+  }
+
+  /** A task he confirmed in a card: link this chat to it, or start a chat on it (A-013 §6). */
+  async function taskAdded(task) {
+    if (view.kind === "chat" && conv && !conv.taskId) {
+      const r = await api.linkChat(conv.id, task.id);
+      if (r.kind === "ok") conv.taskId = task.id;
+    } else if (view.kind !== "chat" || !conv) {
+      const started = await api.startConversation({ route: routeForStage(task.stage), taskId: task.id });
+      if (started.kind !== "ok" || typeof started.body?.conversation?.id !== "string") { loadMenu(); return; }
+      const keep = cards.list().slice();
+      conv = { id: started.body.conversation.id, route: started.body.conversation.route, taskId: task.id, name: null, turns: [], loaded: true };
+      view = { kind: "chat", id: conv.id };
+      side.setFocus({ kind: "chat", id: conv.id });
+      side.setCurrent(view);
+      cards.list().splice(0, cards.list().length, ...keep);
+    }
+    if (conv) conv.turns.push({ id: `local-${Date.now()}`, local: true, reply: CARD_TEXT.prompt, sources: [] });
+    await loadMenu();
+    render();
+    els.view.scrollTop = els.view.scrollHeight;
+    els.message.focus();
+  }
 
   function autosize() {
     els.message.style.height = "auto";
