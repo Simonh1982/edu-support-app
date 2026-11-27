@@ -147,3 +147,17 @@ test("the page has the \"+\" menu, labelled, with the paste date and the file pi
   assert.match(html, /<input type="file" id="camera-input" accept="image\/\*" capture="environment" hidden>/);
   for (const file of ["chat-cards.js", "chat-app.js"]) assert.doesNotMatch(readFileSync(new URL(`../web/${file}`, import.meta.url), "utf8"), /innerHTML|\bconfirm\s*\(/, file);
 });
+
+test("phone fixes from the live check: room for a card, steady taps, and one timeline in order", () => {
+  const css = readFileSync(new URL("../web/chat.css", import.meta.url), "utf8");
+  assert.match(css, /\.main\.top-away \.top \{\s*display: none;/, "the top bar steps aside while scrolling down");
+  assert.match(css, /\.main\.editing-card \.composer-wrap \{\s*display: none;/, "the message box steps aside while a card is filled in");
+  assert.match(css, /height: 100dvh;/, "sized to the space above the keyboard");
+  assert.doesNotMatch(css, /:focus-within \.composer-hint/, "nothing in the message box changes size on focus (a tap would miss)");
+  const app = readFileSync(new URL("../web/chat-app.js", import.meta.url), "utf8");
+  assert.match(app, /if \(!inCard\(e\.relatedTarget\)\) mainEl\.classList\.remove\("editing-card"\)/, "stays aside while focus is anywhere in the card");
+  assert.match(app, /\.sort\(\(a, b\) => a\.at - b\.at \|\| a\.i - b\.i\)/, "cards and messages in the order they happened");
+  assert.match(app, /setText\(els\.taskChip, phone\(\) \? MENU_TEXT\.task : task\.title\)/);
+  const cards = createChatCards({ doc, api: fakeApi([]).api, workerUrl: "https://w.invented.dev", getToken: () => "pass", now: () => 1234 });
+  assert.equal(cards.addSource("t_inv9").at, 1234, "each card records when it was added");
+});
