@@ -1,6 +1,6 @@
 # Workplan: phase 1 (MVP: Work and Learn): APPROVED
-**Version:** 1.9, 17 November 2026. **Status:** **approved by Simon (31 Oct)**, and this is the working document. Updated after WP-114g (public STATE **v45**) and the switch to Claude Code as the main developer.
-**Starts from:** public STATE **v19** (phase 0 closed). **Now at:** STATE **v56**, last package WP-116, **759 tests passing**. Build spec generated from master **v3.7**. Current amendments (in `docs/build-spec-amendments.md`): A-008, A-009, A-010, A-011 (long documents) and **A-012** (120,000 characters; try a summary again). **Next amendment: A-013.** Blueprint **v1.4** (unchanged).
+**Version:** 2.0, 27 November 2026. **Status:** **approved by Simon (31 Oct)**, and this is the working document. Updated after WP-116 (public STATE **v56**) and A-013 (the chat-first redesign).
+**Starts from:** public STATE **v19** (phase 0 closed). **Now at:** STATE **v56**, last package WP-116, **759 tests passing**. Build spec generated from master **v3.7**. Current amendments (in `docs/build-spec-amendments.md`): A-008, A-009, A-010, A-011 (long documents) A-012 (120,000 characters; try a summary again) and **A-013** (chat-first app; invisible support ladder). **Next amendment: A-014.** Blueprint **v1.4** (unchanged).
 **Scope source:** build spec §47.1 phase 1 row, plus A-005 and A-008 to A-011, plus items carried from phase 0.
 
 ## How Claude Code uses this document
@@ -63,6 +63,7 @@
     - He can add **his own sources** (title, optional author and link).
     - The task panel at the top of a task conversation also lets him **change the stage**.
 17. **Long documents (17 Nov, A-011; built in WP-114g):** files up to 20 MB (once verified through the Worker and GitHub); attached copies read up to 75,000 characters; summaries grow with the document, up to roughly 700–900 words.
+18. **Chat-first redesign (27 Nov, A-013):** option A (fully chat-first), chosen after a clickable prototype with invented data. The app opens on **All** subjects. The support buttons go; the server keeps the support rules as an invisible ladder. Built in WP-130 to WP-134.
 
 ## Standing rules added in phase 1
 1. **Any package that changes `package.json` must keep the `overrides` block.** Read the current file first; never REPLACE it from older text.
@@ -118,6 +119,11 @@
 | 115 | public | Notebook | Entries with author; quotes with citation; AI text pin-only; history and search; surfacing earlier research; notebook titles in the snapshot; the task panel's **Your notes** part. **Must use the notebook record shape fixed by WP-103** (`type: 'summary'` entries already exist). ~~**Folded in (17 Nov, Simon):** a **Summarise again** button when a new copy is attached to a source that already has a summary~~ (done early in WP-114j) | 114 | **Done** (split 17 Nov). **115a** server (STATE v53, PR #53): notes, quotes with citations (inserted into a note with their citation, Simon's choice), pins, search, earlier research, snapshot titles. **115b** screens (STATE v54): a **Your notebook** home button (Simon's choice) with search and Write a note, view-only titles while the tutor rests; the task panel's **Your notes** with the earlier-research offer; **Add a quote** under each saved source |
 | 115c | public | Type or paste it; topics for every task | One form for typing or pasting a task, with an optional due date (Simon's design, 18 Nov); every task is read and gets topics; tasks without topics get them matched once; earlier research uses each task's current topics. Found by the WP-115b live check: the earlier task had been typed, so had no topics. Also from that check: **Insert a quote** shown openly in the note form (it was folded away and looked like a heading) | 115 | **Done** (STATE v55) |
 | 116 | public | Plan my answer | Plan record (his words only); pinned entries; gaps; main-point attempt; thesis added as an anchor (§23.6) | 115 | **Done** (STATE v56). The five §9.2 prompts in his words; his main point is the thesis anchor and starts from his first Plan my answer attempt; notes, quotes and summaries pinned as references; gaps (his, or the tutor's questions from What's missing?, after the live check) |
+| 130 | public | Invisible support ladder (**A-013** §7) | Server: no support buttons needed. The tutor chooses hint, breakdown, pointer or explanation from what he writes; the server enforces attempt-first, first-pair-before-second and explanation-last, and records every step as now; "I'm stuck" and similar move up a step. Tutor instructions and new eval cases (no early answers, no refusing fair help). The old support route stays until WP-134 | 116 | To do |
+| 131 | public | Chat-first shell and side menu (**A-013** §1–§4) | Responsive layout (phone drawer, tablet, monitor three columns); clean new-chat screen with greeting and chips; tutor status dot; side menu with search, subject buttons (from private settings; opens on All), Chats / Tasks / Topics sections and the focus level; chat list and names (task chats named from the task; others named by the AI, renamable); snapshot adds chat titles and worked topics for view-only use | 130 | To do |
+| 132 | public | Message box and new tasks in the chat (**A-013** §6) | The "+" menu (photo, file, paste a task, add a source) using the existing capture and paste routes; the help-type chip, worked out from what he writes; Check the details as a card in the chat, linking the chat to the new task; compact source cards | 131 | To do |
+| 133 | public | Task and topic pages, task panel (**A-013** §5) | Task page (stage, start a chat, its chats, topics, folded question, sources, notes and plan); topic page (outline description, notes, tasks, chats); task panel (monitor column, phone full screen); sources and notes open full screen on a phone. Reuses the WP-114 to WP-116 parts | 132 | To do |
+| 134 | public | Retire the old screens (**A-013**) | Remove the home actions, Coming up page, old capture, paste and task-panel screens and the support buttons; Notebook and Photos & files restyled as pages from the menu foot; accessibility pass at 360, 768 and 1366 px; STATE and tests tidied | 133 | To do |
 | 117 | public | Review my work | Opus content review beside the spelling panel; paste check; feedback titles in the snapshot | 107, 113, 115 | To do |
 | 118 | public | Check my spelling | Same check on notes, plan sections and attempt boxes; results never stored | 117 | To do |
 | 119 | public | Learn something | Starting points; guided sections; knowledge checks with Question items and Answers; model answer rules | 113, 103 | To do (unblocked) |
@@ -159,7 +165,8 @@
 | ~~Summaries of long attached documents are thin~~ | **Decided (17 Nov):** A-011, built in WP-114g. The 8 MB file limit also stopped a journal article uploading |
 | Topics and qualification can't be changed on the check screen | No topic-list route yet. Simon to choose the package |
 | ~~Understand and research it starts again after a reload~~ | **Done** in WP-114h (Simon chose a small package, 60 days) |
-| Navigation feels inconsistent in places | Simon to note the screen, what he tapped and what he expected. A small tidy-up package may follow |
+| ~~Navigation feels inconsistent in places~~ | **Decided (27 Nov):** A-013 chat-first redesign, WP-130 to WP-134 |
+| **Review the tutor's behaviour, starting with Plan my answer** (Simon, 27 Nov) | Once WP-130 to WP-134 are done, before WP-117: workshop how the tutor helps in each kind of help, starting with planning. May lead to a small amendment and package |
 
 ### Private packages
 | WP | Repo | Title | Goal | Depends on | Status |
@@ -174,9 +181,9 @@
 
 **Private commits since v1.7:** none recorded here. WP-114p status to confirm; live-check test records (the test task, its sources and attached copies) are now in the storage repository and may want a later clear-out like WP-114r.
 
-**Order:** ~~101 → … → 114 → 114d/e/f → 114g → 114h → 114i → 114j → 115 → 116~~ → **117** → 118 → 119 → 120 → 121 → 122 → 123 → 124 → 125 → 126. WP-119, WP-123 and WP-124 are unblocked and can go earlier if Simon prefers. Private packages slot in when their information arrives; WP-142 can go at any time.
+**Order:** ~~101 → … → 114 → 114d/e/f → 114g → 114h → 114i → 114j → 115 → 116~~ → **130 → 131 → 132 → 133 → 134** (A-013) → tutor review (open item) → 117 → 118 → 119 → 120 → 121 → 122 → 123 → 124 → 125 → 126. WP-119, WP-123 and WP-124 are unblocked and can go earlier if Simon prefers. Private packages slot in when their information arrives; WP-142 can go at any time.
 
-**Progress:** 17 of 26 public packages done, plus one hotfix (WP-108, 111 and 114 were split; WP-114d became 114d, 114e and 114f; WP-114g was added for A-011 and is done). Public tests: 327 at phase start → 640 (v39) → 703 (v42) → 721 (v45) → 723 (v46) → 724 (v47) → 726 (v48) → 727 (v49) → 731 (v50) → 732 (v51) → 733 (v52) → 739 (v53) → 747 (v54) → 752 (v55) → **759** (v56).
+**Progress:** 17 of 31 public packages done (A-013 added WP-130 to WP-134), plus one hotfix (WP-108, 111 and 114 were split; WP-114d became 114d, 114e and 114f; WP-114g was added for A-011 and is done). Public tests: 327 at phase start → 640 (v39) → 703 (v42) → 721 (v45) → 723 (v46) → 724 (v47) → 726 (v48) → 727 (v49) → 731 (v50) → 732 (v51) → 733 (v52) → 739 (v53) → 747 (v54) → 752 (v55) → **759** (v56).
 
 ## Risks
 | Risk | Handling |
@@ -190,6 +197,8 @@
 | 20 MB may be too much for the Worker's free plan or GitHub's file API | GitHub allows 100 MB and Cloudflare a 100 MB body; the Worker's 128 MB memory was the blocker (measured), so WP-114g part 1 streams large files. `inbox-size-check` proves it live; fall back to about 12 MB if it fails |
 | WP-114f log lines not yet seen live | Check at the next live check that they hold code words and counts only |
 | Package size (front-end screens) | Large packages are fine; split at a natural break, roughly over 1,500 lines |
+| A-013 redesign touches every learner screen | Built in order WP-130 to WP-134, each usable on its own; the old screens stay until WP-134 so nothing breaks between packages; the prototype (owner's private page) is the visual reference |
+| The invisible ladder feels stubborn or slides to answers | Server-enforced rules, eval cases in WP-130, review point after real use |
 | A `package.json` change drops the `zod` override | Standing rule 1; Claude Code checks `npm audit` |
 | Large libraries slow a fresh Codespace install | Accepted; one-off `npm install` after a rebuild |
 
@@ -210,3 +219,4 @@
    - Private WP-114p listed (status to confirm).
    - Risks updated. **WP-115 is next.**
 9. *(17 Nov)* **v1.9:** Claude Code becomes the main developer (one package per session; it keeps this file's status up to date). **A-011** decided (20 MB files; 75,000 characters; longer summaries); **WP-114g** added before WP-115. Private details moved to private `docs/private-notes.md`. Next amendment A-012.
+10. *(27 Nov)* **v2.0:** WP-116 done (STATE v56). **A-013** decided after a clickable prototype: a chat-first app with a side menu of chats, tasks and topics filtered by subject, task and topic pages, a "+" menu, and an invisible support ladder in place of the support buttons. **WP-130 to WP-134** added before WP-117. Simon's open item: review the tutor's behaviour, starting with Plan my answer, once the redesign is done.
