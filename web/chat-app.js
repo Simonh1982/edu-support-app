@@ -119,14 +119,33 @@ export function initChat({ doc = document, win = window } = {}) {
   // ---------- more room on a phone (live check, 29 Nov) ----------
   // The top bar slides away while he scrolls down the chat and comes back as soon as he scrolls up;
   // while he fills in a card, the message box steps aside so the card has the screen.
+  // Live check fix: showing or hiding the bar changes the chat's height, which makes the browser move
+  // the scroll position, which looked like a scroll the other way: the bar flickered. So the app's own
+  // jumps don't count, the knock-on scroll after a change is ignored, and the bar only hides when
+  // there is plenty to scroll through.
   const mainEl = els.view.parentElement;
+  const SETTLE_MS = 400;
   let lastY = 0;
+  let settleUntil = 0;
+  function setTopAway(away) {
+    if (mainEl.classList.contains("top-away") === away) return;
+    mainEl.classList.toggle("top-away", away);
+    settleUntil = Date.now() + SETTLE_MS;
+  }
+  /** The app's own scrolling (to the newest message, or the top): never counts as his. */
+  function jumpTo(y) {
+    settleUntil = Date.now() + SETTLE_MS;
+    els.view.scrollTop = y;
+    lastY = els.view.scrollTop;
+  }
   els.view.addEventListener("scroll", () => {
     const y = els.view.scrollTop;
     const dy = y - lastY;
     lastY = y;
-    if (y < 24 || dy < -6) mainEl.classList.remove("top-away");
-    else if (dy > 6 && y > 64) mainEl.classList.add("top-away");
+    if (Date.now() < settleUntil) return;
+    const room = els.view.scrollHeight - els.view.clientHeight;
+    if (y < 24 || dy < -6) setTopAway(false);
+    else if (dy > 6 && y > 64 && room > 240) setTopAway(true);
   }, { passive: true });
   // Nothing may move while he taps: the box stays aside while focus is anywhere in the card (its
   // buttons too), and comes back once he leaves it or the card is finished (found in testing).
@@ -171,7 +190,7 @@ export function initChat({ doc = document, win = window } = {}) {
     side.setCurrent(next.kind === "chat" || next.kind === "task" || next.kind === "topic" ? next : null);
     closeDrawer();
     render();
-    els.view.scrollTop = next.kind === "chat" ? els.view.scrollHeight : 0;
+    jumpTo(next.kind === "chat" ? els.view.scrollHeight : 0);
   }
 
   function newChat() {
@@ -205,7 +224,7 @@ export function initChat({ doc = document, win = window } = {}) {
     const c = r.body.conversation;
     conv = { id, route: c.route, taskId: c.taskId ?? null, name: c.name ?? known?.name ?? null, turns: turnsFromServer(c), loaded: true };
     render();
-    els.view.scrollTop = els.view.scrollHeight;
+    jumpTo(els.view.scrollHeight);
   }
 
   // ---------- header ----------
@@ -466,7 +485,7 @@ export function initChat({ doc = document, win = window } = {}) {
     const sentAt = Date.now();
     mine.turns.push({ id: `pending-${sentAt}`, at: sentAt, learnerText: text, pending: true });
     render();
-    els.view.scrollTop = els.view.scrollHeight;
+    jumpTo(els.view.scrollHeight);
     const r = await api.sendMessage(id, { text });
     busy = false;
     mine.turns = mine.turns.filter((t) => !t.pending);
@@ -477,7 +496,7 @@ export function initChat({ doc = document, win = window } = {}) {
     els.message.value = "";
     autosize();
     render();
-    els.view.scrollTop = els.view.scrollHeight;
+    jumpTo(els.view.scrollHeight);
     if (turn) doc.getElementById(`turn-${turn.id}`)?.focus({ preventScroll: true });
     loadMenu();
     return undefined;
@@ -558,7 +577,7 @@ export function initChat({ doc = document, win = window } = {}) {
     pasteMode = false;
     autosize();
     render();
-    els.view.scrollTop = els.view.scrollHeight;
+    jumpTo(els.view.scrollHeight);
   }
 
   /** A task he confirmed in a card: link this chat to it, or start a chat on it (A-013 §6). */
@@ -579,7 +598,7 @@ export function initChat({ doc = document, win = window } = {}) {
     if (conv) conv.turns.push({ id: `local-${Date.now()}`, at: Date.now(), local: true, reply: CARD_TEXT.prompt, sources: [] });
     await loadMenu();
     render();
-    els.view.scrollTop = els.view.scrollHeight;
+    jumpTo(els.view.scrollHeight);
     els.message.focus();
   }
 

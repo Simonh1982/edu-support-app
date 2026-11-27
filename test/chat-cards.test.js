@@ -161,3 +161,11 @@ test("phone fixes from the live check: room for a card, steady taps, and one tim
   const cards = createChatCards({ doc, api: fakeApi([]).api, workerUrl: "https://w.invented.dev", getToken: () => "pass", now: () => 1234 });
   assert.equal(cards.addSource("t_inv9").at, 1234, "each card records when it was added");
 });
+
+test("the top bar never flickers: the app's own jumps don't count, and the knock-on scroll after a change is ignored", () => {
+  const app = readFileSync(new URL("../web/chat-app.js", import.meta.url), "utf8");
+  assert.match(app, /function jumpTo\(y\) \{\s*settleUntil = Date\.now\(\) \+ SETTLE_MS;/);
+  assert.match(app, /if \(Date\.now\(\) < settleUntil\) return;/);
+  assert.match(app, /room > 240\) setTopAway\(true\)/, "only hides with plenty to scroll through");
+  assert.doesNotMatch(app, /els\.view\.scrollTop = els\.view\.scrollHeight/, "every jump to the newest message goes through jumpTo");
+});
