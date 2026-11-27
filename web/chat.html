@@ -36,10 +36,17 @@
           <textarea id="message" rows="1" maxlength="4000" placeholder="Ask anything…"></textarea>
           <div class="composer-row">
             <button type="button" class="icon-button plus" id="plus" aria-haspopup="menu" aria-expanded="false" aria-controls="plus-menu" aria-label="Add a photo, file, task or source"><span aria-hidden="true">+</span></button>
-            <span class="type-chip" id="type-chip">Help: automatic</span>
+            <button type="button" class="type-chip" id="type-chip" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu">Help: automatic</button>
             <button type="submit" class="send" id="send" aria-label="Send"><span aria-hidden="true">↑</span></button>
           </div>
         </div>
+        <ul class="plus-menu help-menu" id="help-menu" role="menu" aria-label="Kind of help" hidden>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="true" data-help="auto">Help: automatic</button></li>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="false" data-help="research">Understand and research it</button></li>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="false" data-help="plan">Plan my answer</button></li>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="false" data-help="review">Review my work</button></li>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="false" data-help="learn">Learn something</button></li>
+        </ul>
         <ul class="plus-menu" id="plus-menu" role="menu" aria-label="Add" hidden>
           <li role="none"><button type="button" role="menuitem" data-add="camera">Take a photo</button></li>
           <li role="none"><button type="button" role="menuitem" data-add="gallery">Choose a photo</button></li>

@@ -9,13 +9,14 @@ import { createWaker, tutorPanel } from "./shared/wake.js";
 import { createApi } from "./shared/api.js";
 import { createAccessibility } from "./shared/accessibility.js";
 import {
-  HELPLINES, ROUTE_LABELS, TALK_MESSAGES, checkMessage, learnerLine, routeForStage, safeLink, showsCare, siteOf,
+  HELPLINES, ROUTE_LABELS, TALK_MESSAGES, checkMessage, learnerLine, routeForStage, showsCare,
   talkErrorMessage, turnFromReply, turnsFromServer,
 } from "./shared/conversation.js";
 import { MENU_TEXT, cleanMenu, dueLabel, focusLists, statusOf, whenLabel } from "./shared/menu.js";
 import { createSideMenu, make } from "./side-menu.js";
 import { STAGE_LABELS } from "./shared/upcoming.js";
 import { createChatCards, CARD_TEXT } from "./chat-cards.js";
+import { createSourceCards } from "./chat-sources.js";
 import { resizeImage } from "./capture.js";
 
 const ROLE = "learner";
@@ -46,7 +47,7 @@ export const CHAT_TEXT = Object.freeze({
   pasteChip: "Adding a task",
   placeholderPaste: "Paste or type the task here: the whole thing, with any instructions…",
   sourceNeedsTask: "A source belongs to a task. Open the task (or add one with Paste a task) first.",
-  sources: "Sources from this reply",
+  placeholderKind: (label) => `Start a new chat: ${label}…`,
   you: "You",
   tutor: "Tutor",
 });
@@ -62,6 +63,7 @@ export function initChat({ doc = document, win = window } = {}) {
     taskChip: byId("task-chip"), dot: byId("tutor-dot"), view: byId("view"), composer: byId("composer"), message: byId("message"),
     send: byId("send"), typeChip: byId("type-chip"), note: byId("composer-note"), signedOut: byId("signed-out"),
     dialog: byId("sign-out-dialog"), dialogCancel: byId("sign-out-cancel"), dialogConfirm: byId("sign-out-confirm"),
+    helpMenu: byId("help-menu"),
     plus: byId("plus"), plusMenu: byId("plus-menu"), cameraInput: byId("camera-input"), galleryInput: byId("gallery-input"),
     fileInput: byId("file-input"), pasteExtra: byId("paste-extra"), pasteDue: byId("paste-due"), pasteCancel: byId("paste-cancel"),
   };
@@ -87,6 +89,10 @@ export function initChat({ doc = document, win = window } = {}) {
   const cards = createChatCards({
     doc, api, workerUrl: config.workerUrl, getToken: () => token, isReady: () => ready, resizeImage,
     onChange: () => render(), onAdded: (task) => taskAdded(task),
+  });
+  const sources = createSourceCards({
+    doc, api, isReady: () => ready, onChange: () => render(), onSignedOut: () => signedOut(), onUnreachable: () => wakeAgain(),
+    onSaved: () => loadMenu(),
   });
 
   const side = createSideMenu({
@@ -183,7 +189,7 @@ export function initChat({ doc = document, win = window } = {}) {
 
   // ---------- navigation ----------
   function show(next) {
-    if (next.kind !== view.kind || next.id !== view.id) { cards.clear(); pasteMode = false; }
+    if (next.kind !== view.kind || next.id !== view.id) { cards.clear(); sources.clear(); pasteMode = false; }
     view = next;
     renaming = false;
     setText(els.note, "");
@@ -322,17 +328,9 @@ export function initChat({ doc = document, win = window } = {}) {
     tutor.append(make(doc, "p", { className: "who", text: CHAT_TEXT.tutor }));
     tutor.append(make(doc, "p", { className: "text", text: turn.reply ?? TALK_MESSAGES.noReply }));
     if (showsCare(turn)) tutor.append(careBox());
-    const links = (turn.sources ?? []).map((s) => ({ s, url: safeLink(s.url) })).filter((x) => x.url);
-    if (links.length) {
-      tutor.append(make(doc, "p", { className: "who", text: CHAT_TEXT.sources }));
-      const ul = make(doc, "ul", { className: "message-sources" });
-      for (const { s, url } of links) {
-        const item = make(doc, "li");
-        item.append(make(doc, "a", { text: s.title ?? siteOf(url), attrs: { href: url, target: "_blank", rel: "noopener noreferrer" } }), make(doc, "span", { text: ` · ${siteOf(url)}` }));
-        ul.append(item);
-      }
-      tutor.append(ul);
-    }
+    // WP-132b: the sources as cards with Save and Summarise (Attach a copy is on the task page, WP-133)
+    const sourceCards = sources.render(turn);
+    if (sourceCards) tutor.append(sourceCards);
     li.append(tutor);
     return li;
   }
@@ -423,9 +421,12 @@ export function initChat({ doc = document, win = window } = {}) {
     setText(els.typeChip, pasteMode ? CHAT_TEXT.pasteChip : route ? HELP_LABELS[route] ?? CHAT_TEXT.helpAuto : CHAT_TEXT.helpAuto);
     els.pasteExtra.hidden = !pasteMode;
     els.message.maxLength = pasteMode ? 20000 : 4000;
-    els.message.placeholder = pasteMode ? CHAT_TEXT.placeholderPaste : view.kind === "chat" ? CHAT_TEXT.placeholderReply
-      : view.kind === "task" ? CHAT_TEXT.placeholderTask
-        : pendingRoute === "learn" ? CHAT_TEXT.placeholderLearn : CHAT_TEXT.placeholderNew;
+    els.message.placeholder = pasteMode ? CHAT_TEXT.placeholderPaste
+      : view.kind === "chat" ? CHAT_TEXT.placeholderReply
+        : pendingRoute === "learn" ? CHAT_TEXT.placeholderLearn
+          : pendingRoute ? CHAT_TEXT.placeholderKind(HELP_LABELS[pendingRoute])
+            : view.kind === "task" ? CHAT_TEXT.placeholderTask : CHAT_TEXT.placeholderNew;
+    els.typeChip.disabled = pasteMode;
     els.send.disabled = busy;
     els.message.readOnly = busy;
   }
@@ -440,11 +441,11 @@ export function initChat({ doc = document, win = window } = {}) {
 
   // ---------- sending ----------
   async function routeFor(text) {
+    if (pendingRoute) return pendingRoute;
     if (view.kind === "task") {
       const task = menuData.tasks.find((t) => t.id === view.id);
       return routeForStage(task?.stage);
     }
-    if (pendingRoute) return pendingRoute;
     const r = await api.suggestRoute({ message: text });
     return typeof r.body?.route === "string" ? r.body.route : "research";
   }
@@ -502,6 +503,54 @@ export function initChat({ doc = document, win = window } = {}) {
     return undefined;
   });
 
+  // ---------- the help-type menu (WP-132b, A-013 §6) ----------
+  // Before a chat starts it sets the kind of help. In a chat that has started, picking another kind
+  // starts a new chat of that kind on the same task, so each chat stays one kind of help.
+  function closeHelp({ focus = false } = {}) {
+    if (els.helpMenu.hidden) return;
+    els.helpMenu.hidden = true;
+    els.typeChip.setAttribute("aria-expanded", "false");
+    if (focus) els.typeChip.focus();
+  }
+  function openHelp() {
+    closePlus();
+    const current = (view.kind === "chat" ? conv?.route : pendingRoute) ?? "auto";
+    for (const b of els.helpMenu.querySelectorAll("[data-help]")) b.setAttribute("aria-checked", String(b.dataset.help === current));
+    els.helpMenu.hidden = false;
+    els.typeChip.setAttribute("aria-expanded", "true");
+    (els.helpMenu.querySelector('[aria-checked="true"]') ?? els.helpMenu.querySelector("button"))?.focus();
+  }
+  function chooseHelp(choice) {
+    const route = choice === "auto" ? null : choice;
+    if (view.kind === "chat" && conv?.turns?.length && route !== conv.route) {
+      const taskId = conv.taskId;
+      if (taskId) { conv = null; side.setFocus({ kind: "task", id: taskId }); show({ kind: "task", id: taskId }); } else newChat();
+      pendingRoute = route;
+      renderComposer();
+    } else if (view.kind !== "chat") {
+      pendingRoute = route;
+      renderComposer();
+    }
+    els.message.focus();
+  }
+  els.typeChip.addEventListener("click", () => (els.helpMenu.hidden ? openHelp() : closeHelp({ focus: true })));
+  els.helpMenu.addEventListener("keydown", (e) => {
+    const items = [...els.helpMenu.querySelectorAll("button")];
+    const at = items.indexOf(doc.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); closeHelp({ focus: true }); }
+    if (e.key === "ArrowDown") { e.preventDefault(); items[(at + 1) % items.length]?.focus(); }
+    if (e.key === "ArrowUp") { e.preventDefault(); items[(at - 1 + items.length) % items.length]?.focus(); }
+  });
+  doc.addEventListener("click", (e) => {
+    if (!els.helpMenu.hidden && !els.helpMenu.contains(e.target) && !els.typeChip.contains(e.target)) closeHelp();
+  });
+  els.helpMenu.addEventListener("click", (e) => {
+    const choice = e.target?.closest?.("[data-help]")?.dataset.help;
+    if (!choice) return;
+    closeHelp();
+    chooseHelp(choice);
+  });
+
   // ---------- the "+" menu (WP-132a) ----------
   function taskContext() {
     if (view.kind === "task") return view.id;
@@ -515,6 +564,7 @@ export function initChat({ doc = document, win = window } = {}) {
     if (focus) els.plus.focus();
   }
   function openPlus() {
+    closeHelp();
     const source = els.plusMenu.querySelector('[data-add="source"]');
     source?.setAttribute("aria-disabled", String(!taskContext()));
     els.plusMenu.hidden = false;

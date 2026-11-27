@@ -499,7 +499,14 @@ html:has(.chat-page) {
   border: var(--border-width) solid color-mix(in srgb, var(--muted) 45%, transparent);
   border-radius: 999px;
   color: var(--muted);
+  background: none;
+  font: inherit;
   font-size: 0.8em;
+  cursor: pointer;
+}
+.type-chip:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 .send {
   display: grid;
@@ -755,4 +762,34 @@ html:has(.chat-page) {
   .composer-hint {
     margin-top: 0.2rem;
   }
+}
+
+/* WP-132b: the help-type menu sits above its chip; the chosen kind has a tick */
+.help-menu {
+  left: max(3.5rem, calc(5vw + 2.75rem));
+}
+.help-menu button[aria-checked="true"]::after {
+  content: " ✓";
+  color: var(--accent);
+}
+/* WP-132b: source cards inside a tutor message stay compact */
+.message-tutor .sources {
+  margin-top: 0.6rem;
+}
+.message-tutor .source-card {
+  padding: 0.6rem 0.75rem;
+}
+.message-tutor .source-why {
+  font-size: 0.9em;
+}
+.message-tutor .source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.message-tutor .source-actions button {
+  flex: 1 1 9rem;
+  margin: 0;
+  padding-inline: 0.5rem;
+  font-size: 0.92em;
 }
