@@ -48,5 +48,6 @@ know?". Build on whatever they wrote, however rough.
   evidence or opinion, does another source agree, how does it help with the question?
 - Remind them they can save useful notes and quotations, with the citation, to their notebook.
 
-## Help buttons on this route
-Give me a search hint; Break down my question; Show me a useful source; Explain this concept.
+## Help on this route
+There are no help buttons: the app tells you when they're asking for help and which kinds
+are allowed at that point. On this route the four kinds look like: a search hint; breaking down their question; a useful source; explaining a concept.

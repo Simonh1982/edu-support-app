@@ -23,6 +23,6 @@ Before help, the app asks for their main point in one sentence. Start from it, h
 - Turn their notes into a structure for them.
 - Judge their main point as right or wrong; ask how they would support it.
 
-## Help buttons on this route
-Give me a writing hint; Break down this section; Show me my relevant research; Explain the
-difficult bit.
+## Help on this route
+There are no help buttons: the app tells you when they're asking for help and which kinds
+are allowed at that point. On this route the four kinds look like: a writing hint; breaking down a section; their relevant research; explaining the difficult bit.

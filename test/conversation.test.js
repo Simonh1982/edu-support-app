@@ -149,9 +149,9 @@ test('route rules from the task stage; work routes are conversation routes', () 
   for (const r of WORK_ROUTES) assert.ok(ROUTES.includes(r));
 });
 
-test('reply parsing: the model\'s reply type is ignored; levels must be 0–3', () => {
+test('reply parsing: the model\'s reply type is kept only as a claim (WP-130); levels must be 0–3', () => {
   assert.deepEqual(parseTutorReply('```json\n{"reply":" Hi ","replyType":"answer","wellbeingLevel":1,"taskSpecific":true}\n```'),
-    { reply: 'Hi', taskSpecific: true, wellbeingLevel: 1 });
+    { reply: 'Hi', taskSpecific: true, wellbeingLevel: 1, replyType: 'answer' });
   assert.equal(parseTutorReply('{"reply":"Hi","wellbeingLevel":7}').wellbeingLevel, null);
   assert.equal(parseTutorReply('{"reply":"  "}'), null);
   assert.equal(parseTutorReply('not json'), null);
