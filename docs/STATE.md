@@ -1,6 +1,6 @@
-STATE version: 62
-Updated: 2026-11-29 21:00 (UK time)
-Last work package applied: WP-132a fix (phone room and chat order on the chat page, from the live check)
+STATE version: 63
+Updated: 2026-11-29 22:30 (UK time)
+Last work package applied: WP-132a fix 2 (the chat page's top bar no longer flickers)
 
 ## File tree
 ```
@@ -451,7 +451,7 @@ Case files are JSON arrays in `evals/cases/`, generic and invented only. Each ca
 - WP-114g live check 17 Nov 2026 (Codespace logs): a long journal article attached to an own source on a task was read and summarised twice (22 s and 12 s), but both drafts failed the live check, so the app said it was too close to the task. Cause: summaries used the tutor-reply check, which treats describing the task's named places or case studies as a leak. Fixed in WP-114g-fix; re-check 17 Nov: a long summary following the paper's sections. Its note said "only the start of the first part": the same 25-page PDF (81,790 characters) was attached twice. Fixed in WP-114g-fix part 2 (duplicates skipped; page counts in the note). Then a different 13-page article (2.9 MB) summarised well. Raised to 120,000 characters with Try again (A-012, part 3).
 
 ## Deviations in effect
-- WP-132a fix (live check, 29 Nov 2026, Simon's requests): on the chat page the top bar hides while scrolling down the chat and returns at once on scrolling up (`.main.top-away`); the message box steps aside while focus is anywhere in a card (`.main.editing-card`), and returns when focus leaves it or the card is finished; the shell is sized with `100dvh` (the space above a phone's keyboard); cards and messages share one timeline ordered by when they happened (saved turns first), so new messages go at the bottom; on a phone the task button says "Task". Found in testing: nothing in the message box may change size on focus, or a tap moves and misses.
+- WP-132a fix (live check, 29 Nov 2026, Simon's requests): on the chat page the top bar hides while scrolling down the chat and returns at once on scrolling up (`.main.top-away`); the message box steps aside while focus is anywhere in a card (`.main.editing-card`), and returns when focus leaves it or the card is finished; the shell is sized with `100dvh` (the space above a phone's keyboard); cards and messages share one timeline ordered by when they happened (saved turns first), so new messages go at the bottom; on a phone the task button says "Task". Found in testing: nothing in the message box may change size on focus, or a tap moves and misses. Fix 2 (live check video, 29 Nov): the bar flickered when a chat opened (hiding it made the chat taller, the browser moved the scroll position, which read as scrolling up, and so on; reproduced at 92 toggles in 1.5 s). Now the app's own jumps (`jumpTo`) don't count, scroll events for 400 ms after a change are ignored, and the bar hides only with more than 240 px to scroll through.
 - WP-131b: the new page is opt-in (`chat.html`) while the classic page stays the default, so nothing breaks before WP-134. Thumbs up/down, source cards with Save and Summarise, and the help-type chip menu are not on the new page yet (WP-132b).
 - WP-131a: subject button labels come from an optional private `profile/subjects.json`; without it they are shortened from the qualification titles (`shortLabel`), which may read oddly for some titles. `test/snapshot.test.js` expects the empty `menu`.
 - WP-130b (owner's choice, 28 Nov 2026, A-013 §7 updated): chats with no task no longer wait for an attempt (so §21.1's Learn something attempt applies only to Learn chats linked to a task), and "stuck" after help counts as the next try. `test/conversation.test.js`: two attempt-rule tests now use a task.
