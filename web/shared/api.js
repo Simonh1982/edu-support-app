@@ -93,6 +93,9 @@ export function createApi({
     suggestRoute: (body) => talk("api/route", body),
     startConversation: (body) => call("api/conversations", { method: "POST", body }),
     openConversation: (id) => call(conversationPath(id)),
+    // WP-131b (A-013): the side menu's lists, and renaming a chat with no task
+    getMenu: () => call("api/menu"),
+    renameChat: (id, name) => call(conversationPath(id), { method: "PATCH", body: { name } }),
     // WP-114h: his latest conversation for a task and route ({ conversation: null } when there is none)
     latestConversation: ({ taskId, route }) => call(`api/conversations?${new URLSearchParams({ taskId, route })}`),
     sendMessage: (id, body) => talk(`${conversationPath(id)}/messages`, body),

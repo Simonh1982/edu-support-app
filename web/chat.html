@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Study</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="chat.css">
+</head>
+<!-- WP-131b (A-013): the chat-first learner page. It sits beside the classic page (index.html) until
+     WP-134 retires that; signing in still happens on the classic page. -->
+<body class="chat-page">
+  <div class="shell" id="shell" hidden>
+    <nav class="side" id="side" aria-label="Your chats, tasks and topics"></nav>
+    <div class="scrim" id="scrim" hidden></div>
+    <div class="main">
+      <header class="top">
+        <button type="button" class="icon-button menu-button" id="menu-open" aria-controls="side" aria-expanded="false" aria-label="Open the menu"><span aria-hidden="true">☰</span></button>
+        <div class="top-title" id="top-title"></div>
+        <button type="button" class="task-chip" id="task-chip" hidden></button>
+        <p class="tutor-dot" id="tutor-dot" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span class="dot-word">Waking</span></p>
+      </header>
+      <main class="view" id="view" tabindex="-1"></main>
+      <form class="composer-wrap" id="composer" novalidate>
+        <div class="composer">
+          <label for="message" class="visually-hidden">Your message</label>
+          <textarea id="message" rows="1" maxlength="4000" placeholder="Ask anything…"></textarea>
+          <div class="composer-row">
+            <span class="type-chip" id="type-chip">Help: automatic</span>
+            <button type="submit" class="send" id="send" aria-label="Send"><span aria-hidden="true">↑</span></button>
+          </div>
+        </div>
+        <p class="composer-note" id="composer-note" role="status" aria-live="polite"></p>
+        <p class="composer-hint">The tutor helps you think. It won't write your answers.</p>
+      </form>
+    </div>
+  </div>
+
+  <section class="signed-out" id="signed-out" aria-labelledby="signed-out-heading" hidden>
+    <h1 id="signed-out-heading" tabindex="-1">Please sign in</h1>
+    <p>Sign in on the main page, then come back here.</p>
+    <p><a class="button-link" href="./">Go to sign in</a></p>
+  </section>
+
+  <dialog id="sign-out-dialog" aria-labelledby="sign-out-heading">
+    <h2 id="sign-out-heading">Sign out now?</h2>
+    <p>You'll need to sign in with GitHub again next time.</p>
+    <div class="dialog-actions">
+      <button type="button" class="primary" id="sign-out-cancel">Stay signed in</button>
+      <button type="button" class="secondary" id="sign-out-confirm">Sign out</button>
+    </div>
+  </dialog>
+
+  <noscript><p>This app needs JavaScript. Please turn it on and reload the page.</p></noscript>
+  <script type="module" src="chat-app.js"></script>
+</body>
+</html>
