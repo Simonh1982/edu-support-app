@@ -61,7 +61,8 @@ export function createChatCards({
   const change = () => onChange();
 
   function newCard(fields) {
-    const card = { key: `card-${(nextKey += 1)}`, state: "sending", message: "", ...fields };
+    // at: when it was added, so the chat shows cards and messages in the order they happened
+    const card = { key: `card-${(nextKey += 1)}`, at: now(), state: "sending", message: "", ...fields };
     cards.push(card);
     change();
     return card;

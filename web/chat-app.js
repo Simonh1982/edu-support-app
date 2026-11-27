@@ -116,6 +116,30 @@ export function initChat({ doc = document, win = window } = {}) {
     if (e.key === "Escape" && els.side.classList.contains("open")) { closeDrawer(); els.menuOpen.focus(); }
   });
 
+  // ---------- more room on a phone (live check, 29 Nov) ----------
+  // The top bar slides away while he scrolls down the chat and comes back as soon as he scrolls up;
+  // while he fills in a card, the message box steps aside so the card has the screen.
+  const mainEl = els.view.parentElement;
+  let lastY = 0;
+  els.view.addEventListener("scroll", () => {
+    const y = els.view.scrollTop;
+    const dy = y - lastY;
+    lastY = y;
+    if (y < 24 || dy < -6) mainEl.classList.remove("top-away");
+    else if (dy > 6 && y > 64) mainEl.classList.add("top-away");
+  }, { passive: true });
+  // Nothing may move while he taps: the box stays aside while focus is anywhere in the card (its
+  // buttons too), and comes back once he leaves it or the card is finished (found in testing).
+  const isField = (el) => Boolean(el?.closest?.(".chat-card") && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  const inCard = (el) => Boolean(el?.closest?.(".chat-card"));
+  els.view.addEventListener("focusin", (e) => {
+    if (isField(e.target)) mainEl.classList.add("editing-card");
+  });
+  els.view.addEventListener("focusout", (e) => {
+    if (!inCard(e.relatedTarget)) mainEl.classList.remove("editing-card");
+  });
+  win.addEventListener?.("resize", () => renderTop());
+
   // ---------- status ----------
   function setStatus(panel) {
     els.dot.dataset.tutor = panel;
@@ -231,7 +255,8 @@ export function initChat({ doc = document, win = window } = {}) {
       const task = conv.taskId ? menuData.tasks.find((t) => t.id === conv.taskId) : null;
       if (task) {
         els.taskChip.hidden = false;
-        setText(els.taskChip, task.title);
+        // on a phone the chat's name already says which task: the button just says "Task" (live check)
+        setText(els.taskChip, phone() ? MENU_TEXT.task : task.title);
         els.taskChip.setAttribute("aria-label", `Open the task: ${task.title}`);
       }
     } else {
@@ -242,6 +267,12 @@ export function initChat({ doc = document, win = window } = {}) {
   els.taskChip.addEventListener("click", () => { if (conv?.taskId) openItem("task", conv.taskId); });
 
   // ---------- main views ----------
+  /** Turns and cards in the order they happened; a stable sort keeps equal times in place. */
+  function timeline(turns, cardList) {
+    return [...turns.map((turn, i) => ({ turn, at: turn.at ?? 0, i })), ...cardList.map((card, i) => ({ card, at: card.at ?? 0, i: turns.length + i }))]
+      .sort((a, b) => a.at - b.at || a.i - b.i);
+  }
+
   function careBox() {
     const box = make(doc, "div", { className: "care" });
     box.append(make(doc, "p", { text: TALK_MESSAGES.careHeading }));
@@ -331,9 +362,9 @@ export function initChat({ doc = document, win = window } = {}) {
       const col = make(doc, "div", { className: "column" });
       if (!ready && !conv?.loaded) col.append(make(doc, "p", { className: "hint", text: CHAT_TEXT.notReadyChat }));
       const ul = make(doc, "ol", { className: "messages", attrs: { "aria-label": "Your conversation" } });
-      // saved turns, then the cards added here, then the app's own prompt after a task is added
-      const turns = conv?.turns ?? [];
-      ul.append(...turns.filter((t) => !t.local).map(messageItem), ...cards.list().map((c) => cards.render(c)), ...turns.filter((t) => t.local).map(messageItem));
+      // one timeline in the order things happened: saved turns first (at 0), then this visit's
+      // messages and cards, so new messages always go at the bottom (live check, 29 Nov)
+      ul.append(...timeline(conv?.turns ?? [], cards.list()).map((x) => (x.card ? cards.render(x.card) : messageItem(x.turn))));
       col.append(ul);
       return [col];
     }
@@ -383,6 +414,8 @@ export function initChat({ doc = document, win = window } = {}) {
   function render() {
     renderTop();
     els.view.replaceChildren(...renderView());
+    // a finished card takes its focused button with it, so bring the message box back
+    if (!inCard(doc.activeElement)) els.view.parentElement.classList.remove("editing-card");
     renderComposer();
   }
 
@@ -430,7 +463,8 @@ export function initChat({ doc = document, win = window } = {}) {
       side.setCurrent(view);
     }
     const mine = conv;
-    mine.turns.push({ id: `pending-${Date.now()}`, learnerText: text, pending: true });
+    const sentAt = Date.now();
+    mine.turns.push({ id: `pending-${sentAt}`, at: sentAt, learnerText: text, pending: true });
     render();
     els.view.scrollTop = els.view.scrollHeight;
     const r = await api.sendMessage(id, { text });
@@ -438,7 +472,7 @@ export function initChat({ doc = document, win = window } = {}) {
     mine.turns = mine.turns.filter((t) => !t.pending);
     if (r.kind !== "ok") { render(); return failed(r); }
     const turn = turnFromReply(r.body?.turn, { learnerText: text });
-    if (turn) mine.turns.push(turn);
+    if (turn) mine.turns.push({ ...turn, at: sentAt });
     if (r.body?.conversation?.name) mine.name = r.body.conversation.name;
     els.message.value = "";
     autosize();
@@ -542,7 +576,7 @@ export function initChat({ doc = document, win = window } = {}) {
       side.setCurrent(view);
       cards.list().splice(0, cards.list().length, ...keep);
     }
-    if (conv) conv.turns.push({ id: `local-${Date.now()}`, local: true, reply: CARD_TEXT.prompt, sources: [] });
+    if (conv) conv.turns.push({ id: `local-${Date.now()}`, at: Date.now(), local: true, reply: CARD_TEXT.prompt, sources: [] });
     await loadMenu();
     render();
     els.view.scrollTop = els.view.scrollHeight;

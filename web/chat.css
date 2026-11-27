@@ -12,6 +12,8 @@ html:has(.chat-page) {
   display: grid;
   grid-template-columns: 17.5rem minmax(0, 1fr);
   height: 100%;
+  /* the space above a phone's keyboard, where the browser supports it */
+  height: 100dvh;
 }
 /* ---------- side menu ---------- */
 .side {
@@ -738,4 +740,19 @@ html:has(.chat-page) {
 .card-done {
   margin: 0;
   font-weight: 600;
+}
+
+/* more room on a phone (live check, 29 Nov): the top bar steps aside while scrolling down, and the
+   message box while a card is being filled in */
+.main.top-away .top {
+  display: none;
+}
+.main.editing-card .composer-wrap {
+  display: none;
+}
+/* nothing in the message box changes size on focus: a shift mid-tap made taps miss (found in testing) */
+@media (max-width: 719px) {
+  .composer-hint {
+    margin-top: 0.2rem;
+  }
 }
