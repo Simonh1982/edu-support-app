@@ -169,8 +169,10 @@ Build spec generated from master specification **v3.7** (31 October 2026). Curre
 **7. The invisible support ladder** (replaces the Hint, Break it down, Point me and Explain buttons; §20 to §22, §23.1).
 - **The four support types stay**: hint, break it down, point to something useful, explain the difficult bit. There are no buttons; the tutor chooses the type from what he writes. "I'm stuck", "I don't get it" or "just tell me" count as asking for the next step.
 - **The rules stay, enforced by the server, not the tutor:**
-  - an attempt comes before any help, and anything written counts (§21.1); "I don't know where to start" still allows break it down only;
-  - the first help is a hint or a breakdown; a pointer or explanation is allowed only after a fresh attempt after that help; an explanation never comes before the earlier types;
+  - on set work (a chat linked to a task), an attempt comes before any help, and anything written counts (§21.1); "I don't know where to start" (or "I'm stuck" before any go) allows break it down only;
+  - the first help is a hint or a breakdown; a pointer or explanation is allowed only after a fresh try after that help; an explanation never comes before the earlier types;
+  - **"I'm stuck" again after help counts as that fresh try** (owner's choice, 28 November 2026, after the first live check felt too stubborn), so each "stuck" moves one step up rather than asking him to try first;
+  - **a chat with no task is not set work** (for example "what is osmosis?"): nothing waits for an attempt and the tutor simply helps, as the core skill says (owner's choice, 28 November 2026);
   - the same-skill-different-context rule, the live check, the per-task tally and the wellbeing replies are unchanged (§23).
 - Every attempt and every support step is still recorded, so independence patterns (§5.2) and the parent summary are unchanged.
 - New eval cases check that the ladder neither gives answers early nor refuses legitimate help (§23.7).

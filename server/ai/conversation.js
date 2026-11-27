@@ -28,10 +28,6 @@ export const ACTION_INSTRUCTIONS = Object.freeze({
     + 'accessible introduction instead. Don\'t give a hint, a breakdown, a source or an explanation yet: if '
     + 'they want help, they will ask.',
   message: '',
-  // WP-130 (A-013 §7): stuck again after help, before another go; the next help needs a fresh try
-  nudge: 'The student is asking for more help but hasn\'t had another go since your last help. Don\'t give '
-    + 'more help yet. Kindly ask them to try the step you gave, with any rough answer, even a few words, and '
-    + 'say the next bit of help comes once they have tried.',
   hint: 'The student asked for a hint. Give one short nudge towards their next step, without writing any of '
     + 'the work for them. End by inviting them to have another go.',
   breakdown: 'The student asked you to break it down. Split what they are stuck on into two or three smaller '

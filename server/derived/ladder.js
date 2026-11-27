@@ -48,13 +48,17 @@ export function helpKind(text) {
  *  - 'escape':  stuck before any attempt: like "I don't know where to start", it gets a breakdown only;
  *  - 'attempt': a go at the work while one is awaited (anything counts, quality is never judged);
  *  - 'support': help on offer and he asked for it: the tutor gives one of the allowed kinds;
- *  - 'nudge':   stuck again after help, before trying again: no more help yet, just encouragement to try;
+ *  - 'retry':   stuck again after help: that counts as his next try, so it opens the next help at once
+ *               (WP-130b, owner's choice: the nudge felt too stubborn);
  *  - 'message': anything else.
+ * taskLinked false (WP-130b): a chat with no task is not set work, so nothing waits for an attempt and
+ * the tutor just helps (as the core skill already says); every message is a 'message'.
  */
-export function ladderStep(state, kind) {
+export function ladderStep(state, kind, { taskLinked = true } = {}) {
+  if (!taskLinked) return 'message';
   const waiting = state?.waiting !== false;
   const pair = state?.pair ?? 0;
   if (waiting && pair === 0) return kind === 'stuck' ? 'escape' : 'attempt';
-  if (waiting) return kind === 'stuck' ? 'nudge' : 'attempt';
+  if (waiting) return kind === 'stuck' ? 'retry' : 'attempt';
   return kind ? 'support' : 'message';
 }
