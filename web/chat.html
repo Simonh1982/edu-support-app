@@ -24,14 +24,32 @@
       </header>
       <main class="view" id="view" tabindex="-1"></main>
       <form class="composer-wrap" id="composer" novalidate>
+        <!-- WP-132a: the "+" menu's paste mode adds a due date (WP-115c's form, in the chat) -->
+        <div class="paste-extra" id="paste-extra" hidden>
+          <label for="paste-due">When is it due?</label>
+          <input type="date" id="paste-due" aria-describedby="paste-due-hint">
+          <span class="hint" id="paste-due-hint">Optional.</span>
+          <button type="button" class="link-button" id="paste-cancel">Cancel</button>
+        </div>
         <div class="composer">
           <label for="message" class="visually-hidden">Your message</label>
           <textarea id="message" rows="1" maxlength="4000" placeholder="Ask anything…"></textarea>
           <div class="composer-row">
+            <button type="button" class="icon-button plus" id="plus" aria-haspopup="menu" aria-expanded="false" aria-controls="plus-menu" aria-label="Add a photo, file, task or source"><span aria-hidden="true">+</span></button>
             <span class="type-chip" id="type-chip">Help: automatic</span>
             <button type="submit" class="send" id="send" aria-label="Send"><span aria-hidden="true">↑</span></button>
           </div>
         </div>
+        <ul class="plus-menu" id="plus-menu" role="menu" aria-label="Add" hidden>
+          <li role="none"><button type="button" role="menuitem" data-add="camera">Take a photo</button></li>
+          <li role="none"><button type="button" role="menuitem" data-add="gallery">Choose a photo</button></li>
+          <li role="none"><button type="button" role="menuitem" data-add="file">Attach a file</button></li>
+          <li role="none"><button type="button" role="menuitem" data-add="paste">Paste a task</button></li>
+          <li role="none"><button type="button" role="menuitem" data-add="source">Add a source</button></li>
+        </ul>
+        <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
+        <input type="file" id="gallery-input" accept="image/*" multiple hidden>
+        <input type="file" id="file-input" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
         <p class="composer-note" id="composer-note" role="status" aria-live="polite"></p>
         <p class="composer-hint">The tutor helps you think. It won't write your answers.</p>
       </form>

@@ -124,10 +124,14 @@ export function conversationView(conv, { disengageAfter = DEFAULT_DISENGAGE_AFTE
   };
 }
 
-/** WP-131a: he renames a chat with no task (a task chat is named after its task). body: { name }. */
+/**
+ * A chat with no task: he renames it (WP-131a; a task chat is named after its task), or, once he adds
+ * a task from it, it is linked to that task (WP-132a, A-013 §6). body: { name } or { taskId }.
+ */
 export async function renameChat(store, id, body, { now = new Date() } = {}) {
   plainObject(body, 'chat');
-  onlyKeys(body, ['name'], 'chat');
+  onlyKeys(body, ['name', 'taskId'], 'chat');
+  if (body.taskId !== undefined) return linkChat(store, id, body, { now });
   const name = textField(body.name, 'name', { max: MENU_LIMITS.name, authors: ['learner'], defaultAuthor: 'learner', required: true });
   const value = name.value.replace(/\s+/g, ' ').trim();
   if (!value) throw bad('name is required');
@@ -137,6 +141,24 @@ export async function renameChat(store, id, body, { now = new Date() } = {}) {
     if (conv.taskId) throw new DomainError(409, MENU_MESSAGES.taskChat);
     const saved = await saveConversation(store, conv, { name: { value, author: 'learner' } }, now);
     await store.logEvent('chat.renamed', { createdBy: 'learner', links: { conversationId: id }, payload: {} });
+    return saved;
+  });
+}
+
+/** WP-132a: links a chat with no task to a task (the ladder applies to it from then on). */
+async function linkChat(store, id, body, { now }) {
+  if (Object.keys(body).length !== 1) throw bad('send taskId on its own');
+  const taskId = recordId(body.taskId, 'taskId', { required: true });
+  const task = await readTask(store, taskId);
+  if (!task || task.deletedAt) throw notFound('Task');
+  return withTaskLock(lockKey(id), async () => {
+    const conv = await readConversation(store, id);
+    if (!conv) throw new DomainError(404, MENU_MESSAGES.notFound);
+    if (conv.taskId === taskId) return conv;
+    if (conv.taskId) throw new DomainError(409, MENU_MESSAGES.alreadyLinked);
+    const topic = conv.topicId ?? (Array.isArray(task.topicIds) ? task.topicIds[0] ?? null : null);
+    const saved = await saveConversation(store, conv, { taskId, topicId: topic }, now);
+    await store.logEvent('chat.linked', { createdBy: 'learner', links: links({ conversationId: id, taskId }), payload: {} });
     return saved;
   });
 }
