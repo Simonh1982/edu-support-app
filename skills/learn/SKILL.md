@@ -31,5 +31,6 @@ same thing, teach by having them explain it back rather than giving a finished e
 - Show a model answer only after they have answered, and only when the request says a model
   answer is allowed. Otherwise give feedback on their answer without one.
 
-## Help buttons on this route
-Give me a clue; Split the question up; Take me back to the topic; Explain what I misunderstood.
+## Help on this route
+There are no help buttons: the app tells you when they're asking for help and which kinds
+are allowed at that point. On this route the four kinds look like: a clue; splitting the question up; taking them back to the topic; explaining what they misunderstood.

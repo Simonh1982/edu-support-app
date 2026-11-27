@@ -12,8 +12,9 @@ import { ROUTES, buildRequest, loadProfileSettings } from '../ai/prompt.js';
 import { createReadTools } from '../ai/read-tools.js';
 import { topicExtract } from '../curriculum.js';
 import {
-  ACTION_INSTRUCTIONS, DISENGAGED_INSTRUCTION, CONVERSATION_MESSAGES, askTutor, askRoute,
+  ACTION_INSTRUCTIONS, DISENGAGED_INSTRUCTION, CONVERSATION_MESSAGES, askTutor, askRoute, supportChoiceInstruction,
 } from '../ai/conversation.js';
+import { helpKind, ladderStep } from '../derived/ladder.js';
 import { isIdkStyle, idkCount, DEFAULT_DISENGAGE_AFTER } from '../derived/engagement.js';
 import { routeFromTask, routeOptions } from '../derived/route.js';
 import { isDisclosure, noteDisclosure } from '../wellbeing.js';
@@ -327,8 +328,8 @@ async function tutorCall(store, conv, { ctx, task, message, attempt, instruction
   });
 }
 
-const instructionFor = (action, disengaged, questionsOnly = false) => [
-  ACTION_INSTRUCTIONS[action], questionsOnly ? QUESTIONS_ONLY_INSTRUCTION : '', disengaged ? DISENGAGED_INSTRUCTION : '',
+const instructionFor = (action, disengaged, questionsOnly = false, choice = null) => [
+  choice ? supportChoiceInstruction(choice) : ACTION_INSTRUCTIONS[action], questionsOnly ? QUESTIONS_ONLY_INSTRUCTION : '', disengaged ? DISENGAGED_INSTRUCTION : '',
 ].filter(Boolean).join('\n');
 
 /**
@@ -340,7 +341,7 @@ const instructionFor = (action, disengaged, questionsOnly = false) => [
  * kept only when that first reply passes, and never beside a reply to a level 2–3 message.
  * Returns { answer, checkResult, checks }; throws only as tutorCall does (first reply).
  */
-async function answerFor(store, conv, { ctx, action, type = null, message, attempt, writing, disengaged, needLevel }) {
+async function answerFor(store, conv, { ctx, action, type = null, choice = null, message, attempt, writing, disengaged, needLevel }) {
   const handle = requireAi(ctx.getAi);
   const task = conv.taskId ? await readTask(store, conv.taskId) : null;
   let questionsOnly = false;
@@ -348,7 +349,7 @@ async function answerFor(store, conv, { ctx, action, type = null, message, attem
     const since = typeof task.createdAt === 'string' ? task.createdAt.slice(0, 7) : null;
     questionsOnly = overTally(taskTally(await listTaskTurns(store, task.id, { since }), task.id), ctx.tally ?? DEFAULT_TALLY);
   }
-  const instruction = instructionFor(type ?? action, disengaged, questionsOnly);
+  const instruction = instructionFor(type ?? action, disengaged, questionsOnly, choice);
   const ask = (extra, level, web = false) => tutorCall(store, conv, {
     ctx, task, message, attempt, needLevel: level, web, instruction: [instruction, extra].filter(Boolean).join('\n'),
   });
@@ -358,7 +359,8 @@ async function answerFor(store, conv, { ctx, action, type = null, message, attem
   const filtered = filterSources(raw.sources, { tasks: targets });
   if (filtered.dropped) log.log(`[sources] ${filtered.dropped} dropped by the source filter`);
   const first = { ...raw, sources: isDisclosure(raw.wellbeingLevel) ? [] : filtered.kept };
-  if (!needsCheck({ route: conv.route, taskId: conv.taskId, type }) || isDisclosure(first.wellbeingLevel)) {
+  const checkType = type ?? (choice?.includes('explanation') ? 'explanation' : null);
+  if (!needsCheck({ route: conv.route, taskId: conv.taskId, type: checkType }) || isDisclosure(first.wellbeingLevel)) {
     return { answer: first, checkResult: null, checks: [] };
   }
   const checked = await liveCheck({
@@ -428,37 +430,80 @@ export async function sendMessage(store, id, body, ctx = {}) {
       max: WORK_LIMITS.attemptText, authors: ['learner'], defaultAuthor: 'learner', required: true,
     });
     if (conv.turns.length >= CONVERSATION_LIMITS.turns) throw new DomainError(409, STATE_MESSAGES.full);
-    const isAttempt = conv.waiting === true;
     const idk = isIdkStyle(text.value);
     const count = idkCount(conv.turns) + (idk ? 1 : 0);
     const disengaged = count >= after;
-    const { answer, checkResult, checks } = await answerFor(store, conv, {
-      ctx, action: isAttempt ? 'attempt' : 'message', message: text.value, writing: text.value, disengaged, needLevel: true,
+    const log = ctx.log ?? console;
+
+    // WP-130 (A-013 §7): the invisible ladder. What he wrote decides the step; the server keeps the rules.
+    const step = ladderStep(conv, helpKind(text.value));
+    // stuck before any attempt counts as "I don't know where to start": a breakdown only (§21.1)
+    const escapeState = step === 'escape' ? advance(conv, { action: 'attempt', escape: true }) : null;
+    const offered = step === 'support' ? offeredSupport(conv) : step === 'escape' ? offeredSupport(escapeState) : [];
+    const attemptText = conv.lastAttemptId ? (await readAttempt(store, conv.lastAttemptId))?.text?.value ?? '' : '';
+    const ask = (choice) => answerFor(store, conv, {
+      ctx,
+      action: step === 'escape' || step === 'support' ? 'support' : step,
+      type: choice?.length === 1 ? choice[0] : null,
+      choice: choice?.length > 1 ? choice : null,
+      message: text.value,
+      attempt: offered.length ? attemptText : undefined,
+      writing: offered.length ? `${attemptText}\n${text.value}`.trim() : text.value,
+      disengaged,
+      needLevel: true,
     });
+    let { answer, checkResult, checks } = await ask(offered.length ? offered : null);
+    let supportType = null;
+    const disclosure = isDisclosure(answer.wellbeingLevel);
+    if (offered.length && !disclosure) {
+      // with one kind allowed, the instruction asked for exactly that kind
+      supportType = offered.length === 1 || offered.includes(answer.replyType) ? (offered.length === 1 ? offered[0] : answer.replyType) : null;
+      if (!supportType) {
+        // it gave a kind that isn't on offer (or didn't say): ask once more for the lightest allowed kind
+        log.log(`[ladder] the tutor's kind of help wasn't on offer; asking for a ${offered[0]}`);
+        const again = await ask([offered[0]]);
+        answer = again.answer;
+        checkResult = again.checkResult;
+        checks = [...checks, ...again.checks];
+        supportType = offered[0];
+      }
+    }
 
     // Levels 2–3 (build spec §32.1): his words, the reply and anything made from them are dropped
     // before anything is saved. A disclosure isn't a go at the work, so it makes no Attempt record and
     // opens no help; he still sees the reply.
-    const disclosure = isDisclosure(answer.wellbeingLevel);
-    const counts = isAttempt && !disclosure;
-    const action = counts ? 'attempt' : 'message';
+    const counts = (step === 'attempt' || step === 'escape') && !disclosure;
+    const supported = Boolean(supportType) && !isDisclosure(answer.wellbeingLevel);
+    const action = supported ? 'support' : step === 'attempt' && counts ? 'attempt' : 'message';
     let state = { pair: conv.pair, waiting: conv.waiting, escape: conv.escape };
     let attemptId = null;
     if (counts) {
-      state = advance(conv, { action: 'attempt' });
+      state = step === 'escape' ? escapeState : advance(conv, { action: 'attempt' });
       if (conv.lastSupportEventId) await logSupportOutcome(store, { supportEventId: conv.lastSupportEventId, outcome: 'tried-again' });
-      attemptId = (await recordAttempt(store, { ...base, text: text.value }, { curriculum: ctx.curriculum, now })).id;
+      const attempt = step === 'escape'
+        ? await recordAttempt(store, { ...base, escape: true }, { curriculum: ctx.curriculum, now })
+        : await recordAttempt(store, { ...base, text: text.value }, { curriculum: ctx.curriculum, now });
+      attemptId = attempt.id;
       // WP-116: in Plan my answer his attempt is his main point (§21.1); it starts the plan if empty
-      if (conv.route === 'plan' && conv.taskId && conv.pair === 0) {
+      if (step === 'attempt' && conv.route === 'plan' && conv.taskId && conv.pair === 0) {
         try {
           await mainPointFromAttempt(store, conv.taskId, text.value, { now });
         } catch (err) {
-          (ctx.log ?? console).error(`[plan] main point not saved: ${err?.name ?? 'Error'}`);
+          log.error(`[plan] main point not saved: ${err?.name ?? 'Error'}`);
         }
       }
     }
+    let supportEventId = null;
+    if (supported) {
+      state = advance(state, { action: 'support', type: supportType });
+      const event = await logSupport(store, {
+        type: supportType, route: conv.route, attemptId: attemptId ?? conv.lastAttemptId, taskId: conv.taskId, topicId: conv.topicId,
+      });
+      supportEventId = event.id;
+    }
     const turn = await saveAiTurn(store, {
-      feature: conv.route, role: 'conversation', model: answer.model, taskId: conv.taskId, topicId: conv.topicId, attemptId,
+      feature: conv.route, role: 'conversation', model: answer.model, taskId: conv.taskId, topicId: conv.topicId,
+      attemptId: attemptId ?? (supported ? conv.lastAttemptId : null),
       learnerText: disclosure ? null : text.value, text: disclosure ? null : answer.reply, latencyMs: answer.ms, success: true,
       taskSpecific: answer.taskSpecific, checkResult, wellbeingLevel: answer.wellbeingLevel,
       sources: disclosure ? [] : answer.sources,
@@ -467,8 +512,8 @@ export async function sendMessage(store, id, body, ctx = {}) {
     const changes = {
       ...state,
       lastAttemptId: attemptId ?? conv.lastAttemptId,
-      lastSupportEventId: counts ? null : conv.lastSupportEventId,
-      turns: [...conv.turns, { turnId: turn.id, action, idk: idk && !disclosure }],
+      lastSupportEventId: supportEventId ?? (counts ? null : conv.lastSupportEventId),
+      turns: [...conv.turns, { turnId: turn.id, action, ...(supported ? { type: supportType } : {}), idk: idk && !disclosure }],
     };
     if (disengaged && !disclosure && !conv.disengagedAt) {
       changes.disengagedAt = ukIso(now);
@@ -480,10 +525,10 @@ export async function sendMessage(store, id, body, ctx = {}) {
     }
     const saved = await saveConversation(store, conv, changes, now);
     // then the event (date and level only) and the owner's alert; neither ever sees his words
-    await noteDisclosure(store, answer.wellbeingLevel, { wellbeing: ctx.wellbeing ?? null, log: ctx.log ?? console });
+    await noteDisclosure(store, answer.wellbeingLevel, { wellbeing: ctx.wellbeing ?? null, log });
     return {
       conversation: conversationView(saved, { disengageAfter: after }),
-      turn: await shownTurn(store, turnView(turn, { action, reply: answer.reply, wellbeingLevel: answer.wellbeingLevel })),
+      turn: await shownTurn(store, turnView(turn, { action, type: supportType, reply: answer.reply, wellbeingLevel: answer.wellbeingLevel })),
       attemptId,
     };
   });

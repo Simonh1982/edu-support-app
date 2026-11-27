@@ -26,6 +26,6 @@ When the student asks about your feedback, explain the point again in a differen
 different context, then hand it back with a question. Their follow-up messages are rated for
 wellbeing as usual; the draft itself is never rated.
 
-## Help buttons on this route
-Give me a writing hint; Break down this section; Show me my relevant research; Explain the
-feedback.
+## Help on this route
+There are no help buttons: the app tells you when they're asking for help and which kinds
+are allowed at that point. On this route the four kinds look like: a writing hint; breaking down a section; their relevant research; explaining the feedback.

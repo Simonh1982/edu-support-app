@@ -25,9 +25,13 @@ export const CONVERSATION_MESSAGES = Object.freeze({
 export const ACTION_INSTRUCTIONS = Object.freeze({
   attempt: 'The student has just had a go (their message above). Build on it: say what is useful in it, '
     + 'then ask one question that moves them on. If they say they know nothing yet, start with a short, '
-    + 'accessible introduction instead. Don\'t give a hint, a breakdown, a source or an explanation yet: the '
-    + 'app offers those as buttons if they want them.',
+    + 'accessible introduction instead. Don\'t give a hint, a breakdown, a source or an explanation yet: if '
+    + 'they want help, they will ask.',
   message: '',
+  // WP-130 (A-013 §7): stuck again after help, before another go; the next help needs a fresh try
+  nudge: 'The student is asking for more help but hasn\'t had another go since your last help. Don\'t give '
+    + 'more help yet. Kindly ask them to try the step you gave, with any rough answer, even a few words, and '
+    + 'say the next bit of help comes once they have tried.',
   hint: 'The student asked for a hint. Give one short nudge towards their next step, without writing any of '
     + 'the work for them. End by inviting them to have another go.',
   breakdown: 'The student asked you to break it down. Split what they are stuck on into two or three smaller '
@@ -40,6 +44,20 @@ export const ACTION_INSTRUCTIONS = Object.freeze({
     + 'them, concisely, using a different context from their task. End with a question or a small activity, '
     + 'and ask them to put the idea in their own words.',
 });
+
+/**
+ * WP-130 (A-013 §7): he asked for help with no button to press, so the tutor chooses the kind that
+ * fits what he wrote, from the kinds the server allows at this point. It says which in replyType.
+ */
+export function supportChoiceInstruction(types) {
+  const allowed = types.filter((t) => ACTION_INSTRUCTIONS[t]);
+  if (allowed.length === 1) return `${ACTION_INSTRUCTIONS[allowed[0]]}\nSet "replyType" to "${allowed[0]}".`;
+  return [
+    'The student is asking for help. Give exactly one kind of help, the one that best fits what they wrote:',
+    ...allowed.map((t) => `- ${t}: ${ACTION_INSTRUCTIONS[t].replace(/^The student asked (for a hint|you to break it down|to be pointed to something useful|you to explain the difficult bit)\. /, '')}`),
+    `Don't give any other kind of help. Set "replyType" to the kind you gave: ${allowed.map((t) => `"${t}"`).join(' or ')}.`,
+  ].join('\n');
+}
 
 export const DISENGAGED_INSTRUCTION = 'The student seems disengaged (several "don\'t know"-style answers). '
   + 'Be shorter and more direct, not firmer: two or three sentences at most. Offer a smaller step or a break, '
@@ -71,7 +89,10 @@ export function parseRouteReply(text) {
   };
 }
 
-/** { reply, taskSpecific, wellbeingLevel } or null if there is no reply to show. The model's replyType is ignored. */
+/**
+ * { reply, taskSpecific, wellbeingLevel, replyType } or null if there is no reply to show. replyType
+ * is the model's word, kept only as a claim: the server decides what is recorded (WP-130).
+ */
 export function parseTutorReply(text) {
   const parsed = parseJsonReply(text);
   if (!parsed || typeof parsed.reply !== 'string' || !parsed.reply.trim()) return null;
@@ -79,6 +100,7 @@ export function parseTutorReply(text) {
     reply: parsed.reply.trim().slice(0, MAX_REPLY_CHARS),
     taskSpecific: parsed.taskSpecific === true,
     wellbeingLevel: level(parsed.wellbeingLevel),
+    replyType: typeof parsed.replyType === 'string' ? parsed.replyType.slice(0, 20) : null,
   };
 }
 
