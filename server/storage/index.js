@@ -32,9 +32,10 @@ export function storageSettings(env = process.env, { appRoot = APP_ROOT } = {}) 
  * The store's before-commit step: rebuild index/snapshot.json from the clone (blueprint §4.2 step 4).
  * The first batch after start-up (the system.start event) writes it, so it is fresh after every start.
  */
-export function snapshotStep(dir, { build = buildSnapshot } = {}) {
+export function snapshotStep(dir, { build = buildSnapshot, getCurriculum = () => null } = {}) {
   return async ({ write }) => {
-    await write(SNAPSHOT_PATH, await build({ dir }));
+    // WP-131a: the curriculum gives the menu its topic titles and subjects, once it has loaded
+    await write(SNAPSHOT_PATH, await build({ dir, curriculum: getCurriculum() }));
   };
 }
 
@@ -45,6 +46,7 @@ export function snapshotStep(dir, { build = buildSnapshot } = {}) {
  */
 export async function startStorage({
   state, config, env = process.env, log = console, makeStore = createStore, getImageLimits = () => null, inbox = true,
+  getCurriculum = () => null,
 } = {}) {
   const show = (s) => {
     state.storage = { ok: s.ok, ready: s.ready, lastPull: s.lastPull, lastPush: s.lastPush, pending: s.pending, detail: s.detail };
@@ -64,7 +66,7 @@ export async function startStorage({
     }
     const store = makeStore({
       dir: settings.dir, remoteUrl: settings.remoteUrl, env: gitEnv({ token: settings.token, env }),
-      log, onStatus: show, beforeCommit: snapshotStep(settings.dir),
+      log, onStatus: show, beforeCommit: snapshotStep(settings.dir, { getCurriculum }),
     });
     show(store.status());
     if (!(await store.init())) return null;

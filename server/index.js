@@ -293,7 +293,7 @@ async function main() {
       aiCeiling,
     });
     // storage also starts after listening, so /api/health can show its progress (storage.detail)
-    startStorage({ state, config, getImageLimits: () => imageLimits }).then(async (store) => {
+    startStorage({ state, config, getImageLimits: () => imageLimits, getCurriculum: () => curriculum }).then(async (store) => {
       storeHandle = store;
       // read once the clone is up to date; logs counts and file names only (never content)
       if (store) curriculum = await startCurriculum({ dir: store.dir });

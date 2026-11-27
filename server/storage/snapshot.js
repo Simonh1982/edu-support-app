@@ -7,6 +7,7 @@ import path from 'node:path';
 import { ukIso } from './records.js';
 import { canReadItem } from '../auth.js';
 import { ITEM_ID_PATTERN } from './items.js';
+import { buildMenu, folderReader, MENU_LIMITS } from '../domain/menu.js';
 
 export const UPCOMING_LIMIT = 20;
 export const RECENT_LIMIT = 10;
@@ -131,11 +132,26 @@ function itemRef(item, extra) {
   return { type: item.type, id: item.id, ...(item.task ? { task: item.task } : {}), title: item.title, ...extra };
 }
 
+/** The side menu's lists for the snapshot, capped; an empty menu if anything goes wrong. */
+async function menuFor(dir, curriculum) {
+  try {
+    const menu = await buildMenu(folderReader(dir), { curriculum, limit: MENU_LIMITS.snapshot });
+    return {
+      subjects: menu.subjects,
+      chats: menu.chats.map(({ id, name, route, taskId, topicIds, qualId, updatedAt }) => ({ id, name, route, taskId, topicIds, qualId, updatedAt })),
+      tasks: menu.tasks,
+      topics: menu.topics,
+    };
+  } catch {
+    return { subjects: [], chats: [], tasks: [], topics: [] };
+  }
+}
+
 /**
  * Build the snapshot from the local clone. Never throws for missing folders or bad files.
  * Plan status and the next session are calculated in later phases, so they are null for now.
  */
-export async function buildSnapshot({ dir, now = new Date() }) {
+export async function buildSnapshot({ dir, now = new Date(), curriculum = null }) {
   const { tasks, items } = await collect(dir);
   const app = await readJson(dir, 'profile/app.json');
   const appName = cleanText(app?.displayName ?? app?.name, APP_NAME_MAX);
@@ -192,6 +208,8 @@ export async function buildSnapshot({ dir, now = new Date() }) {
       settings: { accessibility, presentation },
       recent,
       notebook,
+      // WP-131a (A-013): the side menu while the tutor rests: names and titles only, never text
+      menu: await menuFor(dir, curriculum),
       inboxPending,
     },
     parent: {
