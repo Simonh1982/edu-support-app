@@ -9,7 +9,7 @@
 
 ## Current amendments
 
-Build spec generated from master specification **v3.7** (31 October 2026). Current amendments: A-008 to A-012.
+Build spec generated from master specification **v3.7** (31 October 2026). Current amendments: A-008 to A-013.
 
 ### A-008: Photos and files are removed automatically, and hidden from the list once they are tasks
 **Decided:** 4 November 2026 (owner, options 1A and 2B). **Changes:** build spec §32.2 ("How long conversations are kept"), Appendix A.3 (Upload) and A.6 (retention note); blueprint §4.6 (retention table). **Workplan:** WP-123 (retention), and WP-122 or an earlier tidy-up package (the list).
@@ -121,6 +121,62 @@ Build spec generated from master specification **v3.7** (31 October 2026). Curre
 **2. Try again after "too close".**
 - When a summary fails the live check twice, the message stays, and **Summarise** becomes **Try the summary again**. It uses the copy already attached or the page already saved.
 - Each try goes through the live check as before (§23.5). "Read the original" and "needs a subscription" still end the offer, as before.
+
+### A-013: A chat-first app, like an AI chat platform, with an invisible support ladder
+**Decided:** 27 November 2026 (owner; option A, after trying a clickable prototype with invented data). **Changes:** build spec §3.2 (One decision at a time), §3.3 (Mobile first), §6 and §6.1 (app structure and opening the app), §8 and §8.1 (starting a task), §10 (routing), §17 (Upcoming view), §20 to §22 and §21.1 (the support pairs), §23.1 (button labels), §26 and §29 (where sources and notes are shown); blueprint §10 (the learner page). **Workplan:** WP-130 to WP-134, before WP-117.
+
+**Why:** as features were added, the screens grew structured and crowded on a phone: many buttons, panels and forms. A chat-first design, like an AI chat platform, keeps the main screen clean and puts everything else behind a menu, a "+" button and panels. The safeguards stay exactly as they are; only where they appear changes.
+
+**1. Layout (responsive, still mobile first).**
+- **Phone:** the chat fills the screen. The side menu is a drawer opened from a menu button. Sources, notes and the task details open **full screen** over the chat, with **Back to the chat**.
+- **Tablet:** the side menu stays open on the left; the task panel opens over the chat from the right.
+- **Monitor:** three columns: the side menu, the chat at a comfortable reading width, and the task panel on the right when open.
+- Large tap targets, keyboard use, labelled icons, reduced motion and no sideways scrolling, at every width (§33).
+
+**2. Opening the app.**
+- It opens on a **clean new chat**: a short greeting ("What do you need help with today?"), up to three small suggestion chips (for example *Start a new task*, *Learn something*, *What's due?*) and the message box.
+- The home screen's three large actions (§6) are retired. **Recommended next** (§6), if kept, is one small line under the greeting, decided at the live check.
+- While the tutor wakes (§6.1), everything saved stays readable: the side menu, task pages, topic pages and the notebook come from the snapshot and the Worker, view-only. A message sent while it wakes waits and is sent once it is ready.
+
+**3. The side menu** (where he picks up previous work).
+- **New chat**, then **Search** (chats, tasks and topics).
+- **Subject buttons:** *All* and each of his subjects (names from his qualifications in private settings, never in public code). Choosing one filters Chats, Tasks and Topics to that subject. The app always opens on *All*.
+- **Chats:** the 3 newest shown; an arrow (> closed, ⌄ open) shows them all, newest first.
+- **Tasks:** the 3 due soonest shown, with their due day; opening the list shows them all by due date, with a closed **Done** group at the bottom. This replaces the separate Coming up page (§17).
+- **Topics:** closed until opened; only topics he has worked on, most recently worked on first.
+- **Two levels only.** Choosing a chat, task or topic opens it in the main window, and the menu shows its **focus level**:
+  - a chat: its task and its topics;
+  - a task: its chats (newest first) and its topics;
+  - a topic: its chats and its tasks.
+  - **← All chats / All tasks / All topics** returns to the top level. Choosing an item at the focus level moves the focus to it.
+- At the foot: **Notebook**, **Photos & files**, **Settings**, **Sign out**.
+- A chat's subject is its task's, or its first topic's; a chat with neither appears under *All* only.
+
+**4. Chat names.**
+- A chat on a task is named from the task and the kind of help, for example *"Seaholme – plan"*.
+- A chat with no task gets a short name made by the AI from its subject (for example *"Longshore drift explained"*), which he can rename. Names are titles, like note titles: they may appear in the snapshot; chat text never does.
+
+**5. Task and topic pages.**
+- **Task page** (like a chat platform's project page): the title, subject, due date and stage (changeable); a box to **start a chat about this task**; the list of **chats about this task**; its topics; and folded sections for **the question, sources, notes and plan**.
+- **Topic page:** a short description from the course outline; his notes and summaries on the topic; the tasks and chats that use it.
+- In a chat on a task, a **task button** at the top opens the task panel (monitor: right-hand column; phone: full screen).
+
+**6. The message box.**
+- A **"+" menu**: *Take a photo*, *Attach a file*, *Paste a task*, *Add a source*. These replace the capture buttons and the Type or paste it form (§8).
+- **The tutor works out the kind of help** (Understand and research it, Plan my answer, Review my work, Learn something) from what he writes (§3.4, §10). A small chip above the message box shows it and lets him change it.
+- **New tasks in the chat:** a photo, file or pasted task is read as now, and **Check the details** appears as a card in the chat; confirming it creates the task and links the chat to it.
+
+**7. The invisible support ladder** (replaces the Hint, Break it down, Point me and Explain buttons; §20 to §22, §23.1).
+- **The four support types stay**: hint, break it down, point to something useful, explain the difficult bit. There are no buttons; the tutor chooses the type from what he writes. "I'm stuck", "I don't get it" or "just tell me" count as asking for the next step.
+- **The rules stay, enforced by the server, not the tutor:**
+  - an attempt comes before any help, and anything written counts (§21.1); "I don't know where to start" still allows break it down only;
+  - the first help is a hint or a breakdown; a pointer or explanation is allowed only after a fresh attempt after that help; an explanation never comes before the earlier types;
+  - the same-skill-different-context rule, the live check, the per-task tally and the wellbeing replies are unchanged (§23).
+- Every attempt and every support step is still recorded, so independence patterns (§5.2) and the parent summary are unchanged.
+- New eval cases check that the ladder neither gives answers early nor refuses legitimate help (§23.7).
+- **Review point:** after real use, check that the step-up feels responsive rather than stubborn.
+
+**8. Unchanged.** The privacy rules, what is sent to AI models, the no-answers rules, the notebook's authorship labels, pinned-not-inserted AI text, the plan's own-words rule, accessibility settings, and the parent page.
 
 ---
 
