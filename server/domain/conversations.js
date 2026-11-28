@@ -38,7 +38,6 @@ import {
 
 export const FIRST_PAIR = Object.freeze(['hint', 'breakdown']);
 export const SECOND_PAIR = Object.freeze(['pointer', 'explanation']);
-export const VOTES = Object.freeze(['up', 'down', 'removed']);
 export const CONVERSATION_LIMITS = Object.freeze({ turns: 200, historyTurns: 5, topics: 2 });
 export const ROUTE_FEATURE = 'route-choice';
 
@@ -581,69 +580,6 @@ export async function sendMessage(store, id, body, ctx = {}) {
       attemptId,
     };
   });
-}
-
-/** A support button. Only the buttons on offer are accepted, so help is never out of order (§57). */
-export async function requestSupport(store, id, body, ctx = {}) {
-  plainObject(body, 'support');
-  onlyKeys(body, ['type'], 'support');
-  const type = oneOf(body.type, 'type', SUPPORT_TYPES, { required: true });
-  const now = ctx.now ?? new Date();
-  const after = ctx.disengageAfter ?? DEFAULT_DISENGAGE_AFTER;
-  return withTaskLock(lockKey(id), async () => {
-    const conv = await readConversation(store, id);
-    if (!conv) throw new DomainError(404, STATE_MESSAGES.notFound);
-    const state = advance(conv, { action: 'support', type });
-    if (conv.turns.length >= CONVERSATION_LIMITS.turns) throw new DomainError(409, STATE_MESSAGES.full);
-    const attempt = conv.lastAttemptId ? await readAttempt(store, conv.lastAttemptId) : null;
-    const { answer, checkResult, checks } = await answerFor(store, conv, {
-      ctx,
-      action: 'support',
-      type,
-      attempt: attempt?.text?.value ?? '',
-      writing: attempt?.text?.value ?? '',
-      disengaged: idkCount(conv.turns) >= after,
-      // a button press isn't something he typed, so there's nothing to rate (§32.1)
-      needLevel: false,
-    });
-    const base = { taskId: conv.taskId, topicId: conv.topicId };
-    const event = await logSupport(store, { type, route: conv.route, attemptId: conv.lastAttemptId, ...base });
-    const turn = await saveAiTurn(store, {
-      feature: conv.route, role: 'conversation', model: answer.model, ...base, attemptId: conv.lastAttemptId,
-      text: answer.reply, latencyMs: answer.ms, success: true, taskSpecific: answer.taskSpecific, checkResult,
-      sources: answer.sources,
-    }, { now });
-    await saveChecks(store, conv, checks, now);
-    const saved = await saveConversation(store, conv, {
-      ...state,
-      lastSupportEventId: event.id,
-      turns: [...conv.turns, { turnId: turn.id, action: 'support', type, idk: false }],
-    }, now);
-    return {
-      conversation: conversationView(saved, { disengageAfter: after }),
-      turn: await shownTurn(store, turnView(turn, { action: 'support', type, reply: answer.reply, wellbeingLevel: null })),
-    };
-  });
-}
-
-/**
- * Thumbs up or down on a tutor reply (A-007): an event with the turn ID, route and vote, no text.
- * Each tap is a new event and the latest one counts, so a vote can be changed or removed. Votes are
- * never read back into a prompt.
- */
-export async function voteOnTurn(store, turnId, body) {
-  plainObject(body, 'vote');
-  onlyKeys(body, ['vote'], 'vote');
-  const vote = oneOf(body.vote, 'vote', VOTES, { required: true });
-  const p = aiTurnPath(turnId);
-  const turn = p ? await store.read(p) : null;
-  if (!turn || !ROUTES.includes(turn.feature)) throw new DomainError(404, STATE_MESSAGES.turnNotFound);
-  await store.logEvent('reply.feedback', {
-    createdBy: 'learner',
-    links: { turnId },
-    payload: { route: turn.feature, vote },
-  });
-  return { turnId, route: turn.feature, vote };
 }
 
 /**

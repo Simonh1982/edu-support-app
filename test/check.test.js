@@ -69,9 +69,9 @@ async function everythingSaved(store) {
 
 /**
  * replies: the tutor's replies in turn (the last repeats); verdicts: the checker's in turn (the last
- * repeats; a string is sent as it is). taskSpecific and level apply to every tutor reply.
+ * repeats; a string is sent as it is). taskSpecific, level and replyType apply to every tutor reply.
  */
-function models({ replies = [SAFE], verdicts = [false], taskSpecific = false, level = 0 } = {}) {
+function models({ replies = [SAFE], verdicts = [false], taskSpecific = false, level = 0, replyType = 'other' } = {}) {
   const tutorPrompts = [];
   const checkPrompts = [];
   const ai = createMockAi({
@@ -79,7 +79,7 @@ function models({ replies = [SAFE], verdicts = [false], taskSpecific = false, le
       [MODELS.conversation]: ({ prompt }) => {
         const reply = replies[Math.min(tutorPrompts.length, replies.length - 1)];
         tutorPrompts.push(prompt);
-        return JSON.stringify({ reply, replyType: 'other', taskSpecific, wellbeingLevel: level, sources: [] });
+        return JSON.stringify({ reply, replyType, taskSpecific, wellbeingLevel: level, sources: [] });
       },
       [MODELS.checker]: ({ system, prompt }) => {
         const v = verdicts[Math.min(checkPrompts.length, verdicts.length - 1)];
@@ -248,7 +248,6 @@ test('a reply that passes is shown and stored with checkResult passed; the check
   const checks = (await listTaskTurns(store, task.id)).filter((t) => t.feature === CHECK_FEATURE);
   assert.equal(checks.length, 1);
   assert.deepEqual([checks[0].role, checks[0].model, checks[0].text, checks[0].learnerText, checks[0].success], ['checker', MODELS.checker, null, null, true]);
-  assert.equal((await call('POST', `/api/turns/${checks[0].id}/vote`, { vote: 'up' })).status, 404, 'not a reply he reads');
   await rm(store.dir, { recursive: true, force: true });
 });
 
@@ -269,11 +268,13 @@ test('a leak is written again with stricter instructions; the leaked draft is ne
 });
 
 test('two leaks: the questions-only reply is shown and stored as the fallback', async () => {
-  const { call, task, start, store, m } = await setup({ m: models({ replies: [LEAKY], verdicts: [true], taskSpecific: true }) });
+  const { call, task, start, store, m } = await setup({ m: models({ replies: [LEAKY], verdicts: [true], taskSpecific: true, replyType: 'hint' }) });
   const c = await start({ route: 'research', taskId: task.id });
   await call('POST', `/api/conversations/${c.id}/messages`, { text: 'invented go' });
-  const r = await call('POST', `/api/conversations/${c.id}/support`, { type: 'hint' });
+  // WP-134b: help comes through messages (the ladder, WP-130)
+  const r = await call('POST', `/api/conversations/${c.id}/messages`, { text: "I'm stuck" });
   assert.equal(r.status, 201);
+  assert.equal(r.body.turn.action, 'support');
   assert.equal(r.body.turn.reply, FALLBACK_REPLIES.research);
   const turn = await store.read(aiTurnPath(r.body.turn.id));
   assert.deepEqual([turn.checkResult, turn.taskSpecific, turn.text.value], ['fallback', false, FALLBACK_REPLIES.research]);
@@ -294,11 +295,11 @@ test('not checked: a learn conversation, research with no task, and a reply to a
   // Explain on a learn conversation linked to a task is checked
   const linked = await start({ route: 'learn', taskId: task.id });
   await call('POST', `/api/conversations/${linked.id}/messages`, { text: 'invented go' });
-  await call('POST', `/api/conversations/${linked.id}/support`, { type: 'breakdown' });
-  assert.equal(m.checkPrompts.length, 0, 'Break it down on learn is not checked');
+  await call('POST', `/api/conversations/${linked.id}/messages`, { text: "I'm stuck" });
+  assert.equal(m.checkPrompts.length, 0, 'the first pair on learn is not checked');
   await call('POST', `/api/conversations/${linked.id}/messages`, { text: 'invented fresh go' });
-  await call('POST', `/api/conversations/${linked.id}/support`, { type: 'explanation' });
-  assert.ok(m.checkPrompts.length > 0, 'Explain on a task is checked');
+  await call('POST', `/api/conversations/${linked.id}/messages`, { text: 'can you explain it?' });
+  assert.ok(m.checkPrompts.length > 0, 'the second pair, which can explain, is checked on a task');
   await rm(store.dir, { recursive: true, force: true });
 
   const care = await setup({ m: models({ verdicts: [true], level: 2 }) });

@@ -380,7 +380,7 @@ export function initChat({ doc = document, win = window } = {}) {
 
   function careBox() {
     const box = make(doc, "div", { className: "care" });
-    box.append(make(doc, "p", { text: TALK_MESSAGES.careHeading }));
+    box.append(make(doc, "p", { className: "care-heading", text: TALK_MESSAGES.careHeading }));
     const list = make(doc, "ul");
     for (const line of HELPLINES) {
       const li = make(doc, "li");

@@ -89,7 +89,7 @@ export function createApi({
     // WP-109: the open tasks for "Coming up", and changing a task's stage or deadline
     openTasks: () => call("api/tasks?open=1"),
     updateTask: (id, body) => call(`api/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body }),
-    // WP-111b: route choice, conversations, the support pairs and votes (server routes from WP-111a)
+    // WP-111b: route choice and conversations (WP-134b: the support and vote calls are retired)
     suggestRoute: (body) => talk("api/route", body),
     startConversation: (body) => call("api/conversations", { method: "POST", body }),
     openConversation: (id) => call(conversationPath(id)),
@@ -101,8 +101,6 @@ export function createApi({
     // WP-114h: his latest conversation for a task and route ({ conversation: null } when there is none)
     latestConversation: ({ taskId, route }) => call(`api/conversations?${new URLSearchParams({ taskId, route })}`),
     sendMessage: (id, body) => talk(`${conversationPath(id)}/messages`, body),
-    requestSupport: (id, type) => talk(`${conversationPath(id)}/support`, { type }),
-    vote: (turnId, vote) => call(`api/turns/${encodeURIComponent(turnId)}/vote`, { method: "POST", body: { vote } }),
     // WP-114b: saving a source card, its AI summary, and opening a saved item (server routes from WP-114a)
     saveSource: ({ turnId, index }) => call("api/sources", { method: "POST", body: { turnId, index } }),
     // body: {} to fetch the page, or { text } with text he pasted from it (A-010)

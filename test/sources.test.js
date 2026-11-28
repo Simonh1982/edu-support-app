@@ -286,7 +286,7 @@ test('a support reply on research can carry cards; reopening the conversation re
   const { call, task, start, store } = await setup();
   const c = await start({ route: 'research', taskId: task.id });
   await call('POST', `/api/conversations/${c.id}/messages`, { text: 'invented go' });
-  const hint = await call('POST', `/api/conversations/${c.id}/support`, { type: 'hint' });
+  const hint = await call('POST', `/api/conversations/${c.id}/messages`, { text: "I'm stuck" });
   assert.equal(hint.body.turn.sources.length, 2);
   const open = await call('GET', `/api/conversations/${c.id}`);
   assert.deepEqual(open.body.conversation.turns.map((t) => t.sources.length), [2, 2]);
