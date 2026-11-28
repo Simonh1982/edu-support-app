@@ -19,7 +19,7 @@
       <header class="top">
         <button type="button" class="icon-button menu-button" id="menu-open" aria-controls="side" aria-expanded="false" aria-label="Open the menu"><span aria-hidden="true">☰</span></button>
         <div class="top-title" id="top-title"></div>
-        <button type="button" class="task-chip" id="task-chip" hidden></button>
+        <button type="button" class="task-chip" id="task-chip" aria-controls="task-side" aria-expanded="false" hidden></button>
         <p class="tutor-dot" id="tutor-dot" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span class="dot-word">Waking</span></p>
       </header>
       <main class="view" id="view" tabindex="-1"></main>
@@ -61,6 +61,82 @@
         <p class="composer-hint">The tutor helps you think. It won't write your answers.</p>
       </form>
     </div>
+    <!-- WP-133 (A-013 §5): the task panel beside a chat (monitor: a third column; tablet and phone:
+         over the chat). The same panel moves onto the task page when that is open. -->
+    <aside class="task-side" id="task-side" aria-label="This task" hidden>
+      <div class="task-side-top">
+        <button type="button" class="link-button" id="task-side-close">Back to the chat</button>
+        <button type="button" class="link-button" id="task-side-page">Open the task page</button>
+      </div>
+      <div class="task-side-body" id="task-side-body">
+        <section id="task-panel" class="task-panel" aria-labelledby="task-panel-title" hidden>
+          <h2 id="task-panel-title" tabindex="-1"></h2>
+          <p id="task-panel-meta" class="hint"></p>
+          <p id="task-panel-due" class="task-panel-due"></p>
+          <details id="task-panel-stage" class="more">
+            <summary>Change the stage</summary>
+            <label for="task-panel-stage-select">Stage</label>
+            <select id="task-panel-stage-select">
+              <option value="not-started">Not started</option>
+              <option value="researching">Researching</option>
+              <option value="planning">Planning</option>
+              <option value="drafting">Drafting</option>
+              <option value="reviewing">Reviewing</option>
+              <option value="submitted">Handed in</option>
+              <option value="done">Done</option>
+            </select>
+            <div class="actions">
+              <button type="button" id="task-panel-stage-save" class="primary">Save the stage</button>
+            </div>
+            <p id="task-panel-stage-status" class="status" role="status" aria-live="polite"></p>
+          </details>
+          <details id="task-panel-question" class="more">
+            <summary>Show the question</summary>
+            <p id="task-panel-question-text" class="read-text"></p>
+          </details>
+          <details id="task-panel-sources" class="more">
+            <summary id="task-panel-sources-label">Your sources for this task</summary>
+            <p id="task-panel-sources-status" class="hint"></p>
+            <ul id="task-panel-sources-list" class="source-cards"></ul>
+            <details id="own-source" class="more">
+              <summary>Add a source you found yourself</summary>
+              <form id="own-source-form" novalidate>
+                <label for="own-source-title">Title</label>
+                <input type="text" id="own-source-title" maxlength="200" autocomplete="off">
+                <label for="own-source-author">Author or publisher, if you know it</label>
+                <input type="text" id="own-source-author" maxlength="120" autocomplete="off">
+                <label for="own-source-url">Link, if it has one</label>
+                <input type="url" id="own-source-url" maxlength="500" autocomplete="off" inputmode="url">
+                <label for="own-source-files">A copy of it, if you have one</label>
+                <p class="hint" id="own-source-files-hint">Up to 5: a PDF, a Word file or photos of the pages. The tutor reads the copy when the page won't open.</p>
+                <input type="file" id="own-source-files" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple aria-describedby="own-source-files-hint">
+                <div class="actions">
+                  <button type="submit" id="own-source-add" class="primary">Add this source</button>
+                </div>
+              </form>
+              <p id="own-source-status" class="status" role="status" aria-live="polite"></p>
+            </details>
+          </details>
+          <!-- WP-115b: his notes, quotes and AI summaries for this task, and earlier research (build spec §29) -->
+          <div id="task-panel-earlier" class="earlier" hidden></div>
+          <details id="task-panel-notes" class="more" hidden>
+            <summary id="task-panel-notes-label">Your notes for this task</summary>
+            <p id="task-panel-notes-status" class="hint" role="status" aria-live="polite"></p>
+            <ul id="task-panel-notes-list" class="source-cards"></ul>
+            <details class="more">
+              <summary>Write a note</summary>
+              <div id="task-panel-note-editor"></div>
+            </details>
+          </details>
+          <!-- WP-116: his plan, in his own words, with pinned references and gaps (build spec §9.2) -->
+          <details id="task-panel-plan" class="more" hidden>
+            <summary>Your plan for this task</summary>
+            <p id="task-panel-plan-status" class="status" role="status" aria-live="polite"></p>
+            <div id="task-panel-plan-body"></div>
+          </details>
+        </section>
+      </div>
+    </aside>
   </div>
 
   <section class="signed-out" id="signed-out" aria-labelledby="signed-out-heading" hidden>

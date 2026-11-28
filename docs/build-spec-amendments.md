@@ -181,7 +181,7 @@ Build spec generated from master specification **v3.7** (31 October 2026). Curre
 **8. Unchanged.** The privacy rules, what is sent to AI models, the no-answers rules, the notebook's authorship labels, pinned-not-inserted AI text, the plan's own-words rule, accessibility settings, and the parent page.
 
 ### A-014: No thumbs up and down on tutor replies (for now)
-**Decided:** 29 November 2026 (owner, while planning WP-132b). **Status:** draft for the owner's approval. **Changes:** build spec §31 (Feedback on AI replies), §47.1 and Appendix A.6, which came from A-007. **Workplan:** WP-132b (the chat page has none), WP-134 (removed from the classic page).
+**Decided:** 29 November 2026 (owner, while planning WP-132b). **Status:** approved by the owner, 29 November 2026. **Changes:** build spec §31 (Feedback on AI replies), §47.1 and Appendix A.6, which came from A-007. **Workplan:** WP-132b (the chat page has none), WP-134 (removed from the classic page).
 
 **Why:** on a phone the thumbs took up a lot of space under every reply, and it is not clear they were useful. The chat-first design (A-013) aims for a clean screen.
 

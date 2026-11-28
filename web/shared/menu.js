@@ -65,7 +65,7 @@ export function cleanMenu(raw) {
       id: t.id, title: str(t.title) ?? "Task", qualId: str(t.qualId), subject: str(t.subject), deadline: str(t.deadline), stage: str(t.stage),
       topicIds: Array.isArray(t.topicIds) ? t.topicIds.filter((x) => typeof x === "string") : [],
     })),
-    topics: list(m?.topics).filter((t) => str(t.id)).map((t) => ({ id: t.id, title: str(t.title) ?? t.id, qualId: str(t.qualId), lastWorked: str(t.lastWorked) })),
+    topics: list(m?.topics).filter((t) => str(t.id)).map((t) => ({ id: t.id, title: str(t.title) ?? t.id, qualId: str(t.qualId), lastWorked: str(t.lastWorked), description: str(t.description) })),
   };
 }
 

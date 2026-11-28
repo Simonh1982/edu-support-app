@@ -308,6 +308,20 @@ export function topicExtract(curriculum, topicId) {
   };
 }
 
+// WP-133 (A-013 §5): a short description for the topic page, from the course outline's own words.
+export const TOPIC_DESCRIPTION_MAX = 400;
+const DESCRIPTION_KEYS = ['description', 'summary', 'overview', 'content', 'specification', 'spec', 'detail', 'details'];
+
+/** The topic's description from the outline (a list is joined with "; "), at most 400 characters; null when none. */
+export function topicDescription(curriculum, topicId) {
+  const topic = curriculum?.topics?.get?.(topicId);
+  if (!topic) return null;
+  const raw = firstOf(topic.record ?? {}, DESCRIPTION_KEYS);
+  const joined = stringList(raw).join('; ').replace(/\s+/g, ' ').trim();
+  if (!joined) return null;
+  return joined.length > TOPIC_DESCRIPTION_MAX ? `${joined.slice(0, TOPIC_DESCRIPTION_MAX - 1).trimEnd()}…` : joined;
+}
+
 /** Load at start-up and log counts and problems (file names and IDs only). Never throws. */
 export async function startCurriculum({ dir, log = console } = {}) {
   try {

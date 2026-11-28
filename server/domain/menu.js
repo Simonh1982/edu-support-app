@@ -9,6 +9,7 @@ import { ITEM_ID_PATTERN } from '../storage/items.js';
 import { parseJsonReply } from '../ai/json.js';
 import { tagSafe, clip } from '../ai/prompt.js';
 import { saveAiTurn } from './work.js';
+import { topicDescription } from '../curriculum.js';
 
 export const SUBJECTS_FILE = 'profile/subjects.json';
 export const MENU_LIMITS = Object.freeze({ chats: 300, tasks: 200, topics: 200, label: 24, name: 60, snapshot: 100 });
@@ -131,7 +132,7 @@ export async function buildMenu(store, { curriculum = null, limit = null } = {})
     const t = curriculum?.topics?.get?.(id);
     if (!t) return;
     const was = worked.get(id);
-    if (!was || String(at) > String(was.lastWorked)) worked.set(id, { id, title: t.title, qualId: t.qualId, lastWorked: at ?? null });
+    if (!was || String(at) > String(was.lastWorked)) worked.set(id, { id, title: t.title, qualId: t.qualId, lastWorked: at ?? null, description: topicDescription(curriculum, id) });
   };
   for (const t of taskList) for (const id of t.topicIds ?? []) touch(id, t.updatedAt);
   for (const c of chats) for (const id of c.topicIds) touch(id, c.updatedAt);
