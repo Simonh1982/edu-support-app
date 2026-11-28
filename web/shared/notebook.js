@@ -101,11 +101,12 @@ export function filterTitles(entries, { q = "", kind = "", taskId = "" } = {}) {
 }
 
 /** The query string for GET /api/notebook, with empty filters left out. */
-export function notebookQuery({ q = "", kind = "", taskId = "" } = {}) {
+export function notebookQuery({ q = "", kind = "", taskId = "", topicId = "" } = {}) {
   const params = new URLSearchParams();
   if (q.trim()) params.set("q", q.trim().slice(0, SEARCH_MAX));
   if (kind) params.set("type", kind);
   if (taskId) params.set("taskId", taskId);
+  if (topicId) params.set("topicId", topicId);
   const s = params.toString();
   return s ? `?${s}` : "";
 }

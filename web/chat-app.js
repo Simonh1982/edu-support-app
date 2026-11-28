@@ -17,6 +17,8 @@ import { createSideMenu, make } from "./side-menu.js";
 import { STAGE_LABELS } from "./shared/upcoming.js";
 import { createChatCards, CARD_TEXT } from "./chat-cards.js";
 import { createSourceCards } from "./chat-sources.js";
+import { createTaskPanel } from "./task-panel.js";
+import { createTopicNotes, TOPIC_TEXT } from "./chat-topic.js";
 import { resizeImage } from "./capture.js";
 
 const ROLE = "learner";
@@ -33,7 +35,6 @@ export const CHAT_TEXT = Object.freeze({
   notReadyChat: "This chat opens once the tutor is ready.",
   rename: "Rename this chat",
   renamed: "Chat renamed.",
-  taskPage: "Sources, notes and your plan move onto this page in the next update. For now they're on the classic page.",
   classic: "Open the classic page",
   newTaskSoon: "Adding a task here, by photo, file or pasting, comes in the next update. For now, add it on the classic page.",
   notebookSoon: "Your notebook moves here in a later update. For now it's on the classic page.",
@@ -64,6 +65,8 @@ export function initChat({ doc = document, win = window } = {}) {
     send: byId("send"), typeChip: byId("type-chip"), note: byId("composer-note"), signedOut: byId("signed-out"),
     dialog: byId("sign-out-dialog"), dialogCancel: byId("sign-out-cancel"), dialogConfirm: byId("sign-out-confirm"),
     helpMenu: byId("help-menu"),
+    taskSide: byId("task-side"), taskSideClose: byId("task-side-close"), taskSidePage: byId("task-side-page"), taskSideBody: byId("task-side-body"),
+    panel: byId("task-panel"),
     plus: byId("plus"), plusMenu: byId("plus-menu"), cameraInput: byId("camera-input"), galleryInput: byId("gallery-input"),
     fileInput: byId("file-input"), pasteExtra: byId("paste-extra"), pasteDue: byId("paste-due"), pasteCancel: byId("paste-cancel"),
   };
@@ -81,7 +84,8 @@ export function initChat({ doc = document, win = window } = {}) {
   let pendingRoute = null;
   let busy = false;
   let renaming = false;
-  let pasteMode = false; // WP-132a: the message box takes a task to add
+  let pasteMode = false;
+  let taskPage = null; // WP-133: { id, col, head } for the open task page // WP-132a: the message box takes a task to add
 
   const api = createApi({ getBackendUrl: () => backendUrl, getToken: () => token });
   const accessibility = createAccessibility({ workerUrl: config.workerUrl, root: doc.documentElement, local });
@@ -92,7 +96,22 @@ export function initChat({ doc = document, win = window } = {}) {
   });
   const sources = createSourceCards({
     doc, api, isReady: () => ready, onChange: () => render(), onSignedOut: () => signedOut(), onUnreachable: () => wakeAgain(),
-    onSaved: () => loadMenu(),
+    onSaved: () => { loadMenu(); if (panelTask) panel?.refresh(); },
+    // WP-133: Attach a copy, on a chat about a task, opens the task panel at that source's attach box
+    canAttach: () => Boolean(panel?.canAttach && view.kind === "chat" && conv?.taskId),
+    onAttach: (card, sourceId) => openSide({ attachSource: sourceId }),
+  });
+  // WP-133 (A-013 §5): the classic page's task panel (stage, question, sources with Attach a copy,
+  // notes, plan), shown on the task page and beside a chat about a task
+  const panel = createTaskPanel({
+    api, doc, onSignedOut: () => signedOut(), onUnreachable: () => wakeAgain(),
+    attach: { workerUrl: config.workerUrl, getToken: () => token, resizeImage }, onTaskChanged: () => loadMenu(),
+  });
+  let panelTask = null;
+  let sideOpen = false;
+  const topicNotes = createTopicNotes({
+    doc, api, isReady: () => ready, onChange: () => render(), onSignedOut: () => signedOut(), onUnreachable: () => wakeAgain(),
+    taskTitle: (id) => menuData.tasks.find((t) => t.id === id)?.title ?? null,
   });
 
   const side = createSideMenu({
@@ -156,7 +175,7 @@ export function initChat({ doc = document, win = window } = {}) {
   // Nothing may move while he taps: the box stays aside while focus is anywhere in the card (its
   // buttons too), and comes back once he leaves it or the card is finished (found in testing).
   const isField = (el) => Boolean(el?.closest?.(".chat-card") && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
-  const inCard = (el) => Boolean(el?.closest?.(".chat-card"));
+  const inCard = (el) => Boolean(el?.closest?.(".chat-card, .task-panel"));
   els.view.addEventListener("focusin", (e) => {
     if (isField(e.target)) mainEl.classList.add("editing-card");
   });
@@ -189,8 +208,10 @@ export function initChat({ doc = document, win = window } = {}) {
 
   // ---------- navigation ----------
   function show(next) {
-    if (next.kind !== view.kind || next.id !== view.id) { cards.clear(); sources.clear(); pasteMode = false; }
+    if (next.kind !== view.kind || next.id !== view.id) { cards.clear(); sources.clear(); pasteMode = false; closeSide(); }
     view = next;
+    if (next.kind === "task") panelFor(next.id);
+    if (next.kind === "topic") topicNotes.load(next.id);
     renaming = false;
     setText(els.note, "");
     side.setCurrent(next.kind === "chat" || next.kind === "task" || next.kind === "topic" ? next : null);
@@ -282,14 +303,51 @@ export function initChat({ doc = document, win = window } = {}) {
         els.taskChip.hidden = false;
         // on a phone the chat's name already says which task: the button just says "Task" (live check)
         setText(els.taskChip, phone() ? MENU_TEXT.task : task.title);
-        els.taskChip.setAttribute("aria-label", `Open the task: ${task.title}`);
+        els.taskChip.setAttribute("aria-label", `The task: ${task.title}`);
       }
     } else {
       const titles = { new: MENU_TEXT.newChat, task: MENU_TEXT.task, topic: "Topic", classic: "" };
       els.title.replaceChildren(make(doc, "span", { text: titles[view.kind] ?? "" }));
     }
   }
-  els.taskChip.addEventListener("click", () => { if (conv?.taskId) openItem("task", conv.taskId); });
+  els.taskChip.addEventListener("click", () => (sideOpen ? closeSide({ focus: true }) : openSide()));
+
+  // ---------- the task panel (WP-133, A-013 §5) ----------
+  function taskItem(taskId) {
+    const t = menuData.tasks.find((x) => x.id === taskId);
+    return { taskId, title: t?.title ?? "", subject: t?.subject ?? null, deadline: t?.deadline ?? null, stage: t?.stage ?? null };
+  }
+  function panelFor(taskId, { openPlan = false } = {}) {
+    if (!panel) return;
+    if (panelTask !== taskId) { panelTask = taskId; panel.show(taskItem(taskId), { openPlan }); } else if (openPlan) panel.openPlan();
+  }
+  function placePanel(where) {
+    if (els.panel.parentElement !== where) where.append(els.panel);
+  }
+  function openSide({ attachSource = null } = {}) {
+    if (!panel || view.kind !== "chat" || !conv?.taskId) return;
+    panelFor(conv.taskId, { openPlan: conv.route === "plan" && !attachSource });
+    placePanel(els.taskSideBody);
+    sideOpen = true;
+    els.taskSide.hidden = false;
+    els.shell.classList.add("panel-open");
+    els.taskChip.setAttribute("aria-expanded", "true");
+    if (attachSource) panel.openAttach(attachSource);
+    else doc.getElementById("task-panel-title")?.focus();
+  }
+  function closeSide({ focus = false } = {}) {
+    if (!sideOpen) return;
+    sideOpen = false;
+    els.taskSide.hidden = true;
+    els.shell.classList.remove("panel-open");
+    els.taskChip.setAttribute("aria-expanded", "false");
+    if (focus) els.taskChip.focus();
+  }
+  els.taskSideClose.addEventListener("click", () => closeSide({ focus: true }));
+  els.taskSidePage.addEventListener("click", () => { if (conv?.taskId) openItem("task", conv.taskId); });
+  els.taskSide.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !e.defaultPrevented) { e.preventDefault(); closeSide({ focus: true }); }
+  });
 
   // ---------- main views ----------
   /** Turns and cards in the order they happened; a stable sort keeps equal times in place. */
@@ -388,14 +446,24 @@ export function initChat({ doc = document, win = window } = {}) {
     if (view.kind === "task") {
       const f = focusLists(menuData, view);
       const t = f?.task;
-      const col = make(doc, "div", { className: "column page" });
-      if (!t) return [col];
+      // one page element per task, so the panel inside it (and whatever he is typing there) stays put
+      // when the page redraws; only the top part is rebuilt
+      if (taskPage?.id !== view.id) {
+        const col = make(doc, "div", { className: "column page task-page" });
+        const head = make(doc, "div", { className: "task-page-head" });
+        col.append(head);
+        taskPage = { id: view.id, col, head };
+      }
+      if (!t) { taskPage.head.replaceChildren(); return [taskPage.col]; }
       const due = dueLabel(t.deadline);
-      col.append(make(doc, "h1", { text: t.title, attrs: { tabindex: "-1" } }), make(doc, "p", { className: "meta", text: [t.subject, due.text, STAGE_LABELS[t.stage] ?? t.stage].filter(Boolean).join(" · ") }));
-      col.append(pageList(CHAT_TEXT.chatsAbout(f.chats.length), f.chats.map((c) => listButton(c.name, whenLabel(c.updatedAt), () => openItem("chat", c.id))), CHAT_TEXT.noChatsYet));
-      if (f.topics.length) col.append(pageList(MENU_TEXT.topicsLabel, f.topics.map((p) => listButton(p.title, whenLabel(p.lastWorked), () => openItem("topic", p.id)))));
-      col.append(make(doc, "p", { className: "hint", text: CHAT_TEXT.taskPage }), classicLink());
-      return [col];
+      taskPage.head.replaceChildren(
+        make(doc, "h1", { text: t.title, attrs: { tabindex: "-1" } }),
+        make(doc, "p", { className: "meta", text: [t.subject, due.text, STAGE_LABELS[t.stage] ?? t.stage].filter(Boolean).join(" · ") }),
+        pageList(CHAT_TEXT.chatsAbout(f.chats.length), f.chats.map((c) => listButton(c.name, whenLabel(c.updatedAt), () => openItem("chat", c.id))), CHAT_TEXT.noChatsYet),
+        ...(f.topics.length ? [pageList(MENU_TEXT.topicsLabel, f.topics.map((p) => listButton(p.title, whenLabel(p.lastWorked), () => openItem("topic", p.id))))] : []),
+      );
+      if (panel) placePanel(taskPage.col);
+      return [taskPage.col];
     }
     if (view.kind === "topic") {
       const f = focusLists(menuData, view);
@@ -403,6 +471,13 @@ export function initChat({ doc = document, win = window } = {}) {
       if (!f?.topic) return [col];
       const subject = menuData.subjects.find((s) => s.id === f.topic.qualId)?.label ?? "";
       col.append(make(doc, "h1", { text: f.topic.title, attrs: { tabindex: "-1" } }), make(doc, "p", { className: "meta", text: subject }));
+      // WP-133: what the course outline says about it, then his notes and summaries on it
+      if (f.topic.description) {
+        const about = make(doc, "div", { className: "topic-about" });
+        about.append(make(doc, "p", { className: "hint", text: TOPIC_TEXT.fromOutline }), make(doc, "p", { text: f.topic.description }));
+        col.append(about);
+      }
+      col.append(topicNotes.render(view.id));
       col.append(pageList(CHAT_TEXT.topicChats(f.chats.length), f.chats.map((c) => listButton(c.name, whenLabel(c.updatedAt), () => openItem("chat", c.id))), MENU_TEXT.noChats));
       col.append(pageList(CHAT_TEXT.topicTasks(f.tasks.length), f.tasks.map((t) => listButton(t.title, dueLabel(t.deadline).text, () => openItem("task", t.id)))));
       return [col];
@@ -433,7 +508,9 @@ export function initChat({ doc = document, win = window } = {}) {
 
   function render() {
     renderTop();
-    els.view.replaceChildren(...renderView());
+    const nodes = renderView();
+    // the task page keeps its element between redraws (see renderView)
+    if (!(nodes.length === 1 && els.view.childNodes.length === 1 && els.view.firstChild === nodes[0])) els.view.replaceChildren(...nodes);
     // a finished card takes its focused button with it, so bring the message box back
     if (!inCard(doc.activeElement)) els.view.parentElement.classList.remove("editing-card");
     renderComposer();
@@ -681,6 +758,7 @@ export function initChat({ doc = document, win = window } = {}) {
     waker?.stop?.();
     ready = false;
     setStatus("waking");
+    panel?.setTutor("waking");
     const current = createWaker({ workerUrl: config.workerUrl, token, onUpdate: ({ state }) => setStatus(tutorPanel(state)) });
     waker = current;
     current.run().then((result) => {
@@ -690,6 +768,8 @@ export function initChat({ doc = document, win = window } = {}) {
       if (READY_STATES.has(result.state)) {
         backendUrl = result.backendUrl ?? null;
         ready = true;
+        panel?.setTutor(result.state);
+        if (view.kind === "topic") topicNotes.load(view.id);
         loadMenu();
         if (view.kind === "chat" && conv && !conv.loaded) openChat(conv.id);
         render();

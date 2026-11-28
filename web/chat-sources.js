@@ -2,7 +2,7 @@
 // Summarise, and "Paste the text instead" when the tutor can't open the page (A-010). The cards are
 // drawn by sourceList (web/conversation.js), the same builder as the classic page, so the rules
 // (a summary keeps its source, read-the-original and too-close are final, videos aren't summarised)
-// stay in one place. Attach a copy belongs with the task's sources (WP-133). State is kept in memory.
+// stay in one place. WP-133: Attach a copy opens the task panel at that source. State is kept in memory.
 import { sourceList } from "./conversation.js";
 import {
   FINAL_SUMMARY_OUTCOMES, PASTE_OUTCOMES, SOURCE_MESSAGES, cardKey, checkPasted, sourceErrorMessage, summaryFromEntry, summaryFromResult,
@@ -10,9 +10,13 @@ import {
 
 /**
  * api: the tutor's calls; isReady(); onChange() redraws; onSignedOut(); onUnreachable(); onSaved()
- * after a source is saved (the menu and task page refresh). Returns { render(turn), clear() }.
+ * after a source is saved (the menu and task page refresh). WP-133: canAttach() and onAttach(card, sourceId)
+ * show "Attach a copy" on a saved card in a chat about a task. Returns { render(turn), clear() }.
  */
-export function createSourceCards({ doc = document, api, isReady = () => true, onChange = () => {}, onSignedOut = () => {}, onUnreachable = () => {}, onSaved = () => {} }) {
+export function createSourceCards({
+  doc = document, api, isReady = () => true, onChange = () => {}, onSignedOut = () => {}, onUnreachable = () => {}, onSaved = () => {},
+  canAttach = () => false, onAttach = () => {},
+}) {
   const cards = new Map(); // cardKey → { sourceId, summaryId, saving, summarising, summary, asked, again, canPaste, pasteText, pasteOpen, note }
   let generation = 0;
   const cardOf = (turnId, index) => cards.get(cardKey(turnId, index)) ?? {};
@@ -119,6 +123,7 @@ export function createSourceCards({ doc = document, api, isReady = () => true, o
         onPaste: (card, text) => paste(turn.id, card, text),
         onPasteChange: (card, changes) => setCard(turn.id, card.index, changes),
         ready: isReady(),
+        onAttach: canAttach() ? (card, sourceId) => onAttach(card, sourceId) : null,
       });
     },
     clear() { generation += 1; cards.clear(); },
