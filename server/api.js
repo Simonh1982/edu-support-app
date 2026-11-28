@@ -6,7 +6,7 @@ import { listTasks, readTask, createTask, updateTask, addAnchor, updateAnchor, r
 import { recordAttempt } from './domain/work.js';
 import { openUpload, uploadView, confirmUpload, addPastedBrief, UPLOAD_MESSAGES } from './domain/uploads.js';
 import {
-  startConversation, openConversation, latestConversation, conversationView, renameChat, sendMessage, requestSupport, voteOnTurn, suggestRoute,
+  startConversation, openConversation, latestConversation, conversationView, renameChat, sendMessage, suggestRoute,
   STATE_MESSAGES,
 } from './domain/conversations.js';
 import { listSources, saveSource, summariseSource, addOwnSource, attachToSource } from './domain/sources.js';
@@ -32,15 +32,14 @@ export const API_ROUTES = Object.freeze([
   route('POST', '/api/uploads/paste', 'pasteBrief'),
   route('GET', `/api/uploads/${ID}`, 'getUpload'),
   route('POST', `/api/uploads/${ID}/confirm`, 'confirmUpload'),
-  // WP-111a: route choice, conversations with the support pairs, and votes on replies
+  // WP-111a: route choice and conversations (WP-134b: the support buttons and votes are retired;
+  // help comes through messages, WP-130)
   route('POST', '/api/route', 'suggestRoute'),
   route('POST', '/api/conversations', 'startConversation'),
   // WP-114h: his latest conversation for a task and route (?taskId=&route=), to carry on after a reload
   route('GET', '/api/conversations', 'latestConversation'),
   route('GET', `/api/conversations/${ID}`, 'getConversation'),
   route('POST', `/api/conversations/${ID}/messages`, 'sendMessage'),
-  route('POST', `/api/conversations/${ID}/support`, 'requestSupport'),
-  route('POST', `/api/turns/${ID}/vote`, 'voteOnTurn'),
   // WP-114a: saving source cards and AI summaries of saved sources
   route('GET', '/api/sources', 'listSources'),
   route('POST', '/api/sources', 'saveSource'),
@@ -184,12 +183,6 @@ const HANDLERS = {
   },
   async sendMessage({ store, params: [id], body, ctx }) {
     return { status: 201, body: await sendMessage(store, id, object(body), ctx) };
-  },
-  async requestSupport({ store, params: [id], body, ctx }) {
-    return { status: 201, body: await requestSupport(store, id, object(body), ctx) };
-  },
-  async voteOnTurn({ store, params: [id], body }) {
-    return { status: 200, body: await voteOnTurn(store, id, object(body)) };
   },
   async listSources({ store, query }) {
     const sources = await listSources(store, { taskId: query.get('taskId') || null });

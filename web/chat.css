@@ -55,7 +55,7 @@ html:has(.chat-page) {
 }
 .menu-search {
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   margin: 0.5rem 0 0.25rem;
   padding: 0 0.75rem;
   border: var(--border-width) solid color-mix(in srgb, var(--muted) 45%, transparent);
@@ -77,7 +77,7 @@ html:has(.chat-page) {
   padding: 0.4rem 0.25rem 0.1rem;
 }
 .menu-subject {
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: 0 0.85rem;
   border: var(--border-width) solid color-mix(in srgb, var(--muted) 45%, transparent);
   border-radius: 999px;
@@ -101,7 +101,7 @@ html:has(.chat-page) {
   align-items: center;
   gap: 0.4rem;
   width: 100%;
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   padding: 0 0.5rem;
   border: 0;
   background: none;
@@ -165,7 +165,7 @@ html:has(.chat-page) {
   color: var(--warn);
 }
 .menu-more {
-  min-height: 2rem;
+  min-height: 2.75rem;
   padding: 0 0.6rem;
   border: 0;
   background: none;
@@ -209,7 +209,7 @@ html:has(.chat-page) {
   border-top: var(--border-width) solid color-mix(in srgb, var(--muted) 35%, transparent);
 }
 .menu-foot-item {
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: 0 0.6rem;
   border: 0;
   border-radius: 0.6rem;
@@ -280,7 +280,7 @@ html:has(.chat-page) {
 }
 .task-chip {
   max-width: 40%;
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   overflow: hidden;
   padding: 0 0.85rem;
   border: var(--border-width) solid color-mix(in srgb, var(--muted) 45%, transparent);
@@ -357,7 +357,7 @@ html:has(.chat-page) {
   gap: 0.5rem;
 }
 .chip {
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: 0 0.9rem;
   border: var(--border-width) solid color-mix(in srgb, var(--muted) 45%, transparent);
   border-radius: 999px;
@@ -494,7 +494,7 @@ html:has(.chat-page) {
 .type-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 2.1rem;
+  min-height: 2.75rem;
   padding: 0 0.75rem;
   border: var(--border-width) solid color-mix(in srgb, var(--muted) 45%, transparent);
   border-radius: 999px;
@@ -511,8 +511,8 @@ html:has(.chat-page) {
 .send {
   display: grid;
   place-items: center;
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 2.75rem;
+  height: 2.75rem;
   margin-left: auto;
   border: 0;
   border-radius: 0.75rem;
@@ -626,8 +626,8 @@ html:has(.chat-page) {
   position: relative;
 }
 .plus {
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 2.75rem;
+  height: 2.75rem;
   font-size: 1.5em;
 }
 .plus-menu {
@@ -682,7 +682,7 @@ html:has(.chat-page) {
   font: inherit;
 }
 .link-button {
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   margin-left: auto;
   border: 0;
   background: none;
@@ -918,4 +918,10 @@ html:has(.chat-page) {
 }
 .wake-retry {
   white-space: nowrap;
+}
+
+/* WP-134b accessibility pass (360, 768 and 1366 px): every control is at least 44 px (2.75rem) tall,
+   so nothing is a small target on a phone; the message box starts at the same height. */
+#message {
+  min-height: 2.75rem;
 }

@@ -13,7 +13,6 @@ export const ROUTE_BY_STAGE = Object.freeze({
 });
 export const SUPPORT_TYPES = Object.freeze(["hint", "breakdown", "pointer", "explanation"]);
 export const FIRST_PAIR = Object.freeze(["hint", "breakdown"]);
-export const VOTES = Object.freeze(["up", "down", "removed"]);
 export const MESSAGE_MAX_CHARS = 4000;
 // Copy of HELPLINES in server/wellbeing.js (checked by test/wellbeing.test.js). Shown beside level-3 replies.
 export const HELPLINES = Object.freeze([
@@ -37,19 +36,11 @@ export const SUMMARY_TIMEOUT_MS = 300_000;
 // check, so the browser waits longer than for other calls.
 export const CONVERSATION_TIMEOUT_MS = 210_000;
 // The quickest few tasks are shown as buttons; the rest sit behind "Show all".
-export const TASK_BUTTONS = 5;
 
 export const ROUTE_LABELS = Object.freeze({
   research: "Understand and research it",
   plan: "Plan my answer",
   review: "Review my work",
-});
-
-// The attempt each route asks for first (build spec §21.1).
-export const ATTEMPT_PROMPTS = Object.freeze({
-  research: "What do you think the question is asking?",
-  plan: "What's your main point, in one sentence?",
-  review: "Paste or type the part of your work you'd like help with.",
 });
 
 // The four support types, with the wording adjusted to the activity (build spec §21, §22, §23.1).
@@ -75,36 +66,13 @@ export const SUPPORT_LABELS = Object.freeze({
 });
 
 export const TALK_MESSAGES = Object.freeze({
-  anythingCounts: "Anything counts, however rough. Spelling doesn't matter.",
-  tryAgain: "Have another go. What would you try now?",
-  tryAgainHint: "A fresh try opens the next kind of help.",
-  reply: "Anything to say back to the tutor?",
-  replyHint: "Or choose some help below.",
-  waitForTutor: "You can write now. It sends once the tutor's ready.",
   thinking: "The tutor's thinking. This can take up to a minute or two.",
   needText: "Write something first, however rough.",
   tooLong: `That's too long. Please keep it under ${MESSAGE_MAX_CHARS.toLocaleString("en-GB")} characters.`,
-  escapeNote: "No problem. Let's break it down into smaller steps.",
   noReply: "This reply wasn't kept.",
   failed: "The tutor couldn't answer just now. Your words are still here, so try again.",
   unreachable: "Can't reach the tutor. It may be resting. Your words are still here.",
-  resumed: "Picked up where you left off.",
-  // WP-114h: an earlier conversation for this task, loaded again after a reload
-  carriedOn: (day) => `Carrying on with your conversation ${day}.`,
-  newChat: "Start a new conversation",
-  newStarted: "New conversation. Your earlier one is still saved.",
-  voteFailed: "That didn't save. Please try again.",
   careHeading: "If you need to talk to someone now:",
-  noTasks: "No tasks yet. Add one below, or choose Something else.",
-  whatHelp: "What do you need help with?",
-  noTask: "Not linked to a task.",
-  workingOn: (title) => `Working on “${title}”.`,
-  showAll: (count) => `Show all ${count} tasks`,
-});
-
-export const VOTE_LABELS = Object.freeze({
-  up: Object.freeze({ text: "👍 Helpful", label: "Thumbs up: this helped" }),
-  down: Object.freeze({ text: "👎 Not helpful", label: "Thumbs down: this didn't help" }),
 });
 
 // What kind of source each card is, in plain words (build spec §26).
@@ -149,64 +117,14 @@ export const SOURCE_MESSAGES = Object.freeze({
   pasteTooLong: `That's more than ${PASTED_SOURCE_MAX_CHARS.toLocaleString("en-GB")} characters. Paste the part you need most.`,
 });
 
-export const isWorkRoute = (route) => WORK_ROUTES.includes(route);
-
 /** The route a task's stage suggests (build spec §10), as the server's derived/route.js does. */
 export function routeForStage(stage) {
   return ROUTE_BY_STAGE[stage] ?? "research";
 }
 
-/** The suggested route first, then the others in their usual order. */
-export function routeChoices(route) {
-  return isWorkRoute(route) ? [route, ...WORK_ROUTES.filter((r) => r !== route)] : [...WORK_ROUTES];
-}
-
-/**
- * Tasks the learner can get help with, soonest deadline first (no deadline last). Typed tasks still
- * waiting in the edit queue aren't on the tutor yet, so they are left out, as are finished tasks.
- * dueOf(deadline) gives the "due" wording.
- */
-export function taskChoices(items, { dueOf = () => "" } = {}) {
-  if (!Array.isArray(items)) return [];
-  return items
-    .filter((i) => i && typeof i.taskId === "string" && typeof i.title === "string" && !i.queued)
-    .filter((i) => i.stage !== "submitted" && i.stage !== "done")
-    .map((i, index) => ({ i, index }))
-    .sort((a, b) => {
-      const da = typeof a.i.deadline === "string" ? a.i.deadline : "9999-99-99";
-      const db = typeof b.i.deadline === "string" ? b.i.deadline : "9999-99-99";
-      return da === db ? a.index - b.index : da < db ? -1 : 1;
-    })
-    .map(({ i }) => ({ taskId: i.taskId, title: i.title, route: routeForStage(i.stage), due: dueOf(i.deadline ?? null) || "" }));
-}
-
 export function supportLabel(route, type) {
   const set = SUPPORT_LABELS[route] ?? SUPPORT_LABELS.default;
   return set[type] ?? SUPPORT_LABELS.default[type] ?? type;
-}
-
-/** "Need some help?" over the first pair, "Still stuck?" over the second (build spec §21, §22). */
-export function supportHeading(offered) {
-  if (!Array.isArray(offered) || offered.length === 0) return "";
-  if (offered.length === 1 && offered[0] === "breakdown") return "Let's break it down";
-  return offered.some((t) => FIRST_PAIR.includes(t)) ? "Need some help?" : "Still stuck?";
-}
-
-/**
- * The label and hint over the writing box. view is the server's conversation view (or null before
- * the conversation starts); asked tells whether any help has been given yet.
- */
-export function promptFor(view, route, { asked = false } = {}) {
-  if (!view || (view.needsAttempt && !asked)) {
-    return { label: ATTEMPT_PROMPTS[route] ?? ATTEMPT_PROMPTS.research, hint: TALK_MESSAGES.anythingCounts };
-  }
-  if (view.needsAttempt) return { label: TALK_MESSAGES.tryAgain, hint: TALK_MESSAGES.tryAgainHint };
-  return { label: TALK_MESSAGES.reply, hint: TALK_MESSAGES.replyHint };
-}
-
-/** The escape is offered only before the first attempt. */
-export function canEscape(view) {
-  return !view || view.canEscape === true;
 }
 
 /** Checks what he typed. Quality is never judged: anything entered counts (build spec §21.1). */
@@ -215,17 +133,6 @@ export function checkMessage(text) {
   if (!value) return { error: TALK_MESSAGES.needText };
   if (value.length > MESSAGE_MAX_CHARS) return { error: TALK_MESSAGES.tooLong };
   return { text: value };
-}
-
-/** Tapping the vote already chosen takes it away; tapping the other one changes it (A-007). */
-export function nextVote(current, tapped) {
-  if (tapped !== "up" && tapped !== "down") return current ?? null;
-  return current === tapped ? "removed" : tapped;
-}
-
-/** The vote as shown: "removed" shows as no vote. */
-export function shownVote(vote) {
-  return vote === "up" || vote === "down" ? vote : null;
 }
 
 /** A turn for the screen, from a send or support reply. learnerText is what he typed, if anything. */
@@ -389,17 +296,4 @@ export function talkErrorMessage(result) {
   if (result.status === 429) return { message: "That's a lot in a short time. Please wait a minute, then try again." };
   if (result.status === 404) return { message: "That conversation couldn't be found. Please start again." };
   return { message: TALK_MESSAGES.failed };
-}
-
-const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" });
-const LONG_DAY = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "long", day: "numeric", month: "long" });
-
-/** WP-114h: when a conversation was last used, in UK time: "today", "yesterday" or "on Tuesday 4 November". */
-export function conversationDay(iso, now = new Date()) {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "from before";
-  const day = DAY_FORMAT.format(at);
-  if (day === DAY_FORMAT.format(now)) return "from today";
-  if (day === DAY_FORMAT.format(new Date(now.getTime() - 86_400_000))) return "from yesterday";
-  return `on ${LONG_DAY.format(at)}`;
 }

@@ -3,13 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { makeEvent } from '../server/storage/records.js';
 import { matchApiRoute, handleApi } from '../server/api.js';
 import { RESUME_DAYS, conversationPath, latestConversation } from '../server/domain/conversations.js';
-import { TALK_MESSAGES, conversationDay } from '../web/shared/conversation.js';
 import { createApi } from '../web/shared/api.js';
 
 async function fakeStore() {
@@ -93,7 +91,7 @@ test('the lookup checks its question and is learner only', async () => {
   } finally { await rm(store.dir, { recursive: true, force: true }); }
 });
 
-test('the screen asks for it by task and route, says when it is from, and offers a new conversation', async () => {
+test('the client call asks for it by task and route', async () => {
   const urls = [];
   const api = createApi({
     getBackendUrl: () => 'https://example-codespace-3000.app.github.dev', getToken: () => 'invented-pass',
@@ -102,10 +100,5 @@ test('the screen asks for it by task and route, says when it is from, and offers
   const r = await api.latestConversation({ taskId: 'task_invented', route: 'research' });
   assert.equal(r.kind, 'ok');
   assert.match(urls[0], /\/api\/conversations\?taskId=task_invented&route=research$/);
-  const now = new Date('2026-11-17T12:00:00Z');
-  assert.equal(conversationDay('2026-11-17T08:00:00Z', now), 'from today');
-  assert.equal(conversationDay('2026-11-16T08:00:00Z', now), 'from yesterday');
-  assert.equal(conversationDay('2026-11-04T08:00:00Z', now), 'on Wednesday 4 November');
-  assert.equal(TALK_MESSAGES.carriedOn('from today'), 'Carrying on with your conversation from today.');
   // WP-134a: the chat page lists a task's chats instead of carrying on with the latest one
 });

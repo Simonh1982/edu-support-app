@@ -178,12 +178,11 @@ test('start: route required, task must exist, topic taken from the task; event w
   await rm(store.dir, { recursive: true, force: true });
 });
 
-test('attempt before help: support refused until something is written; the attempt opens the first pair', async () => {
+test('attempt before help: the attempt opens the first pair', async () => {
   const { call, task, store, ai } = await setup();
   const c = await start(call, { route: 'research', taskId: task.id });
-  const early = await call('POST', `/api/conversations/${c.id}/support`, { type: 'hint' });
-  assert.equal(early.status, 409);
-  assert.equal(ai.prompts.length, 0, 'no AI call for a refused button');
+  // WP-134b: the support buttons' route is retired; help comes through messages (WP-130)
+  assert.equal(matchApiRoute('POST', `/api/conversations/${c.id}/support`), null);
   assert.equal((await call('POST', `/api/conversations/${c.id}/messages`, { text: '   ' })).status, 400);
 
   const r = await call('POST', `/api/conversations/${c.id}/messages`, { text: LEARNER_WORDS });
@@ -209,28 +208,24 @@ test('attempt before help: support refused until something is written; the attem
   await rm(store.dir, { recursive: true, force: true });
 });
 
-test('second pair only after a fresh attempt; outcome logged; support turns carry no learner text', async () => {
+test('second pair only after a fresh attempt; outcome logged; events hold no text', async () => {
+  // WP-134b: through messages, as the chat page asks (the ladder, WP-130)
   const { call, task, store, ai } = await setup();
   const c = await start(call, { route: 'plan', taskId: task.id });
   await call('POST', `/api/conversations/${c.id}/messages`, { text: 'my main point is cost' });
-  assert.equal((await call('POST', `/api/conversations/${c.id}/support`, { type: 'pointer' })).status, 409);
-  const hint = await call('POST', `/api/conversations/${c.id}/support`, { type: 'hint' });
+  const hint = await call('POST', `/api/conversations/${c.id}/messages`, { text: "I'm stuck" });
   assert.equal(hint.status, 201);
-  assert.equal(hint.body.turn.replyType, 'hint');
-  assert.deepEqual(hint.body.conversation.offered, []);
-  assert.equal(hint.body.conversation.needsAttempt, true);
-  assert.ok(ai.prompts[1].prompt.includes('<learner_attempt>my main point is cost</learner_attempt>'));
-  assert.ok(ai.prompts[1].prompt.includes(ACTION_INSTRUCTIONS.hint));
-  assert.equal((await call('POST', `/api/conversations/${c.id}/support`, { type: 'breakdown' })).status, 409);
-  assert.equal((await call('POST', `/api/conversations/${c.id}/support`, { type: 'explanation' })).status, 409);
+  assert.equal(hint.body.turn.action, 'support');
+  assert.ok(['hint', 'breakdown'].includes(hint.body.turn.type), 'the first pair');
+  assert.ok(ai.prompts.at(-1).prompt.includes('<learner_attempt>my main point is cost</learner_attempt>'));
 
   const fresh = await call('POST', `/api/conversations/${c.id}/messages`, { text: 'cost and who pays' });
+  assert.equal(fresh.body.turn.action, 'attempt');
   assert.deepEqual(fresh.body.conversation.offered, ['pointer', 'explanation']);
-  const explain = await call('POST', `/api/conversations/${c.id}/support`, { type: 'explanation' });
-  assert.equal(explain.status, 201);
-  const turn = await store.read(aiTurnPath(explain.body.turn.id));
-  assert.equal(turn.learnerText, null);
-  assert.equal(turn.wellbeingLevel, null, 'a button press is not rated');
+  const second = await call('POST', `/api/conversations/${c.id}/messages`, { text: 'can you explain it?' });
+  assert.equal(second.body.turn.action, 'support');
+  assert.ok(['pointer', 'explanation'].includes(second.body.turn.type), 'the second pair');
+  const turn = await store.read(aiTurnPath(second.body.turn.id));
   assert.equal(turn.attemptId, fresh.body.attemptId);
 
   const types = store.events.map((e) => e.type);
@@ -266,8 +261,8 @@ test('escape: no AI call, Break it down only, recorded as an escape attempt', as
   assert.deepEqual(r.body.conversation.offered, ['breakdown']);
   assert.equal(r.body.conversation.canEscape, false);
   assert.equal((await store.read(attemptPath(r.body.attemptId))).escape, true);
-  assert.equal((await call('POST', `/api/conversations/${c.id}/support`, { type: 'hint' })).status, 409);
-  assert.equal((await call('POST', `/api/conversations/${c.id}/support`, { type: 'breakdown' })).status, 201);
+  const help = await call('POST', `/api/conversations/${c.id}/messages`, { text: "I'm stuck" });
+  assert.deepEqual([help.body.turn.action, help.body.turn.type], ['support', 'breakdown'], 'Break it down only');
   assert.equal((await call('POST', `/api/conversations/${c.id}/messages`, { escape: true })).status, 409);
   await rm(store.dir, { recursive: true, force: true });
 });
@@ -353,11 +348,11 @@ test('resume: the conversation comes back with its turns; missing ones 404', asy
   const { call, store, task } = await setup();
   const c = await start(call, { route: 'learn', taskId: task.id });
   await call('POST', `/api/conversations/${c.id}/messages`, { text: 'invented first go' });
-  await call('POST', `/api/conversations/${c.id}/support`, { type: 'breakdown' });
+  const help = await call('POST', `/api/conversations/${c.id}/messages`, { text: "I'm stuck" });
   const r = await call('GET', `/api/conversations/${c.id}`);
   assert.equal(r.status, 200);
   const turns = r.body.conversation.turns;
-  assert.deepEqual(turns.map((t) => [t.action, t.type]), [['attempt', null], ['support', 'breakdown']]);
+  assert.deepEqual(turns.map((t) => [t.action, t.type]), [['attempt', null], ['support', help.body.turn.type]]);
   assert.equal(turns[0].learnerText, 'invented first go');
   assert.equal(turns[1].reply, 'Invented tutor reply.');
   assert.equal((await call('GET', '/api/conversations/conv_missing')).status, 404);
@@ -365,23 +360,12 @@ test('resume: the conversation comes back with its turns; missing ones 404', asy
   await rm(store.dir, { recursive: true, force: true });
 });
 
-test('votes: up, down and removed are events with the turn and route only, never sent to the model', async () => {
-  const { call, store, ai } = await setup();
+test('WP-134b (A-014): the thumbs route is retired', async () => {
+  const { call, store } = await setup();
   const c = await start(call, { route: 'learn' });
   const r = await call('POST', `/api/conversations/${c.id}/messages`, { text: 'invented go' });
-  const id = r.body.turn.id;
-  for (const vote of ['up', 'down', 'removed']) {
-    const v = await call('POST', `/api/turns/${id}/vote`, { vote });
-    assert.equal(v.status, 200);
-    assert.deepEqual(v.body, { turnId: id, route: 'learn', vote });
-  }
-  const votes = store.events.filter((e) => e.type === 'reply.feedback');
-  assert.deepEqual(votes.map((e) => e.payload), [{ route: 'learn', vote: 'up' }, { route: 'learn', vote: 'down' }, { route: 'learn', vote: 'removed' }]);
-  assert.deepEqual(votes[0].links, { turnId: id });
-  assert.equal((await call('POST', `/api/turns/${id}/vote`, { vote: 'love' })).status, 400);
-  assert.equal((await call('POST', '/api/turns/turn_missing/vote', { vote: 'up' })).status, 404);
-  await call('POST', `/api/conversations/${c.id}/messages`, { text: 'another invented go' });
-  assert.doesNotMatch(ai.prompts.at(-1).prompt, /vote|thumb|reply\.feedback/i);
+  assert.equal(matchApiRoute('POST', `/api/turns/${r.body.turn.id}/vote`), null);
+  assert.equal(store.events.some((e) => e.type === 'reply.feedback'), false);
   await rm(store.dir, { recursive: true, force: true });
 });
 
@@ -398,7 +382,6 @@ test('route choice: from the task without AI; from a message by the light model,
   const turnFile = store.writes.find((w) => w.startsWith('ai-turns/'));
   const turn = await store.read(turnFile);
   assert.deepEqual([turn.feature, turn.role, turn.learnerText, turn.text, turn.wellbeingLevel], ['route-choice', 'light', null, null, 0]);
-  assert.equal((await call('POST', `/api/turns/${turn.id}/vote`, { vote: 'up' })).status, 404, 'not a reply he reads');
 
   const none = await call('POST', '/api/route', { message: 'invented' }, { aiHandle: null });
   assert.deepEqual(none.body, { route: null, options: ['research', 'plan', 'review', 'learn'], by: 'none' });
@@ -413,7 +396,6 @@ test('the parent role is refused on every conversation route, and nothing is wri
   for (const [method, url, body] of [
     ['POST', '/api/route', { message: 'x' }], ['POST', '/api/conversations', { route: 'learn' }],
     ['GET', `/api/conversations/${c.id}`], ['POST', `/api/conversations/${c.id}/messages`, { text: 'x' }],
-    ['POST', `/api/conversations/${c.id}/support`, { type: 'hint' }], ['POST', `/api/turns/${r.body.turn.id}/vote`, { vote: 'up' }],
   ]) {
     const res = await call(method, url, body, { role: 'parent' });
     assert.equal(res.status, 403, `${method} ${url}`);

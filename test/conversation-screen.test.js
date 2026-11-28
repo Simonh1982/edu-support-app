@@ -6,7 +6,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  ATTEMPT_PROMPTS,
   CONVERSATION_TIMEOUT_MS,
   FIRST_PAIR,
   MESSAGE_MAX_CHARS,
@@ -15,20 +14,12 @@ import {
   SUPPORT_LABELS,
   SUPPORT_TYPES,
   TALK_MESSAGES,
-  VOTES,
   WORK_ROUTES,
-  canEscape,
   checkMessage,
   learnerLine,
-  nextVote,
-  promptFor,
-  routeChoices,
   routeForStage,
-  shownVote,
-  supportHeading,
   supportLabel,
   talkErrorMessage,
-  taskChoices,
   turnFromReply,
   turnsFromServer,
 } from "../web/shared/conversation.js";
@@ -51,69 +42,28 @@ test("the screen's copies match the server", () => {
   assert.deepEqual([...SUPPORT_TYPES], [...serverWork.SUPPORT_TYPES]);
   assert.equal(MESSAGE_MAX_CHARS, serverWork.WORK_LIMITS.attemptText);
   assert.deepEqual([...FIRST_PAIR], [...serverConversations.FIRST_PAIR]);
-  assert.deepEqual([...VOTES], [...serverConversations.VOTES]);
   // WP-134a: the chat page's message box
   assert.match(read("index.html"), new RegExp(`id="message"[^>]*maxlength="${MESSAGE_MAX_CHARS}"`));
 });
 
 // ---------- routes and tasks ----------
 
-test("a task's stage suggests its route, and the others follow in order", () => {
+test("a task's stage suggests its route", () => {
   assert.equal(routeForStage("not-started"), "research");
   assert.equal(routeForStage("planning"), "plan");
   assert.equal(routeForStage("drafting"), "review");
   assert.equal(routeForStage("made-up"), "research");
-  assert.deepEqual(routeChoices("plan"), ["plan", "research", "review"]);
-  assert.deepEqual(routeChoices("learn"), ["research", "plan", "review"]);
-  for (const route of WORK_ROUTES) {
-    assert.ok(ROUTE_LABELS[route] && ATTEMPT_PROMPTS[route], route);
-  }
-});
-
-test("taskChoices: soonest first, no deadline last, queued and finished tasks left out", () => {
-  const items = [
-    { taskId: "t-later", title: "Invented later", deadline: "2026-11-20", stage: "planning" },
-    { taskId: "t-none", title: "Invented undated", deadline: null, stage: "not-started" },
-    { taskId: "t-soon", title: "Invented soon", deadline: "2026-11-04", stage: "drafting" },
-    { taskId: "e0000001a", title: "Invented queued", deadline: "2026-11-03", stage: "not-started", queued: true },
-    { taskId: "t-in", title: "Invented handed in", deadline: "2026-11-03", stage: "submitted" },
-    { taskId: "t-done", title: "Invented done", deadline: "2026-11-03", stage: "done" },
-    { title: "no id" },
-    null,
-  ];
-  const choices = taskChoices(items, { dueOf: (d) => (d ? `Due ${d}` : "") });
-  assert.deepEqual(choices.map((c) => c.taskId), ["t-soon", "t-later", "t-none"]);
-  assert.deepEqual(choices[0], { taskId: "t-soon", title: "Invented soon", route: "review", due: "Due 2026-11-04" });
-  assert.equal(choices[2].due, "");
-  assert.deepEqual(taskChoices(null), []);
+  for (const route of WORK_ROUTES) assert.ok(ROUTE_LABELS[route], route);
 });
 
 // ---------- support pairs and prompts ----------
 
-test("support buttons use the route's wording, keeping the four types", () => {
+test("a help step saved from the retired buttons is still named in the route's wording", () => {
   assert.equal(supportLabel("research", "hint"), "Give me a search hint");
   assert.equal(supportLabel("review", "explanation"), "Explain the feedback");
   assert.equal(supportLabel("plan", "breakdown"), "Help me break it down");
   assert.equal(supportLabel("plan", "explanation"), "Explain the difficult bit");
   for (const set of Object.values(SUPPORT_LABELS)) assert.deepEqual(Object.keys(set), [...SUPPORT_TYPES]);
-});
-
-test("pair headings: first pair, second pair, and Break it down only after the escape", () => {
-  assert.equal(supportHeading(["hint", "breakdown"]), "Need some help?");
-  assert.equal(supportHeading(["pointer", "explanation"]), "Still stuck?");
-  assert.equal(supportHeading(["breakdown"]), "Let's break it down");
-  assert.equal(supportHeading([]), "");
-  assert.equal(supportHeading(undefined), "");
-});
-
-test("the writing box asks for the route's attempt, then a fresh try after help, then a reply", () => {
-  assert.equal(promptFor(null, "plan").label, ATTEMPT_PROMPTS.plan);
-  assert.equal(promptFor({ needsAttempt: true }, "research").label, ATTEMPT_PROMPTS.research);
-  assert.equal(promptFor({ needsAttempt: true }, "research", { asked: true }).label, TALK_MESSAGES.tryAgain);
-  assert.equal(promptFor({ needsAttempt: false }, "review", { asked: true }).label, TALK_MESSAGES.reply);
-  assert.equal(canEscape(null), true, "offered before the conversation starts");
-  assert.equal(canEscape({ canEscape: true }), true);
-  assert.equal(canEscape({ canEscape: false }), false);
 });
 
 test("checkMessage accepts anything written, however rough, and refuses empty or over-long text", () => {
@@ -124,17 +74,7 @@ test("checkMessage accepts anything written, however rough, and refuses empty or
   assert.ok(checkMessage("x".repeat(MESSAGE_MAX_CHARS)).text);
 });
 
-// ---------- votes and turns ----------
-
-test("votes: tap to choose, tap again to remove, tap the other to change", () => {
-  assert.equal(nextVote(null, "up"), "up");
-  assert.equal(nextVote("up", "up"), "removed");
-  assert.equal(nextVote("up", "down"), "down");
-  assert.equal(nextVote("removed", "down"), "down");
-  assert.equal(nextVote("up", "sideways"), "up");
-  assert.equal(shownVote("removed"), null);
-  assert.equal(shownVote("down"), "down");
-});
+// ---------- turns ----------
 
 test("turns from a reply and from a reopened conversation", () => {
   const sent = turnFromReply({ id: "turn_a1", action: "attempt", type: null, reply: "Invented reply" }, { learnerText: "my go" });
@@ -192,19 +132,17 @@ test("the conversation calls go to the WP-111a routes with the pass", async () =
   await api.openConversation("conv_1");
   await api.sendMessage("conv_1", { text: "my go" });
   await api.sendMessage("conv_1", { escape: true });
-  await api.requestSupport("conv_1", "hint");
-  await api.vote("turn_1", "up");
+  assert.equal(api.requestSupport, undefined, "WP-134b: the support buttons' call is retired");
+  assert.equal(api.vote, undefined, "WP-134b: the thumbs' call is retired (A-014)");
   assert.deepEqual(calls.map((c) => [c.method, c.url.slice(BACKEND.length)]), [
     ["POST", "/api/route"],
     ["POST", "/api/conversations"],
     ["GET", "/api/conversations/conv_1"],
     ["POST", "/api/conversations/conv_1/messages"],
     ["POST", "/api/conversations/conv_1/messages"],
-    ["POST", "/api/conversations/conv_1/support"],
-    ["POST", "/api/turns/turn_1/vote"],
   ]);
   assert.deepEqual(calls.map((c) => c.body), [
-    { message: "invented" }, { route: "plan", taskId: "t1" }, undefined, { text: "my go" }, { escape: true }, { type: "hint" }, { vote: "up" },
+    { message: "invented" }, { route: "plan", taskId: "t1" }, undefined, { text: "my go" }, { escape: true },
   ]);
   assert.ok(calls.every((c) => c.auth === "Bearer test-pass"));
 });
@@ -215,10 +153,8 @@ test("calls that wait for a tutor reply get the longer timeout; the others keep 
   const { fetchImpl } = fakeFetch({ delayMs: 60 });
   const api = createApi({ getBackendUrl: () => BACKEND, getToken: () => "t", fetchImpl, timeoutMs: 15, talkTimeoutMs: 2000 });
   assert.equal((await api.sendMessage("conv_1", { text: "go" })).kind, "ok");
-  assert.equal((await api.requestSupport("conv_1", "hint")).kind, "ok");
   assert.equal((await api.suggestRoute({ message: "x" })).kind, "ok");
   assert.equal((await api.openTasks()).kind, "network", "an ordinary call still gives up sooner");
-  assert.equal((await api.vote("turn_1", "down")).kind, "network");
 });
 
 // ---------- the tutor status panel ----------
@@ -256,20 +192,13 @@ test("each panel colour pair meets AA contrast, in standard and high contrast", 
       assert.ok(contrast(bg, fg) >= 4.5, `${state} ${bg} on ${fg}: ${contrast(bg, fg).toFixed(2)}`);
     }
   }
-  for (const state of ["offline", "waking", "ready"]) {
-    assert.match(css, new RegExp(`#wake-status\\[data-tutor="${state}"\\]\\s*\\{[^}]*background: var\\(--tutor-${state}-bg\\);[^}]*color: var\\(--tutor-${state}-fg\\);`), state);
-  }
 });
 
-test("Back is a clear outlined button, and a chosen vote is ticked as well as filled", () => {
+test("WP-134b: the classic screens' styling is gone, the helplines keep theirs", () => {
   const css = read("app.css");
-  const back = css.match(/\nbutton\.back\s*\{([^}]*)\}/)[1];
-  assert.match(back, /border: 2px solid var\(--accent\)/);
-  assert.match(back, /text-decoration: none/);
-  assert.match(back, /min-height: var\(--tap\)/);
-  assert.match(css, /button\.back::before\s*\{\s*content: "\\2190" \/ "";/);
-  assert.doesNotMatch(css, /button\.link,\s*button\.back/, "Back no longer looks like a link");
-  assert.match(css, /button\.vote\[aria-pressed="true"\]::after/);
+  assert.doesNotMatch(css, /button\.vote|button\.back|\.talk-form|\.check-screen|\.recommend|#wake-status/);
+  assert.match(css, /\.care-heading\s*\{/);
+  assert.match(read("chat-app.js"), /className: "care-heading", text: TALK_MESSAGES\.careHeading/);
 });
 
 // ---------- the page ----------

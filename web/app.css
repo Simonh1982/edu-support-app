@@ -308,44 +308,6 @@ h3 {
   margin: 1.5rem 0 0.5rem;
 }
 
-.panel {
-  margin: 1rem 0;
-  padding: 0 1rem 0.25rem;
-  border: var(--border-width) solid var(--muted);
-  border-radius: 0.5rem;
-}
-
-.panel label,
-.check-screen label {
-  display: block;
-  font-weight: 600;
-  margin: 1rem 0 0.25rem;
-}
-
-.panel input,
-.panel textarea,
-.check-screen input,
-.check-screen select,
-.check-screen textarea {
-  display: block;
-  width: 100%;
-  min-height: var(--tap);
-  padding: 0.5rem 0.75rem;
-  font: inherit;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  line-height: var(--line-height);
-  color: var(--fg);
-  background: var(--bg);
-  border: 2px solid var(--muted);
-  border-radius: 0.5rem;
-}
-
-.panel textarea,
-.check-screen textarea {
-  resize: vertical;
-}
-
 button.secondary[disabled] {
   opacity: 0.6;
   cursor: not-allowed;
@@ -361,8 +323,7 @@ button.secondary[disabled] {
   margin: 0 0 0.25rem;
 }
 
-.chips,
-.plain-list {
+.chips {
   list-style: none;
   margin: 0 0 var(--paragraph-gap);
   padding: 0;
@@ -387,24 +348,6 @@ button.secondary[disabled] {
   flex: 1 1 10rem;
 }
 
-.chip-type,
-.chip-text {
-  display: block;
-}
-
-.chip-type {
-  color: var(--muted);
-  font-size: 0.9em;
-}
-
-.chip-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.chip-actions button,
 .correction button {
   flex: 1 1 8rem;
   width: auto;
@@ -463,9 +406,6 @@ mark.unsure {
 }
 
 /* ---------- "Coming up" (WP-109) ---------- */
-.upcoming {
-  margin-top: 1.5rem;
-}
 
 .tasks {
   list-style: none;
@@ -490,72 +430,7 @@ mark.unsure {
   margin: 0 0 0.25rem;
 }
 
-.task-title {
-  font-weight: 600;
-}
-
-.task-meta strong {
-  color: var(--warn);
-}
-
-.task-stage {
-  color: var(--muted);
-  font-size: 0.95em;
-}
-
-.task-edit label {
-  display: block;
-  font-weight: 600;
-  margin: 0.75rem 0 0.25rem;
-}
-
-.task-edit select,
-.task-edit input {
-  display: block;
-  width: 100%;
-  min-height: var(--tap);
-  padding: 0.5rem 0.75rem;
-  font: inherit;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  color: var(--fg);
-  background: var(--bg);
-  border: 2px solid var(--muted);
-  border-radius: 0.5rem;
-}
-
-.task-edit select[disabled],
-.task-edit input[disabled] {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* ---------- home screen, views and the edit queue (WP-110) ---------- */
-.main-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 1.25rem 0;
-}
-
-/* The three main actions: large, full width, easy to tap (build spec §6). */
-button.big {
-  display: block;
-  width: 100%;
-  min-height: calc(var(--tap) * 1.5);
-  padding: 1rem 1.25rem;
-  border: 0;
-  border-radius: 0.75rem;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font: inherit;
-  font-size: 1.15em;
-  font-weight: 700;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  text-align: left;
-  cursor: pointer;
-}
+/* ---------- shared pieces from the WP-110 views ---------- */
 
 button.link {
   display: inline-flex;
@@ -576,65 +451,10 @@ button.link {
 
 /* Back looks like a clear button (owner request, 2 Nov 2026): an outlined button with an arrow. The
    arrow is decoration only, so screen readers just say "Back". */
-button.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: var(--tap);
-  min-width: 7rem;
-  padding: 0.5rem 1.25rem 0.5rem 1rem;
-  border: 2px solid var(--accent);
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--fg);
-  font: inherit;
-  font-weight: 700;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-button.back::before {
-  content: "\2190" / "";
-}
-
-button.back:hover {
-  background: var(--accent);
-  color: var(--accent-fg);
-}
-
-.recommend {
-  margin: 1rem 0;
-  padding: 0.75rem 1rem;
-  border: var(--border-width) solid var(--muted);
-  border-left: 4px solid var(--accent);
-  border-radius: 0.5rem;
-}
-
-.recommend h2 {
-  font-size: 1em;
-  margin: 0 0 0.25rem;
-}
-
-.recommend p {
-  margin: 0 0 0.5rem;
-}
-
-.queue-note {
-  margin: 1rem 0;
-  padding: 0.5rem 0.75rem;
-  border-left: 4px solid var(--focus);
-  font-weight: 600;
-}
 
 /* Waiting changes are also said in words, so the dashed edge is never the only signal. */
 .task[data-pending="true"] {
   border-left-style: dashed;
-}
-
-.task-pending {
-  font-weight: 600;
 }
 
 dialog {
@@ -676,169 +496,7 @@ dialog h2 {
   --tutor-ready-fg: #ffffff;
 }
 
-#wake-status[data-tutor] {
-  border: var(--border-width) solid var(--fg);
-  border-left-width: var(--border-width);
-  border-radius: 0.5rem;
-  font-weight: 700;
-}
-
-#wake-status[data-tutor="offline"] {
-  background: var(--tutor-offline-bg);
-  color: var(--tutor-offline-fg);
-}
-
-#wake-status[data-tutor="waking"] {
-  background: var(--tutor-waking-bg);
-  color: var(--tutor-waking-fg);
-}
-
-#wake-status[data-tutor="ready"] {
-  background: var(--tutor-ready-bg);
-  color: var(--tutor-ready-fg);
-}
-
-/* ---------- getting help and the conversation (WP-111b) ---------- */
-.help-start {
-  margin-top: 1.5rem;
-}
-
-.help-tasks li {
-  margin-bottom: 0.5rem;
-}
-
-button.task-choice {
-  text-align: left;
-}
-
-.task-choice-title,
-.task-choice-due {
-  display: block;
-}
-
-.task-choice-due {
-  color: var(--muted);
-  font-size: 0.9em;
-  font-weight: 400;
-}
-
-.talk {
-  margin-top: 1rem;
-}
-
-.turns {
-  list-style: none;
-  margin: 1rem 0;
-  padding: 0;
-}
-
-.turn {
-  margin-bottom: 1rem;
-}
-
-.turn-you,
-.turn-tutor {
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-}
-
-.turn-you {
-  margin: 0 0 0.5rem 1.5rem;
-  border: var(--border-width) solid var(--muted);
-}
-
-.turn-tutor {
-  border: var(--border-width) solid var(--muted);
-  border-left: 4px solid var(--accent);
-}
-
-.turn-tutor:focus {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.turn-who {
-  margin: 0 0 0.25rem;
-  color: var(--muted);
-  font-size: 0.9em;
-  font-weight: 700;
-}
-
-/* Replies keep their line breaks, so numbered steps and bullets stay readable. */
-.turn-text {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.votes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-button.vote {
-  flex: 1 1 9rem;
-  min-height: var(--tap);
-  padding: 0.5rem 0.75rem;
-  border: 2px solid var(--accent);
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--fg);
-  font: inherit;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  cursor: pointer;
-}
-
-/* A chosen vote is filled and ticked, so it doesn't rely on colour alone. */
-button.vote[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-weight: 700;
-}
-
-button.vote[aria-pressed="true"]::after {
-  content: " \2713" / "";
-}
-
-.support {
-  margin: 1rem 0;
-  padding: 0.25rem 1rem;
-  border: var(--border-width) solid var(--muted);
-  border-radius: 0.5rem;
-}
-
-.support h3 {
-  margin-top: 0.75rem;
-}
-
-.talk-form label {
-  display: block;
-  font-weight: 600;
-  margin: 1rem 0 0.25rem;
-}
-
-.talk-form textarea,
-.help-start textarea {
-  display: block;
-  width: 100%;
-  min-height: calc(var(--tap) * 2);
-  padding: 0.5rem 0.75rem;
-  font: inherit;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  line-height: var(--line-height);
-  color: var(--fg);
-  background: var(--bg);
-  border: 2px solid var(--muted);
-  border-radius: 0.5rem;
-  resize: vertical;
-}
-
-.help-start .panel label {
-  margin-top: 0.5rem;
-}
+/* ---------- the conversation (WP-111b; the chat page since WP-134a) ---------- */
 
 /* Level-3 helplines (WP-112). Uses the theme's own colours, so contrast holds in every theme. */
 .care {
