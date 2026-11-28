@@ -23,7 +23,7 @@ import {
   turnsFromServer,
 } from "../web/shared/conversation.js";
 import { createApi } from "../web/shared/api.js";
-import { sourceList } from "../web/conversation.js";
+import { sourceList } from "../web/source-parts.js";
 import * as serverSources from "../server/ai/sources.js";
 
 const BACKEND = "https://example-codespace-3000.app.github.dev";
@@ -274,9 +274,10 @@ test("no cards: nothing is shown, including beside a reply that wasn't kept", ()
 // ---------- page rules ----------
 
 test("the page wires the cards and keeps to the page rules", () => {
-  const page = read("web/conversation.js");
-  assert.match(page, /const sources = sourceList\(doc, turn,/);
-  assert.match(page, /cards\.clear\(\)/, "signing out forgets the cards");
+  // WP-134a: the chat page's source cards (web/chat-sources.js) replace the classic screen's
+  const page = read("web/chat-sources.js");
+  assert.match(page, /return sourceList\(doc, turn, \{/);
+  assert.match(read("web/chat-app.js"), /sources\.clear\(\);/, "signing out and leaving a chat forget the cards");
   assert.match(page, /api\.saveSource\(\{ turnId, index: card\.index \}\)/);
   assert.match(page, /api\.summariseSource\(saved\.sourceId\)/);
   assert.match(page, /api\.openItem\("notebook", saved\.summaryId\)/, "a summary made before is shown again, not made twice");

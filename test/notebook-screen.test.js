@@ -247,9 +247,11 @@ test("Your notebook while the tutor rests: titles from the snapshot, view-only, 
   assert.equal(els["notebook-list"].children.length, 1);
 });
 
-test("the page has the notebook view, its home button and the task panel's notes part, each control labelled", () => {
+test("the page has the notebook page, its menu button and the task panel's notes part, each control labelled", () => {
   const html = readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
-  assert.match(html, /<button type="button" id="go-notebook" class="big">Your notebook<\/button>/);
+  // WP-134a: a page from the menu's foot
+  assert.match(html, /<section class="column page" id="notebook-page" aria-labelledby="notebook-heading">/);
+  assert.match(readFileSync(new URL("../web/side-menu.js", import.meta.url), "utf8"), /\["notebook", MENU_TEXT\.notebook\]/);
   for (const id of ["notebook-q", "notebook-kind", "notebook-task"]) assert.match(html, new RegExp(`<label for="${id}">`), id);
   assert.match(html, /<form id="notebook-search" class="notebook-search" role="search" novalidate>/);
   assert.match(html, /<details id="task-panel-notes" class="more" hidden>\s*<summary id="task-panel-notes-label">Your notes for this task<\/summary>/);

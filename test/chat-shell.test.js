@@ -2,7 +2,7 @@
 // focus level), the menu itself on a fake page, and the new page's markup. Invented data only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync, cpSync, rmSync } from "node:fs";
+import { readFileSync, mkdtempSync, cpSync, rmSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -122,7 +122,7 @@ test("the side menu: arrows open lists, a subject filters, and a choice shows it
 });
 
 test("the new page: labelled controls, the status dot, a sign-out dialog, and a way back to sign in", () => {
-  const html = readFileSync(path.join(WEB, "chat.html"), "utf8");
+  const html = readFileSync(path.join(WEB, "index.html"), "utf8");
   assert.match(html, /<html lang="en-GB">/);
   assert.match(html, /<link rel="stylesheet" href="app.css">\s*<link rel="stylesheet" href="chat.css">/, "the learner's accessibility settings apply");
   assert.match(html, /<nav class="side" id="side" aria-label="Your chats, tasks and topics">/);
@@ -130,13 +130,16 @@ test("the new page: labelled controls, the status dot, a sign-out dialog, and a 
   assert.match(html, /<label for="message" class="visually-hidden">Your message<\/label>/);
   assert.match(html, /<p class="tutor-dot" id="tutor-dot" role="status"/);
   assert.match(html, /<dialog id="sign-out-dialog"/);
-  assert.match(html, /<a class="button-link" href="\.\/">Go to sign in<\/a>/);
+  // WP-134a: this is the main page now, with sign-in; the old chat.html address forwards here
+  assert.match(html, /<section class="signed-out" id="sign-in-screen" aria-labelledby="sign-in-heading" hidden>/);
+  assert.match(html, /<form id="sign-in-form" novalidate>/);
   assert.match(html, /<script type="module" src="chat-app.js"><\/script>/);
-  const classic = readFileSync(path.join(WEB, "index.html"), "utf8");
-  assert.match(classic, /<a id="try-chat" class="link" href="chat.html">Try the new chat design<\/a>/);
+  assert.doesNotMatch(html, /src="app\.js"|id="home-screen"|id="view-upcoming"|id="talk-support"/, "the classic screens are gone");
+  assert.match(readFileSync(path.join(WEB, "chat.html"), "utf8"), /<meta http-equiv="refresh" content="0; url=\.\/">/);
   for (const file of ["chat-app.js", "side-menu.js"]) {
-    assert.doesNotMatch(readFileSync(path.join(WEB, file), "utf8"), /innerHTML|insertAdjacentHTML|confirm\(|indexedDB/, file);
+    assert.doesNotMatch(readFileSync(path.join(WEB, file), "utf8"), /innerHTML|insertAdjacentHTML|confirm\(|indexedDB\.open|localStorage\./, file);
   }
+  assert.match(readFileSync(path.join(WEB, "chat-app.js"), "utf8"), /win\.indexedDB\?\.deleteDatabase\?\.\(OLD_DEVICE_DB\)/, "the classic page's saved view is removed on sign-out");
   const shared = readFileSync(path.join(WEB, "shared", "menu.js"), "utf8").replace(/\/\/.*$/gm, "");
   assert.doesNotMatch(shared, /^import /m);
   assert.doesNotMatch(shared, /\b(document|window|localStorage)\b/);
@@ -147,11 +150,28 @@ test("deploy stamping covers the new page", () => {
   try {
     cpSync(WEB, path.join(dir, "web"), { recursive: true });
     execFileSync("bash", [path.join(ROOT, "scripts", "stamp-versions.sh"), path.join(dir, "web"), "abc12345"], { stdio: "pipe" });
-    const html = readFileSync(path.join(dir, "web", "chat.html"), "utf8");
+    const html = readFileSync(path.join(dir, "web", "index.html"), "utf8");
     assert.match(html, /src="chat-app\.js\?v=abc12345"/);
     assert.match(html, /href="chat\.css\?v=abc12345"/);
     assert.match(readFileSync(path.join(dir, "web", "chat-app.js"), "utf8"), /from "\.\/side-menu\.js\?v=abc12345"/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("WP-134a: sign-in, Try again and the pages from the menu's foot live on the chat page", () => {
+  const app = readFileSync(path.join(WEB, "chat-app.js"), "utf8");
+  assert.match(app, /const fragment = readFragment\(win\.location\?\.hash \?\? ""\);/, "the pass is read from the address after GitHub");
+  assert.match(app, /win\.history\?\.replaceState\?\.\(null, "", win\.location\.pathname \+ win\.location\.search\);/, "and taken out of it straight away");
+  assert.match(app, /const checked = checkNewPass\(fragment\.pass, ROLE\);/);
+  assert.match(app, /const target = loginUrl\(config\.workerUrl, els\.signInShared\.checked\);/);
+  assert.match(app, /if \(RETRY_STATES\.has\(result\.state\)\) \{\s*els\.wakeRetry\.hidden = false;/);
+  assert.match(app, /if \(view\.kind === "notebook"\) return \[els\.notebookPage\];/);
+  assert.match(app, /if \(view\.kind === "files"\) return \[els\.filesPage\];/);
+  assert.match(app, /onCheck: \(uploadId\) => \{ newChat\(\); cards\.addUpload\(uploadId\); \}/);
+  assert.match(app, /showSignIn\("signed-out", \{ focus: true \}\);/);
+  assert.doesNotMatch(app, /Open the classic page|on the classic page/, "nothing points to the retired page");
+  for (const gone of ["app.js", "home.js", "upcoming.js", "check.js", "conversation.js", "device-store.js", path.join("shared", "offline.js"), path.join("shared", "recommend.js")]) {
+    assert.equal(existsSync(path.join(WEB, gone)), false, gone);
   }
 });

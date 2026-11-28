@@ -524,32 +524,16 @@ test("new shared modules use no DOM-only or Node-only APIs", () => {
   }
 });
 
-test("check.js builds the page with text only, keeps nothing in the browser and logs nothing", () => {
-  const source = readFileSync(join(WEB, "check.js"), "utf8");
-  assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML/);
-  assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB/);
-  assert.doesNotMatch(source, /console\./, "brief text must never reach the console");
-});
-
-test("learner page has the Type or paste it form (WP-115c) and the check screen, every control labelled", () => {
+test("the chat page takes a pasted task up to the server's limit, and every control is labelled", () => {
+  // WP-134a: the "+" menu's Paste a task replaces the classic Type or paste it form and check screen
   const html = readFileSync(join(WEB, "index.html"), "utf8");
-  assert.match(html, /<button type="button" id="paste-open"[^>]*disabled>Type or paste it<\/button>/);
-  assert.doesNotMatch(html, /id="type-open"|id="type-form"/, "one form for typing and pasting");
-  assert.match(html, new RegExp(`<textarea id="paste-text"[^>]*maxlength="${PASTE_MAX_CHARS}"`));
-  assert.match(html, /<input type="date" id="paste-deadline" aria-describedby="paste-deadline-hint paste-deadline-uk">/);
-  assert.match(html, /<input type="date" id="check-deadline"/);
-  assert.match(html, /<section id="check-screen"[^>]*hidden>/);
-  assert.match(html, /<h2 id="check-heading" tabindex="-1">Check the details<\/h2>/);
-  for (const field of CHECK_FIELDS) {
-    assert.match(html, new RegExp(`id="check-field-${field}"`), field);
-    assert.match(html, new RegExp(`id="check-prompt-${field}"`), field);
-  }
-  for (const [value, label] of [...TASK_KINDS.map((k) => [k, null]), ...WORK_TYPES.map((w) => [w, null])]) {
-    assert.match(html, new RegExp(`<option value="${value}">`), label ?? value);
-  }
+  assert.match(readFileSync(join(WEB, "chat-app.js"), "utf8"), new RegExp(`els\\.message\\.maxLength = pasteMode \\? ${PASTE_MAX_CHARS} :`));
+  assert.match(html, /<input type="date" id="paste-due" aria-describedby="paste-due-hint">/);
+  assert.doesNotMatch(html, /id="paste-form"|id="check-screen"/, "the classic form and check screen are retired");
   const controls = [...html.matchAll(/<(input|textarea|select)\b[^>]*\bid="([^"]+)"/g)]
     .filter(([tag]) => !/type="file"/.test(tag))
     .map((m) => m[2]);
+  assert.ok(controls.length >= 8);
   for (const id of controls) assert.match(html, new RegExp(`<label\\b[^>]*\\bfor="${id}"`), `label for ${id}`);
 });
 
@@ -558,11 +542,11 @@ test("deploy stamping covers the new modules", () => {
   try {
     cpSync(WEB, join(dir, "web"), { recursive: true });
     execFileSync("bash", [join(ROOT, "scripts", "stamp-versions.sh"), join(dir, "web"), "abc12345"], { stdio: "pipe" });
-    const appJs = readFileSync(join(dir, "web", "app.js"), "utf8");
-    assert.match(appJs, /from "\.\/check\.js\?v=abc12345"/);
+    const appJs = readFileSync(join(dir, "web", "chat-app.js"), "utf8");
+    assert.match(appJs, /from "\.\/chat-cards\.js\?v=abc12345"/);
     assert.match(appJs, /from "\.\/shared\/api\.js\?v=abc12345"/);
-    const checkJs = readFileSync(join(dir, "web", "check.js"), "utf8");
-    assert.match(checkJs, /from "\.\/shared\/task-check\.js\?v=abc12345"/);
+    const cardsJs = readFileSync(join(dir, "web", "chat-cards.js"), "utf8");
+    assert.match(cardsJs, /from "\.\/shared\/task-check\.js\?v=abc12345"/);
     assert.match(readFileSync(join(dir, "web", "shared", "api.js"), "utf8"), /from "\.\/auth\.js\?v=abc12345"/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -580,9 +564,9 @@ test("the waker hands back the tutor's address when it's ready", async () => {
   assert.equal(result.backendUrl, BACKEND);
 });
 
-test("the new page code imports under Node without a DOM", async () => {
-  const check = await import("../web/check.js");
-  assert.equal(typeof check.createTaskEntry, "function");
-  const app = await import("../web/app.js");
-  assert.equal(typeof app.loginUrl, "function");
+test("the page code imports under Node without a DOM", async () => {
+  const app = await import("../web/chat-app.js");
+  assert.equal(typeof app.initChat, "function");
+  const cards = await import("../web/chat-cards.js");
+  assert.equal(typeof cards.createChatCards, "function");
 });

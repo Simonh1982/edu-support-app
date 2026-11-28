@@ -889,3 +889,33 @@ html:has(.chat-page) {
 .task-side .task-panel {
   margin: 0;
 }
+
+/* ---------- WP-134a: pages from the menu's foot ---------- */
+.page-store {
+  display: none;
+}
+.notebook-search input,
+.notebook-search select,
+.note-form input,
+.note-form select,
+.note-form textarea {
+  display: block;
+  min-height: var(--tap);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  line-height: var(--line-height);
+  color: var(--fg);
+  background: var(--bg);
+  border: 2px solid var(--muted);
+  border-radius: 0.5rem;
+}
+.notebook-search label {
+  display: block;
+  margin: 0.9rem 0 0.25rem;
+  font-weight: 600;
+}
+.wake-retry {
+  white-space: nowrap;
+}

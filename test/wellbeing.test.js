@@ -273,12 +273,11 @@ test('the screen shows the helplines beside level-3 replies only, including reop
   assert.equal(screen.turnFromReply({ id: 'turn_c3', reply: 'x', wellbeingLevel: '3' }).wellbeingLevel, null);
 });
 
-test('the page wires the care box and the straight-to-tutor send', async () => {
-  const page = await readFile(new URL('../web/conversation.js', import.meta.url), 'utf8');
+test('the page wires the care box beside a level-3 reply', async () => {
+  // WP-134a: the chat page (every message goes straight to the tutor there)
+  const page = await readFile(new URL('../web/chat-app.js', import.meta.url), 'utf8');
   assert.match(page, /if \(showsCare\(turn\)\) tutor\.append\(careBox\(\)\)/);
   assert.match(page, /for \(const line of HELPLINES\)/);
-  assert.match(page, /result\.body\?\.sendNow === true/);
-  assert.match(page, /if \(sendNow\) await sendText\(checked\.text\)/);
   const css = await readFile(new URL('../web/app.css', import.meta.url), 'utf8');
   assert.match(css, /\.care a\s*\{[^}]*min-height: var\(--tap\)/);
   const index = await readFile(new URL('../server/index.js', import.meta.url), 'utf8');

@@ -3,7 +3,7 @@
 // drawn by sourceList (web/conversation.js), the same builder as the classic page, so the rules
 // (a summary keeps its source, read-the-original and too-close are final, videos aren't summarised)
 // stay in one place. WP-133: Attach a copy opens the task panel at that source. State is kept in memory.
-import { sourceList } from "./conversation.js";
+import { sourceList } from "./source-parts.js";
 import {
   FINAL_SUMMARY_OUTCOMES, PASTE_OUTCOMES, SOURCE_MESSAGES, cardKey, checkPasted, sourceErrorMessage, summaryFromEntry, summaryFromResult,
 } from "./shared/conversation.js";

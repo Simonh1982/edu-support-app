@@ -13,7 +13,7 @@ import {
 import { OWN_SOURCE_LIMITS, PANEL_MESSAGES, ownSourceBody, panelFacts, panelSources } from "../web/shared/task-panel.js";
 import { longDateText } from "../web/shared/upcoming.js";
 import { createApi } from "../web/shared/api.js";
-import { sourceList } from "../web/conversation.js";
+import { sourceList } from "../web/source-parts.js";
 import { createTaskPanel, sourceItems } from "../web/task-panel.js";
 import * as serverSources from "../server/ai/sources.js";
 import * as serverDomain from "../server/domain/sources.js";
@@ -350,12 +350,11 @@ test("the panel: signed out on a 401; nothing is kept after clear()", async () =
 
 // ---------- page rules ----------
 
-test("the page has the panel in the conversation view, collapsed, with every control labelled", () => {
+test("the page has the panel beside the chat, collapsed, with every control labelled", () => {
   const html = read("web/index.html");
-  const talk = html.slice(html.indexOf('<div id="view-talk"'), html.indexOf('<div id="view-upcoming"'));
-  const panel = talk.slice(talk.indexOf('<section id="task-panel"'), talk.indexOf("</section>", talk.indexOf('<section id="task-panel"')));
-  assert.match(talk, /<section id="task-panel" class="task-panel" aria-labelledby="task-panel-title" hidden>/);
-  assert.ok(talk.indexOf('id="talk-task"') < talk.indexOf('id="task-panel"'));
+  const side = html.slice(html.indexOf('<aside class="task-side"'), html.indexOf("</aside>"));
+  const panel = side.slice(side.indexOf('<section id="task-panel"'), side.indexOf("</section>", side.indexOf('<section id="task-panel"')));
+  assert.match(side, /<section id="task-panel" class="task-panel" aria-labelledby="task-panel-title" hidden>/);
   for (const id of ["task-panel-question", "task-panel-sources", "own-source"]) {
     assert.match(panel, new RegExp(`<details id="${id}" class="more">`), `${id} starts closed`);
   }
@@ -376,10 +375,10 @@ test("the panel code keeps to the page rules", () => {
   }
   const shared = read("web/shared/task-panel.js").replace(/\/\/.*$/gm, "").replace(/"(?:[^"\\\n]|\\.)*"/g, '""');
   assert.doesNotMatch(shared, /\b(document|window|localStorage|sessionStorage|indexedDB|navigator|process|Buffer|require)\b/);
-  const page = read("web/conversation.js");
+  const page = read("web/chat-app.js");
   assert.match(page, /import \{ createTaskPanel \} from "\.\/task-panel\.js";/);
-  assert.match(page, /panel\?\.clear\(\)/, "signing out clears the panel");
-  assert.match(page, /api\.summariseSource\(state\.sourceId, \{ text: checked\.text \}\)/);
+  assert.match(page, /panel\?\.show\(null\);/, "signing out clears the panel");
+  assert.match(read("web/chat-sources.js"), /api\.summariseSource\(state\.sourceId, \{ text: checked\.text \}\)/);
   const css = read("web/app.css");
   assert.match(css, /\.task-panel input,\s*\.paste-source textarea\s*\{[^}]*min-height: var\(--tap\)/);
 });

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { MAX_ATTACHMENTS, PANEL_MESSAGES, attachInfo, attachNote, panelSources, panelStage } from "../web/shared/task-panel.js";
 import { UPCOMING_MESSAGES } from "../web/shared/upcoming.js";
 import { ATTACH_POLL, createTaskPanel, sourceItems } from "../web/task-panel.js";
-import { sourceList } from "../web/conversation.js";
+import { sourceList } from "../web/source-parts.js";
 
 class FakeElement {
   constructor(tag) {

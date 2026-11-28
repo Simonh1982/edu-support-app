@@ -107,9 +107,5 @@ test('the screen asks for it by task and route, says when it is from, and offers
   assert.equal(conversationDay('2026-11-16T08:00:00Z', now), 'from yesterday');
   assert.equal(conversationDay('2026-11-04T08:00:00Z', now), 'on Wednesday 4 November');
   assert.equal(TALK_MESSAGES.carriedOn('from today'), 'Carrying on with your conversation from today.');
-  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
-  assert.match(html, /<div class="actions" id="talk-new-actions" hidden>\s*<button type="button" id="talk-new" class="secondary">Start a new conversation<\/button>/);
-  const page = readFileSync(new URL('../web/conversation.js', import.meta.url), 'utf8');
-  assert.match(page, /api\.latestConversation\?\.\(\{ taskId: mine\.taskId, route: mine\.route \}\)/);
-  assert.match(page, /if \(!mine\?\.conversationId\) return lookUp\(mine\);/, 'looked up once the tutor is ready');
+  // WP-134a: the chat page lists a task's chats instead of carrying on with the latest one
 });

@@ -292,9 +292,9 @@ test("web/shared/accessibility.js uses no DOM-only or Node-only APIs", () => {
 });
 
 test("the learner page starts, refreshes and stops the settings", () => {
-  const app = readFileSync(join(WEB, "app.js"), "utf8");
+  const app = readFileSync(join(WEB, "chat-app.js"), "utf8");
   assert.match(app, /from "\.\/shared\/accessibility\.js"/);
-  assert.match(app, /accessibility\.start\(\{ token: pass\.token, shared: pass\.payload\.shared \}\)/);
+  assert.match(app, /accessibility\.start\(\{ token, shared: sharedComputer \}\)/);
   assert.match(app, /accessibility\.refresh\(\)/);
   assert.match(app, /accessibility\.stop\(\)/);
 });

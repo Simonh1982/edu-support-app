@@ -119,7 +119,7 @@ test("leaving the chat forgets the cards, and a late answer doesn't come back", 
 });
 
 test("the help chip is a menu of the kinds of help, and the page has no thumbs (A-014)", () => {
-  const html = read("web/chat.html");
+  const html = read("web/index.html");
   assert.match(html, /<button type="button" class="type-chip" id="type-chip" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu">/);
   for (const [kind, label] of [["auto", "Help: automatic"], ["research", "Understand and research it"], ["plan", "Plan my answer"], ["review", "Review my work"], ["learn", "Learn something"]]) {
     assert.match(html, new RegExp(`role="menuitemradio" aria-checked="(true|false)" data-help="${kind}">${label}<`), kind);
@@ -127,7 +127,7 @@ test("the help chip is a menu of the kinds of help, and the page has no thumbs (
   const app = read("web/chat-app.js");
   assert.match(app, /if \(pendingRoute\) return pendingRoute;\n    if \(view\.kind === "task"\)/, "a chosen kind wins over the task's stage");
   assert.match(app, /if \(taskId\) \{ conv = null; side\.setFocus\(\{ kind: "task", id: taskId \}\); show\(\{ kind: "task", id: taskId \}\); \} else newChat\(\);/, "another kind starts a new chat on the same task");
-  for (const file of ["web/chat.html", "web/chat-app.js", "web/chat-sources.js", "web/chat-cards.js"]) {
+  for (const file of ["web/index.html", "web/chat-app.js", "web/chat-sources.js", "web/chat-cards.js"]) {
     assert.doesNotMatch(read(file), /thumb|rateTurn|helpful/i, file);
     assert.doesNotMatch(read(file), /innerHTML|\bconfirm\s*\(/, file);
   }

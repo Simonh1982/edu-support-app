@@ -73,6 +73,16 @@ test("a pasted task is sent with its date, followed while it travels and is read
   assert.equal(card.message, CARD_TEXT.added("My invented title"));
 });
 
+test("WP-134a: a photo or file sent earlier (from Photos & files) opens as a card and is followed to Check the details", async () => {
+  const { api, calls } = fakeApi([ok({ upload: UPLOAD })]);
+  const cards = createChatCards({ doc, api, workerUrl: "https://w.invented.dev", getToken: () => "pass", sleep: async () => {} });
+  const card = cards.addUpload("up_tinv1");
+  await settle();
+  assert.deepEqual(calls[0], ["openUpload", "up_tinv1"]);
+  assert.equal(card.state, "check");
+  assert.match(cards.render(card).textContent, new RegExp(`${CARD_TEXT.sent}.*Check the details`, "s"));
+});
+
 test("a read that failed, or text that isn't a task, says so plainly; a source is added to the chat's task", async () => {
   const failed = fakeApi([ok({ upload: { id: "up_tinv1", status: "failed", failureReason: "unreadable" } })]);
   const a = createChatCards({ doc, api: failed.api, workerUrl: "https://w.invented.dev", getToken: () => "pass", sleep: async () => {} });
@@ -138,7 +148,7 @@ test("a chat with no task is linked to the task added from it; once only, and ne
 });
 
 test("the page has the \"+\" menu, labelled, with the paste date and the file pickers", () => {
-  const html = readFileSync(new URL("../web/chat.html", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
   assert.match(html, /id="plus" aria-haspopup="menu" aria-expanded="false" aria-controls="plus-menu" aria-label="Add a photo, file, task or source"/);
   for (const [what, label] of [["camera", "Take a photo"], ["gallery", "Choose a photo"], ["file", "Attach a file"], ["paste", "Paste a task"], ["source", "Add a source"]]) {
     assert.match(html, new RegExp(`role="menuitem" data-add="${what}">${label}<`), what);

@@ -1,11 +1,12 @@
-// WP-131b (A-013): the chat-first learner page. A clean new chat (greeting, small chips, the message
-// box), the side menu of chats, tasks and topics, the tutor's status as a dot, and simple task and
-// topic pages. Uses the same pass, wake-up, accessibility settings and server routes as the classic
-// page (index.html), which stays until WP-134. The message box's "+" menu and help chip (WP-132) and
-// the full task and topic pages (WP-133) come next.
+// The learner page (A-013, chat first; WP-131b to WP-134a): sign-in, a clean new chat (greeting,
+// small chips, the message box with its "+" menu and help chip), the side menu of chats, tasks and
+// topics, the tutor's status as a dot, task and topic pages with the task panel, and the Notebook,
+// Photos & files and Settings pages from the menu's foot. WP-134a retired the classic screens.
 import { config } from "./config.js";
-import { clearPass, loadPass, usableStorage, workerRequest } from "./shared/auth.js";
-import { createWaker, tutorPanel } from "./shared/wake.js";
+import {
+  checkNewPass, clearPass, loadPass, loginUrl, readFragment, savePass, signInMessage, usableStorage, workerRequest,
+} from "./shared/auth.js";
+import { WAKE_MESSAGES, createWaker, tutorPanel } from "./shared/wake.js";
 import { createApi } from "./shared/api.js";
 import { createAccessibility } from "./shared/accessibility.js";
 import {
@@ -19,10 +20,16 @@ import { createChatCards, CARD_TEXT } from "./chat-cards.js";
 import { createSourceCards } from "./chat-sources.js";
 import { createTaskPanel } from "./task-panel.js";
 import { createTopicNotes, TOPIC_TEXT } from "./chat-topic.js";
-import { resizeImage } from "./capture.js";
+import { createCaptureScreen, resizeImage } from "./capture.js";
+import { createNotebook } from "./notebook.js";
 
 const ROLE = "learner";
 const READY_STATES = new Set(["ready", "readyNoAi"]);
+// wake results that offer Try again (as the classic page did)
+const RETRY_STATES = new Set(["timeout", "worker", "wakeFailed", "notConfigured"]);
+// WP-134a: the classic page kept a saved view and an edit queue in this IndexedDB database on own
+// devices; the chat page doesn't use it, so it is deleted on sign-out
+export const OLD_DEVICE_DB = "edu-support.learner";
 // Help types as the chip names them (A-013 §6); Learn something isn't one of the work routes.
 export const HELP_LABELS = Object.freeze({ ...ROUTE_LABELS, learn: "Learn something" });
 export const CHAT_TEXT = Object.freeze({
@@ -35,11 +42,10 @@ export const CHAT_TEXT = Object.freeze({
   notReadyChat: "This chat opens once the tutor is ready.",
   rename: "Rename this chat",
   renamed: "Chat renamed.",
-  classic: "Open the classic page",
-  newTaskSoon: "Adding a task here, by photo, file or pasting, comes in the next update. For now, add it on the classic page.",
-  notebookSoon: "Your notebook moves here in a later update. For now it's on the classic page.",
-  filesSoon: "Your photos and files move here in a later update. For now they're on the classic page.",
-  settingsSoon: "Settings are on the classic page for now.",
+  settingsHeading: "Settings",
+  settingsText: "Your text size, colours, font and motion settings are set up for you, and this page uses them. To change them, ask the person who looks after the app.",
+  sharedNote: "You're on a shared computer. Nothing is saved here, and you'll be signed out after 4 hours or when you close this tab.",
+  takingYou: "Taking you to GitHub…",
   chatsAbout: (n) => `Chats about this task (${n})`,
   topicChats: (n) => `Chats (${n})`,
   topicTasks: (n) => `Tasks (${n})`,
@@ -62,7 +68,9 @@ export function initChat({ doc = document, win = window } = {}) {
   const els = {
     shell: byId("shell"), side: byId("side"), scrim: byId("scrim"), menuOpen: byId("menu-open"), title: byId("top-title"),
     taskChip: byId("task-chip"), dot: byId("tutor-dot"), view: byId("view"), composer: byId("composer"), message: byId("message"),
-    send: byId("send"), typeChip: byId("type-chip"), note: byId("composer-note"), signedOut: byId("signed-out"),
+    send: byId("send"), typeChip: byId("type-chip"), note: byId("composer-note"), signIn: byId("sign-in-screen"), signInForm: byId("sign-in-form"), signInShared: byId("shared-computer"),
+    signInStatus: byId("sign-in-status"), signInHeading: byId("sign-in-heading"), wakeRetry: byId("wake-retry"),
+    notebookPage: byId("notebook-page"), filesPage: byId("files-page"),
     dialog: byId("sign-out-dialog"), dialogCancel: byId("sign-out-cancel"), dialogConfirm: byId("sign-out-confirm"),
     helpMenu: byId("help-menu"),
     taskSide: byId("task-side"), taskSideClose: byId("task-side-close"), taskSidePage: byId("task-side-page"), taskSideBody: byId("task-side-body"),
@@ -85,7 +93,8 @@ export function initChat({ doc = document, win = window } = {}) {
   let busy = false;
   let renaming = false;
   let pasteMode = false;
-  let taskPage = null; // WP-133: { id, col, head } for the open task page // WP-132a: the message box takes a task to add
+  let taskPage = null; // WP-133: { id, col, head } for the open task page
+  let sharedComputer = false; // WP-132a: the message box takes a task to add
 
   const api = createApi({ getBackendUrl: () => backendUrl, getToken: () => token });
   const accessibility = createAccessibility({ workerUrl: config.workerUrl, root: doc.documentElement, local });
@@ -113,13 +122,23 @@ export function initChat({ doc = document, win = window } = {}) {
     doc, api, isReady: () => ready, onChange: () => render(), onSignedOut: () => signedOut(), onUnreachable: () => wakeAgain(),
     taskTitle: (id) => menuData.tasks.find((t) => t.id === id)?.title ?? null,
   });
+  // WP-134a: the classic page's notebook and "Your photos and files", as pages from the menu's foot
+  const notebook = createNotebook({
+    api, workerUrl: config.workerUrl, doc, onSignedOut: (reason) => signedOut(reason), onUnreachable: () => wakeAgain(),
+    getTasks: () => menuData.tasks.map((t) => ({ taskId: t.id, title: t.title })),
+  });
+  const capture = createCaptureScreen({
+    workerUrl: config.workerUrl, doc, onSignedOut: (reason) => signedOut(reason),
+    // a read brief opens Check the details as a card in a new chat
+    onCheck: (uploadId) => { newChat(); cards.addUpload(uploadId); },
+  });
 
   const side = createSideMenu({
     doc,
     root: els.side,
     onOpen: (kind, id) => openItem(kind, id),
     onNewChat: () => newChat(),
-    onFoot: (kind) => (kind === "sign-out" ? askSignOut() : show({ kind: "classic", what: kind })),
+    onFoot: (kind) => (kind === "sign-out" ? askSignOut() : show({ kind })),
   });
 
   // ---------- drawer (phone) ----------
@@ -212,12 +231,15 @@ export function initChat({ doc = document, win = window } = {}) {
     view = next;
     if (next.kind === "task") panelFor(next.id);
     if (next.kind === "topic") topicNotes.load(next.id);
+    if (next.kind === "notebook") notebook?.show();
     renaming = false;
     setText(els.note, "");
     side.setCurrent(next.kind === "chat" || next.kind === "task" || next.kind === "topic" ? next : null);
     closeDrawer();
     render();
     jumpTo(next.kind === "chat" ? els.view.scrollHeight : 0);
+    // WP-134a: on a page, start at its heading (keyboard and screen reader users hear where they are)
+    if (!["new", "chat"].includes(next.kind)) els.view.querySelector("h1")?.focus?.({ preventScroll: true });
   }
 
   function newChat() {
@@ -306,7 +328,7 @@ export function initChat({ doc = document, win = window } = {}) {
         els.taskChip.setAttribute("aria-label", `The task: ${task.title}`);
       }
     } else {
-      const titles = { new: MENU_TEXT.newChat, task: MENU_TEXT.task, topic: "Topic", classic: "" };
+      const titles = { new: MENU_TEXT.newChat, task: MENU_TEXT.task, topic: "Topic", notebook: MENU_TEXT.notebook, files: MENU_TEXT.files, settings: MENU_TEXT.settings };
       els.title.replaceChildren(make(doc, "span", { text: titles[view.kind] ?? "" }));
     }
   }
@@ -410,9 +432,6 @@ export function initChat({ doc = document, win = window } = {}) {
     return box;
   }
 
-  function classicLink() {
-    return make(doc, "a", { className: "button-link", text: CHAT_TEXT.classic, attrs: { href: "./" } });
-  }
 
   function renderView() {
     if (view.kind === "new" && cards.list().length) {
@@ -431,6 +450,7 @@ export function initChat({ doc = document, win = window } = {}) {
       chip(MENU_TEXT.chipLearn, () => { pendingRoute = "learn"; render(); els.message.focus(); });
       chip(MENU_TEXT.chipDue, () => { side.showTasks(); if (phone()) openDrawer(); });
       box.append(chips);
+      if (sharedComputer) box.append(make(doc, "p", { className: "hint", text: CHAT_TEXT.sharedNote }));
       return [box];
     }
     if (view.kind === "chat") {
@@ -482,10 +502,13 @@ export function initChat({ doc = document, win = window } = {}) {
       col.append(pageList(CHAT_TEXT.topicTasks(f.tasks.length), f.tasks.map((t) => listButton(t.title, dueLabel(t.deadline).text, () => openItem("task", t.id)))));
       return [col];
     }
-    // the parts still on the classic page until WP-133 and WP-134
+    // WP-134a: the pages from the menu's foot. Notebook and Photos & files keep their own element
+    // (and state) and move into the view while open.
+    if (view.kind === "notebook") return [els.notebookPage];
+    if (view.kind === "files") return [els.filesPage];
     const col = make(doc, "div", { className: "column page" });
-    const text = { task: CHAT_TEXT.newTaskSoon, notebook: CHAT_TEXT.notebookSoon, files: CHAT_TEXT.filesSoon, settings: CHAT_TEXT.settingsSoon }[view.what] ?? "";
-    col.append(make(doc, "p", { text }), classicLink());
+    col.append(make(doc, "h1", { text: CHAT_TEXT.settingsHeading, attrs: { tabindex: "-1" } }), make(doc, "p", { text: CHAT_TEXT.settingsText }));
+    if (sharedComputer) col.append(make(doc, "p", { className: "hint", text: CHAT_TEXT.sharedNote }));
     return [col];
   }
 
@@ -739,61 +762,141 @@ export function initChat({ doc = document, win = window } = {}) {
   });
 
   // ---------- signing out ----------
-  function signedOut() {
-    clearPass({ role: ROLE, local, session });
+  // ---------- signing in and out (WP-134a: moved from the classic page) ----------
+  function endSession() {
     waker?.stop?.();
+    waker = null;
+    ready = false;
+    token = null;
+    backendUrl = null;
+    capture?.stop();
+    notebook?.stop?.();
+    accessibility.stop();
+    cards.clear();
+    sources.clear();
+    topicNotes.clear();
+    closeSide();
+    panel?.show(null);
+    panelTask = null;
+    taskPage = null;
+    conv = null;
+    pendingRoute = null;
+    menuData = cleanMenu(null);
+    side.setMenu(menuData);
+    view = { kind: "new" };
+    if (els.dialog.open) els.dialog.close();
+  }
+  function showSignIn(code, { focus = false } = {}) {
+    endSession();
     els.shell.hidden = true;
-    els.signedOut.hidden = false;
-    doc.getElementById("signed-out-heading")?.focus();
+    els.signIn.hidden = false;
+    els.signInForm.querySelector("button[type=submit]")?.removeAttribute("disabled");
+    setText(els.signInStatus, code ? signInMessage(code) : "");
+    if (focus) els.signInHeading.focus();
+  }
+  function signedOut(reason = "revoked") {
+    clearPass({ role: ROLE, local, session });
+    showSignIn(typeof reason === "string" ? reason : "revoked", { focus: true });
   }
   function askSignOut() {
     closeDrawer();
-    if (typeof els.dialog.showModal === "function") { els.dialog.showModal(); els.dialogCancel.focus(); }
+    if (typeof els.dialog.showModal === "function") { els.dialog.showModal(); els.dialogCancel.focus(); } else signOutNow();
+  }
+  function signOutNow() {
+    clearPass({ role: ROLE, local, session });
+    try { win.indexedDB?.deleteDatabase?.(OLD_DEVICE_DB); } catch { /* nothing saved, or storage blocked */ }
+    showSignIn("signed-out", { focus: true });
   }
   els.dialogCancel.addEventListener("click", () => els.dialog.close());
-  els.dialogConfirm.addEventListener("click", () => { els.dialog.close(); clearPass({ role: ROLE, local, session }); win.location.assign("./"); });
+  els.dialogConfirm.addEventListener("click", () => { els.dialog.close(); signOutNow(); });
+  els.signInForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const target = loginUrl(config.workerUrl, els.signInShared.checked);
+    if (!target) { setText(els.signInStatus, signInMessage("not-configured")); return; }
+    els.signInForm.querySelector("button[type=submit]")?.setAttribute("disabled", "");
+    setText(els.signInStatus, CHAT_TEXT.takingYou);
+    win.location.assign(target);
+  });
 
   // ---------- waking the tutor ----------
+  function setTutorParts(state) {
+    panel?.setTutor(state);
+    notebook?.setTutor(state);
+    capture?.setTutor(READY_STATES.has(state) ? state : "waiting");
+  }
   function startWaking() {
     waker?.stop?.();
     ready = false;
+    els.wakeRetry.hidden = true;
     setStatus("waking");
-    panel?.setTutor("waking");
+    setTutorParts("waking");
     const current = createWaker({ workerUrl: config.workerUrl, token, onUpdate: ({ state }) => setStatus(tutorPanel(state)) });
     waker = current;
     current.run().then((result) => {
       if (waker !== current) return;
-      if (result.state === "signedOut") return signedOut();
+      if (result.state === "signedOut") return signedOut(result.reason);
       setStatus(tutorPanel(result.state));
+      if (RETRY_STATES.has(result.state)) {
+        els.wakeRetry.hidden = false;
+        setText(els.note, WAKE_MESSAGES[result.state] ?? WAKE_MESSAGES.wakeFailed);
+      }
       if (READY_STATES.has(result.state)) {
         backendUrl = result.backendUrl ?? null;
         ready = true;
-        panel?.setTutor(result.state);
+        setTutorParts(result.state);
+        // the server rebuilds the snapshot when it starts, so read the settings again
+        accessibility.refresh().catch(() => {});
         if (view.kind === "topic") topicNotes.load(view.id);
         loadMenu();
         if (view.kind === "chat" && conv && !conv.loaded) openChat(conv.id);
         render();
       }
       return undefined;
-    }).catch(() => setStatus("offline"));
+    }).catch(() => {
+      setStatus("offline");
+      els.wakeRetry.hidden = false;
+      setText(els.note, WAKE_MESSAGES.wakeFailed);
+    });
   }
   function wakeAgain() {
     if (ready) startWaking();
   }
+  els.wakeRetry.addEventListener("click", () => {
+    if (!token) return;
+    setText(els.note, "");
+    startWaking();
+  });
 
   // ---------- start ----------
+  function startSession(pass) {
+    token = pass.token;
+    sharedComputer = pass.payload?.shared === true;
+    els.signIn.hidden = true;
+    els.shell.hidden = false;
+    accessibility.start({ token, shared: sharedComputer }).catch(() => {});
+    render();
+    side.render();
+    loadMenu();
+    capture?.start(token);
+    notebook?.start(token);
+    startWaking();
+  }
+
+  // coming back from sign-in: take the pass (or error) out of the address bar straight away
+  const fragment = readFragment(win.location?.hash ?? "");
+  if (fragment) {
+    win.history?.replaceState?.(null, "", win.location.pathname + win.location.search);
+    if (fragment.error) { showSignIn(fragment.error); return { state: () => ({ view, ready }) }; }
+    const checked = checkNewPass(fragment.pass, ROLE);
+    if (checked.error) { showSignIn(checked.error); return { state: () => ({ view, ready }) }; }
+    savePass({ token: fragment.pass, payload: checked.payload, local, session });
+  }
   const pass = loadPass({ role: ROLE, local, session });
   if (!pass?.token) {
-    els.signedOut.hidden = false;
+    showSignIn(pass?.expired ? "pass-expired" : undefined);
     return { state: () => ({ view, ready }) };
   }
-  token = pass.token;
-  els.shell.hidden = false;
-  accessibility.start({ token, shared: pass.payload?.shared === true }).catch(() => {});
-  render();
-  side.render();
-  loadMenu();
-  startWaking();
+  startSession(pass);
   return { state: () => ({ view, ready, conv, menu: menuData }) };
 }
 
