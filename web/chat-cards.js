@@ -13,6 +13,7 @@ import { make } from "./side-menu.js";
 export const CARD_TEXT = Object.freeze({
   pasted: "Pasted task",
   photo: "Photo of a task",
+  sent: "Your photo or file",
   file: "File",
   sending: "Sending…",
   arriving: "Sent. The tutor will read it in a moment…",
@@ -139,6 +140,14 @@ export function createChatCards({
     }
   }
 
+  // WP-134a: a photo or file sent earlier (from Photos & files), followed to Check the details
+  function addUpload(uploadId) {
+    const card = newCard({ kind: "task", label: CARD_TEXT.sent, excerpt: "" });
+    card.uploadId = uploadId;
+    follow(card);
+    return card;
+  }
+
   function addSource(taskId) {
     return newCard({ kind: "source", taskId, state: "form", values: { title: "", author: "", url: "" } });
   }
@@ -247,7 +256,7 @@ export function createChatCards({
   }
 
   return {
-    addPaste, addFiles, addSource,
+    addPaste, addFiles, addSource, addUpload,
     list: () => cards,
     render,
     clear() { generation += 1; cards = []; },

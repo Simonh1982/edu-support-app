@@ -371,7 +371,7 @@ test("parent page is accessible, separate, and uses the shared stylesheet", () =
 });
 
 test("the learner app never links to the parent page and the parent page never wakes the Codespace", () => {
-  for (const file of ["index.html", "app.js"]) {
+  for (const file of ["index.html", "chat-app.js", "side-menu.js"]) {
     assert.doesNotMatch(readFileSync(join(WEB, file), "utf8"), /parent\//, file);
   }
   const parentJs = readFileSync(join(WEB, "parent", "parent.js"), "utf8");
@@ -380,10 +380,11 @@ test("the learner app never links to the parent page and the parent page never w
 
 test("learner page has the signed-in screen, status line and sign-out button", () => {
   const html = readFileSync(join(WEB, "index.html"), "utf8");
-  assert.match(html, /<section id="home-screen"[^>]*hidden>/);
-  assert.match(html, /id="wake-status" class="status" role="status" aria-live="polite"/);
-  assert.match(html, /<button type="button" id="sign-out"/);
-  assert.match(html, /<button type="button" id="wake-retry"[^>]*hidden>/);
+  // WP-134a: the chat page: the shell, the tutor's status dot, Try again, and the sign-out dialog
+  assert.match(html, /<div class="shell" id="shell" hidden>/);
+  assert.match(html, /<p class="tutor-dot" id="tutor-dot" role="status" aria-live="polite">/);
+  assert.match(html, /<dialog id="sign-out-dialog"/);
+  assert.match(html, /<button type="button" class="link-button wake-retry" id="wake-retry" hidden>Try again<\/button>/);
 });
 
 test("deploy stamping covers the parent page and the shared modules", () => {
@@ -397,7 +398,7 @@ test("deploy stamping covers the parent page and the shared modules", () => {
     const parentJs = readFileSync(join(dir, "web", "parent", "parent.js"), "utf8");
     assert.match(parentJs, /from "\.\.\/shared\/auth\.js\?v=abc12345"/);
     assert.match(parentJs, /from "\.\.\/config\.js\?v=abc12345"/);
-    const appJs = readFileSync(join(dir, "web", "app.js"), "utf8");
+    const appJs = readFileSync(join(dir, "web", "chat-app.js"), "utf8");
     assert.match(appJs, /from "\.\/shared\/wake\.js\?v=abc12345"/);
     const wakeJs = readFileSync(join(dir, "web", "shared", "wake.js"), "utf8");
     assert.match(wakeJs, /from "\.\/auth\.js\?v=abc12345"/);

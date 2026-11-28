@@ -538,7 +538,8 @@ test("capture code builds the list with text only and never logs file names", ()
 
 test("learner page has the capture section with camera, gallery and file inputs", () => {
   const html = readFileSync(join(WEB, "index.html"), "utf8");
-  assert.match(html, /<h2 id="capture-heading">What are you working on\?<\/h2>/);
+  // WP-134a: on the chat page's Photos & files page
+  assert.match(html, /<h1 id="captures-heading" tabindex="-1">Your photos and files<\/h1>/);
   assert.match(html, /<button type="button" id="capture-camera"[^>]*>Take a photo<\/button>/);
   assert.match(html, /<button type="button" id="capture-gallery"[^>]*>Choose a photo<\/button>/);
   assert.match(html, /<button type="button" id="capture-file"[^>]*>Add a file<\/button>/);
@@ -557,7 +558,7 @@ test("deploy stamping covers the capture modules", () => {
   try {
     cpSync(WEB, join(dir, "web"), { recursive: true });
     execFileSync("bash", [join(ROOT, "scripts", "stamp-versions.sh"), join(dir, "web"), "abc12345"], { stdio: "pipe" });
-    const appJs = readFileSync(join(dir, "web", "app.js"), "utf8");
+    const appJs = readFileSync(join(dir, "web", "chat-app.js"), "utf8");
     assert.match(appJs, /from "\.\/capture\.js\?v=abc12345"/);
     const captureJs = readFileSync(join(dir, "web", "capture.js"), "utf8");
     assert.match(captureJs, /from "\.\/shared\/capture\.js\?v=abc12345"/);
@@ -568,9 +569,9 @@ test("deploy stamping covers the capture modules", () => {
   }
 });
 
-test("app.js still imports under Node without a DOM", async () => {
-  const app = await import("../web/app.js");
-  assert.equal(typeof app.loginUrl, "function");
+test("the page code still imports under Node without a DOM", async () => {
+  const app = await import("../web/chat-app.js");
+  assert.equal(typeof app.initChat, "function");
   const capture = await import("../web/capture.js");
   assert.equal(typeof capture.createCaptureScreen, "function");
   assert.equal(typeof capture.resizeImage, "function");

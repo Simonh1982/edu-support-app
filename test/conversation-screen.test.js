@@ -2,10 +2,8 @@
 // Invented data only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   ATTEMPT_PROMPTS,
@@ -54,10 +52,8 @@ test("the screen's copies match the server", () => {
   assert.equal(MESSAGE_MAX_CHARS, serverWork.WORK_LIMITS.attemptText);
   assert.deepEqual([...FIRST_PAIR], [...serverConversations.FIRST_PAIR]);
   assert.deepEqual([...VOTES], [...serverConversations.VOTES]);
-  const html = read("index.html");
-  for (const id of ["talk-text", "help-other-text"]) {
-    assert.match(html, new RegExp(`id="${id}"[^>]*maxlength="${MESSAGE_MAX_CHARS}"`), id);
-  }
+  // WP-134a: the chat page's message box
+  assert.match(read("index.html"), new RegExp(`id="message"[^>]*maxlength="${MESSAGE_MAX_CHARS}"`));
 });
 
 // ---------- routes and tasks ----------
@@ -277,67 +273,3 @@ test("Back is a clear outlined button, and a chosen vote is ticked as well as fi
 });
 
 // ---------- the page ----------
-
-test("the work view starts with Get help with a task; the conversation view has the support area", () => {
-  const html = read("index.html");
-  const work = html.slice(html.indexOf('<div id="view-work"'), html.indexOf('<div id="view-talk"'));
-  assert.ok(work.indexOf('id="help-start"') < work.indexOf('id="capture"'), "help comes first");
-  assert.match(work, /<h2 id="help-heading" tabindex="-1">Get help with a task<\/h2>/);
-  assert.match(work, /id="help-other"[^>]*aria-controls="help-other-form" aria-expanded="false">Something else<\/button>/);
-  const talk = html.slice(html.indexOf('<div id="view-talk"'), html.indexOf('<div id="view-upcoming"'));
-  assert.match(talk, /<div id="view-talk" class="view" hidden>\s*<button type="button" id="talk-back" class="back">Back<\/button>/);
-  assert.match(talk, /<label id="talk-prompt-label" for="talk-text">/);
-  assert.match(talk, /<textarea id="talk-text"[^>]*aria-describedby="talk-prompt-hint"/);
-  assert.match(talk, /id="talk-escape"[^>]*>I don't know where to start<\/button>/);
-  assert.match(talk, /<section id="talk-support" class="support" aria-labelledby="support-heading" hidden>/);
-  assert.match(talk, /<ol id="talk-turns" class="turns" aria-label="Your conversation" hidden><\/ol>/);
-  assert.match(talk, /id="talk-status" class="status" role="status" aria-live="polite"/);
-  assert.match(talk, /id="talk-error" class="error" role="alert"/);
-  assert.doesNotMatch(talk, /\son[a-z]+=/, "no inline handlers");
-});
-
-test("home knows the conversation view, with no button of its own on the home view", async () => {
-  const { VIEWS, HOME_OPENERS } = await import("../web/home.js");
-  assert.ok(VIEWS.includes("talk"));
-  // WP-115b adds "Your notebook" (owner's choice)
-  assert.deepEqual([...HOME_OPENERS], ["work", "upcoming", "learn", "more", "notebook"]);
-});
-
-test("the page wires the conversation and the coloured status panel", () => {
-  const app = read("app.js");
-  assert.match(app, /import \{ createConversation \} from "\.\/conversation\.js";/);
-  assert.match(app, /conversation\?\.setTutor\(state\)/);
-  assert.match(app, /conversation\?\.stop\(\)/, "signing out clears the conversation");
-  assert.match(app, /conversation\?\.start\(\)/);
-  assert.match(app, /els\.wakeStatus\.dataset\.tutor = tutorPanel\(state\)/);
-  assert.match(app, /els\.wakeStatus\.removeAttribute\("data-tutor"\)/);
-});
-
-test("conversation code keeps to the page rules", () => {
-  const shared = read("shared", "conversation.js")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/.*$/gm, "")
-    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
-    .replace(/`(?:[^`\\]|\\.)*`/g, "``");
-  assert.doesNotMatch(shared, /\b(document|window|localStorage|sessionStorage|indexedDB|navigator|process|Buffer|require)\b/);
-  assert.doesNotMatch(shared, /^import /m, "no imports");
-  const page = read("conversation.js");
-  assert.doesNotMatch(page, /innerHTML|insertAdjacentHTML|localStorage|sessionStorage|indexedDB/);
-});
-
-test("the conversation page code imports under Node without a DOM", async () => {
-  assert.equal(typeof (await import("../web/conversation.js")).createConversation, "function");
-});
-
-test("deploy stamping covers the new modules", { skip: !existsSync(join(ROOT, "scripts", "stamp-versions.sh")) }, () => {
-  const dir = mkdtempSync(join(tmpdir(), "wp111b-stamp-"));
-  try {
-    cpSync(WEB, join(dir, "web"), { recursive: true });
-    execFileSync("bash", [join(ROOT, "scripts", "stamp-versions.sh"), join(dir, "web"), "abc12345"], { stdio: "pipe" });
-    assert.match(readFileSync(join(dir, "web", "app.js"), "utf8"), /from "\.\/conversation\.js\?v=abc12345"/);
-    assert.match(readFileSync(join(dir, "web", "conversation.js"), "utf8"), /from "\.\/shared\/conversation\.js\?v=abc12345"/);
-    assert.match(readFileSync(join(dir, "web", "shared", "api.js"), "utf8"), /from "\.\/conversation\.js\?v=abc12345"/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});

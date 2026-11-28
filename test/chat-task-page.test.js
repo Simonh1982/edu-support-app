@@ -118,10 +118,8 @@ test("Attach a copy: on a saved card in a chat about a task, it goes to that sou
 });
 
 test("the page has the classic task panel's parts, in a labelled panel the task button controls", () => {
-  const chat = read("web/chat.html");
-  const classic = read("web/index.html");
-  const panelIds = [...classic.slice(classic.indexOf('id="task-panel"'), classic.indexOf('id="talk-routes"')).matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(panelIds.length > 20);
+  const chat = read("web/index.html");
+  const panelIds = ["task-panel-title", "task-panel-stage-select", "task-panel-question-text", "task-panel-sources-list", "own-source-form", "own-source-files", "task-panel-notes-list", "task-panel-note-editor", "task-panel-plan-body", "task-panel-earlier"];
   for (const id of panelIds) assert.match(chat, new RegExp(`id="${id}"`), id);
   assert.match(chat, /<aside class="task-side" id="task-side" aria-label="This task" hidden>/);
   assert.match(chat, /id="task-chip" aria-controls="task-side" aria-expanded="false"/);

@@ -171,19 +171,8 @@ test("web/shared/upcoming.js uses no DOM-only or Node-only APIs and imports noth
   assert.doesNotMatch(source, /^\s*import\b/m);
 });
 
-test("the page has the Coming up section, and the page code stores nothing in the browser", () => {
+test("the Coming up page is retired: the side menu's task list replaces it (A-013 §3)", () => {
   const html = readFileSync(join(WEB, "index.html"), "utf8");
-  assert.match(html, /<section id="upcoming"[^>]*aria-labelledby="upcoming-heading"/);
-  assert.match(html, /<h2 id="upcoming-heading" tabindex="-1">Coming up<\/h2>/);
-  assert.match(html, /id="upcoming-status" class="status" role="status" aria-live="polite"/);
-  assert.match(html, /<button type="button" id="upcoming-undo" class="secondary" hidden>Undo<\/button>/);
-  const page = readFileSync(join(WEB, "upcoming.js"), "utf8");
-  assert.doesNotMatch(page, /localStorage|sessionStorage|indexedDB|innerHTML/);
-  const app = readFileSync(join(WEB, "app.js"), "utf8");
-  assert.match(app, /from "\.\/upcoming\.js"/);
-  assert.match(app, /upcoming\?\.stop\(\)/);
-  assert.match(app, /onTaskAdded:/);
-  const check = readFileSync(join(WEB, "check.js"), "utf8");
-  // WP-115c: typed tasks go through Check the details too, so only a confirmed task is added
-  assert.equal((check.match(/onTaskAdded\?\.\(\)/g) ?? []).length, 1, "after a confirmed task");
+  assert.doesNotMatch(html, /id="upcoming"/);
+  assert.match(readFileSync(join(WEB, "side-menu.js"), "utf8"), /showTasks/);
 });

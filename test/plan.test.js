@@ -241,11 +241,12 @@ test('Your plan: the five prompts, labelled; Save sends only what changed; Pin a
   assert.match(els['task-panel-plan-body'].textContent, /Question from the tutor.*What would show it\?/);
 });
 
-test('the page has the plan part, and the conversation opens it for Plan my answer', () => {
+test('the page has the plan part, and a Plan my answer chat opens it', () => {
   const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
   assert.match(html, /<details id="task-panel-plan" class="more" hidden>\s*<summary>Your plan for this task<\/summary>/);
-  const conversation = readFileSync(new URL('../web/conversation.js', import.meta.url), 'utf8');
-  assert.match(conversation, /openPlan: route === "plan"/);
+  // WP-134a: the chat page's task panel opens at the plan for a Plan my answer chat
+  const page = readFileSync(new URL('../web/chat-app.js', import.meta.url), 'utf8');
+  assert.match(page, /panelFor\(conv\.taskId, \{ openPlan: conv\.route === "plan" && !attachSource \}\)/);
   for (const file of ['task-plan.js']) {
     assert.doesNotMatch(readFileSync(new URL(`../web/${file}`, import.meta.url), 'utf8'), /innerHTML|localStorage|sessionStorage|indexedDB|confirm\(/);
   }

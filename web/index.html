@@ -1,439 +1,219 @@
 <!doctype html>
 <html lang="en-GB">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#1d4f7a">
-    <meta name="robots" content="noindex">
-    <title>Sign in</title>
-    <link rel="manifest" href="manifest.webmanifest">
-    <link rel="icon" href="icons/icon-192.png" type="image/png">
-    <link rel="stylesheet" href="app.css">
-    <script type="module" src="app.js"></script>
-  </head>
-  <body>
-    <main id="main">
-      <section id="sign-in-screen" aria-labelledby="sign-in-heading">
-        <h1 id="sign-in-heading" tabindex="-1">Sign in</h1>
-        <p>Sign in with your GitHub account to carry on.</p>
-
-        <form id="sign-in-form" novalidate>
-          <div class="check">
-            <input type="checkbox" id="shared-computer" name="shared">
-            <label for="shared-computer">This is a shared computer</label>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1d4f7a">
+  <meta name="robots" content="noindex">
+  <title>Study</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="chat.css">
+</head>
+<!-- The learner page (A-013, chat first). WP-134a: the classic screens are retired and sign-in
+     happens here. -->
+<body class="chat-page">
+  <div class="shell" id="shell" hidden>
+    <nav class="side" id="side" aria-label="Your chats, tasks and topics"></nav>
+    <div class="scrim" id="scrim" hidden></div>
+    <div class="main">
+      <header class="top">
+        <button type="button" class="icon-button menu-button" id="menu-open" aria-controls="side" aria-expanded="false" aria-label="Open the menu"><span aria-hidden="true">☰</span></button>
+        <div class="top-title" id="top-title"></div>
+        <button type="button" class="task-chip" id="task-chip" aria-controls="task-side" aria-expanded="false" hidden></button>
+        <button type="button" class="link-button wake-retry" id="wake-retry" hidden>Try again</button>
+        <p class="tutor-dot" id="tutor-dot" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span class="dot-word">Waking</span></p>
+      </header>
+      <main class="view" id="view" tabindex="-1"></main>
+      <form class="composer-wrap" id="composer" novalidate>
+        <!-- WP-132a: the "+" menu's paste mode adds a due date (WP-115c's form, in the chat) -->
+        <div class="paste-extra" id="paste-extra" hidden>
+          <label for="paste-due">When is it due?</label>
+          <input type="date" id="paste-due" aria-describedby="paste-due-hint">
+          <span class="hint" id="paste-due-hint">Optional.</span>
+          <button type="button" class="link-button" id="paste-cancel">Cancel</button>
+        </div>
+        <div class="composer">
+          <label for="message" class="visually-hidden">Your message</label>
+          <textarea id="message" rows="1" maxlength="4000" placeholder="Ask anything…"></textarea>
+          <div class="composer-row">
+            <button type="button" class="icon-button plus" id="plus" aria-haspopup="menu" aria-expanded="false" aria-controls="plus-menu" aria-label="Add a photo, file, task or source"><span aria-hidden="true">+</span></button>
+            <button type="button" class="type-chip" id="type-chip" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu">Help: automatic</button>
+            <button type="submit" class="send" id="send" aria-label="Send"><span aria-hidden="true">↑</span></button>
           </div>
-          <p class="hint" id="shared-hint">
-            Tick this on a school or library computer. Nothing is saved on the computer,
-            and you're signed out after 4 hours.
-          </p>
-          <button type="submit" class="primary" aria-describedby="shared-hint">
-            Sign in with GitHub
-          </button>
-        </form>
-
-        <p id="sign-in-status" class="status" role="status" aria-live="polite"></p>
-      </section>
-
-      <section id="home-screen" aria-labelledby="home-heading" hidden>
-        <h1 id="home-heading" tabindex="-1">Home</h1>
-        <p id="shared-note" class="hint" hidden>
-          You're on a shared computer. Nothing is saved here, and you'll be signed out
-          after 4 hours or when you close this tab.
-        </p>
-
-        <p id="wake-status" class="status" role="status" aria-live="polite"></p>
-
-        <div class="actions">
-          <button type="button" id="wake-retry" class="primary" hidden>Try again</button>
         </div>
-
-        <p id="queue-note" class="queue-note" role="status" aria-live="polite" hidden></p>
-
-        <!-- WP-110: the home view, with one view per main action (build spec §6, §6.1) -->
-        <div id="view-home" class="view">
-          <section id="recommend" class="recommend" aria-labelledby="recommend-heading" hidden>
-            <h2 id="recommend-heading">Recommended next</h2>
-            <p id="recommend-text"></p>
-            <button type="button" id="recommend-open" class="secondary">See it in your list</button>
-          </section>
-
-          <nav class="main-actions" aria-label="Main actions">
-            <button type="button" id="go-work" class="big">Help me with some work</button>
-            <button type="button" id="go-learn" class="big">Learn or revise</button>
-            <button type="button" id="go-upcoming" class="big">See what's coming up</button>
-            <button type="button" id="go-notebook" class="big">Your notebook</button>
-          </nav>
-
-          <button type="button" id="go-more" class="link">More</button>
-        </div>
-
-        <div id="view-work" class="view" hidden>
-          <button type="button" class="back" data-back>Back</button>
-
-          <!-- WP-111b: start a conversation about a task (build spec §9, §10) -->
-          <section id="help-start" class="help-start" aria-labelledby="help-heading">
-            <h2 id="help-heading" tabindex="-1">Get help with a task</h2>
-            <p class="hint">Pick a task, or tell the tutor what you need.</p>
-            <ul id="help-tasks" class="plain-list help-tasks" aria-labelledby="help-heading"></ul>
+        <ul class="plus-menu help-menu" id="help-menu" role="menu" aria-label="Kind of help" hidden>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="true" data-help="auto">Help: automatic</button></li>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="false" data-help="research">Understand and research it</button></li>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="false" data-help="plan">Plan my answer</button></li>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="false" data-help="review">Review my work</button></li>
+          <li role="none"><button type="button" role="menuitemradio" aria-checked="false" data-help="learn">Learn something</button></li>
+        </ul>
+        <ul class="plus-menu" id="plus-menu" role="menu" aria-label="Add" hidden>
+          <li role="none"><button type="button" role="menuitem" data-add="camera">Take a photo</button></li>
+          <li role="none"><button type="button" role="menuitem" data-add="gallery">Choose a photo</button></li>
+          <li role="none"><button type="button" role="menuitem" data-add="file">Attach a file</button></li>
+          <li role="none"><button type="button" role="menuitem" data-add="paste">Paste a task</button></li>
+          <li role="none"><button type="button" role="menuitem" data-add="source">Add a source</button></li>
+        </ul>
+        <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
+        <input type="file" id="gallery-input" accept="image/*" multiple hidden>
+        <input type="file" id="file-input" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+        <p class="composer-note" id="composer-note" role="status" aria-live="polite"></p>
+        <p class="composer-hint">The tutor helps you think. It won't write your answers.</p>
+      </form>
+      <!-- WP-134a: pages that keep their own state; each moves into the main view while open -->
+      <div class="page-store" id="page-store" hidden>
+        <section class="column page" id="notebook-page" aria-labelledby="notebook-heading">
+          <h1 id="notebook-heading" tabindex="-1">Your notebook</h1>
+          <form id="notebook-search" class="notebook-search" role="search" novalidate>
+            <label for="notebook-q">Search your notebook</label>
+            <p class="hint" id="notebook-q-hint">Words from a title, a note or a source.</p>
+            <input type="search" id="notebook-q" maxlength="100" autocomplete="off" aria-describedby="notebook-q-hint">
+            <label for="notebook-kind">Show</label>
+            <select id="notebook-kind"></select>
+            <label for="notebook-task">Task</label>
+            <select id="notebook-task"></select>
             <div class="actions">
-              <button type="button" id="help-all" class="secondary" hidden>Show all tasks</button>
-              <button type="button" id="help-other" class="secondary" aria-controls="help-other-form" aria-expanded="false">Something else</button>
+              <button type="submit" class="primary">Search</button>
             </div>
-            <form id="help-other-form" class="panel" aria-labelledby="help-other-heading" novalidate hidden>
-              <h3 id="help-other-heading">Something else</h3>
-              <label for="help-other-text">What do you need help with?</label>
-              <textarea id="help-other-text" rows="3" maxlength="4000"></textarea>
-              <div class="actions">
-                <button type="submit" class="primary">Next</button>
-              </div>
-            </form>
-            <p id="help-status" class="status" role="status" aria-live="polite"></p>
-          </section>
-
-          <section id="capture" class="capture" aria-labelledby="capture-heading">
-            <h2 id="capture-heading">What are you working on?</h2>
-            <p class="hint" id="capture-hint">
-              Take a photo of the task, or add a photo, PDF or Word file. You don't need to wait
-              for the tutor.
-            </p>
-            <div class="actions">
-              <button type="button" id="capture-camera" class="primary" aria-describedby="capture-hint">Take a photo</button>
-              <button type="button" id="capture-gallery" class="secondary">Choose a photo</button>
-              <button type="button" id="capture-file" class="secondary">Add a file</button>
-            </div>
-            <input type="file" id="capture-camera-input" accept="image/*" capture="environment" hidden>
-            <input type="file" id="capture-gallery-input" accept="image/*" multiple hidden>
-            <input type="file" id="capture-file-input" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
-
-            <p id="capture-status" class="status" role="status" aria-live="polite"></p>
-
-            <!-- WP-115c: one form for typing or pasting a task, with its due date -->
-            <div class="actions">
-              <button type="button" id="paste-open" class="secondary" aria-controls="paste-form" aria-expanded="false" disabled>Type or paste it</button>
-            </div>
-            <p id="tutor-needed" class="hint">You can type or paste a task now. It's read once the tutor's ready.</p>
-
-            <form id="paste-form" class="panel" aria-labelledby="paste-heading" novalidate hidden>
-              <h3 id="paste-heading">Type or paste it</h3>
-              <label for="paste-text">The task or question</label>
-              <p class="hint" id="paste-text-hint">Type it or paste it in: the whole task, with any instructions. The tutor reads it, then asks you to check the details.</p>
-              <textarea id="paste-text" rows="8" maxlength="20000" aria-describedby="paste-text-hint"></textarea>
-              <label for="paste-deadline">When is it due?</label>
-              <p class="hint" id="paste-deadline-hint">Leave it blank if you don't know yet.</p>
-              <input type="date" id="paste-deadline" aria-describedby="paste-deadline-hint paste-deadline-uk">
-              <p class="hint" id="paste-deadline-uk"></p>
-              <div class="actions">
-                <button type="submit" class="primary">Read this</button>
-                <button type="button" id="paste-cancel" class="secondary">Cancel</button>
-              </div>
-            </form>
-
-            <p id="entry-status" class="status" role="status" aria-live="polite"></p>
-
-            <h2 id="captures-heading" tabindex="-1">Your photos and files</h2>
-            <p id="captures-empty" class="hint">Nothing added yet.</p>
-            <ul id="captures-list" class="captures" aria-labelledby="captures-heading"></ul>
-            <button type="button" id="captures-refresh" class="secondary">Check again</button>
-          </section>
-
-          <section id="check-screen" class="check-screen" aria-labelledby="check-heading" hidden>
-            <h2 id="check-heading" tabindex="-1">Check the details</h2>
-            <p id="check-status" class="status" role="status" aria-live="polite"></p>
-
-            <form id="check-form" novalidate hidden>
-              <p id="check-intro"></p>
-              <div id="check-ask"></div>
-
-              <section id="check-corrections" aria-labelledby="corrections-heading" hidden>
-                <h3 id="corrections-heading">Spelling I corrected</h3>
-                <p class="hint">Tap Undo to keep the spelling as it was.</p>
-                <ul id="corrections-list" class="plain-list"></ul>
-              </section>
-
-              <section aria-labelledby="chips-heading">
-                <h3 id="chips-heading" tabindex="-1">What this task is about</h3>
-                <p class="hint">The tutor keeps to these. Edit or remove any that are wrong.</p>
-                <ul id="chips-list" class="chips"></ul>
-                <details class="more">
-                  <summary>Add one</summary>
-                  <label for="chip-type">What is it?</label>
-                  <select id="chip-type">
-                    <option value="question">Question</option>
-                    <option value="location" selected>Place or case study</option>
-                    <option value="text">Set text or extract</option>
-                    <option value="track">Track</option>
-                  </select>
-                  <label for="chip-new">Words</label>
-                  <input type="text" id="chip-new" maxlength="1000" autocomplete="off">
-                  <div class="actions">
-                    <button type="button" id="chip-add" class="secondary">Add</button>
-                  </div>
-                </details>
-                <p id="chip-error" class="error" role="alert"></p>
-              </section>
-
-              <details id="check-more" class="more">
-                <summary>Other details</summary>
-                <div id="check-other">
-                  <div class="field" id="check-field-title">
-                    <label for="check-title">Title</label>
-                    <p class="prompt" id="check-prompt-title" hidden></p>
-                    <input type="text" id="check-title" maxlength="120" autocomplete="off">
-                  </div>
-                  <div class="field" id="check-field-subject">
-                    <label for="check-subject">Subject</label>
-                    <p class="prompt" id="check-prompt-subject" hidden></p>
-                    <input type="text" id="check-subject" maxlength="40" autocomplete="off">
-                  </div>
-                  <div class="field" id="check-field-deadline">
-                    <label for="check-deadline">Deadline</label>
-                    <p class="prompt" id="check-prompt-deadline" hidden></p>
-                    <input type="date" id="check-deadline" aria-describedby="check-deadline-uk">
-                    <p class="hint" id="check-deadline-uk"></p>
-                  </div>
-                  <div class="field" id="check-field-question">
-                    <label for="check-question">Question</label>
-                    <p class="prompt" id="check-prompt-question" hidden></p>
-                    <textarea id="check-question" rows="5" maxlength="4000"></textarea>
-                  </div>
-                  <div class="field" id="check-field-kind">
-                    <label for="check-kind">Kind of task</label>
-                    <p class="prompt" id="check-prompt-kind" hidden></p>
-                    <select id="check-kind">
-                      <option value="">Not sure</option>
-                      <option value="assignment">Assignment</option>
-                      <option value="homework">Homework</option>
-                      <option value="assessment">Assessment</option>
-                    </select>
-                  </div>
-                  <div class="field" id="check-field-workType">
-                    <label for="check-workType">Kind of work</label>
-                    <p class="prompt" id="check-prompt-workType" hidden></p>
-                    <select id="check-workType">
-                      <option value="">Not sure</option>
-                      <option value="essay">Essay</option>
-                      <option value="worksheet">Worksheet</option>
-                      <option value="project">Project</option>
-                      <option value="production">Production</option>
-                      <option value="other">Something else</option>
-                    </select>
-                  </div>
-                  <div class="field" id="check-field-marks">
-                    <label for="check-marks">Marks</label>
-                    <p class="prompt" id="check-prompt-marks" hidden></p>
-                    <input type="text" id="check-marks" inputmode="numeric" maxlength="4" autocomplete="off">
-                  </div>
-                  <div class="field" id="check-field-wordCount">
-                    <label for="check-wordCount">Word count</label>
-                    <p class="prompt" id="check-prompt-wordCount" hidden></p>
-                    <input type="text" id="check-wordCount" inputmode="numeric" maxlength="6" autocomplete="off">
-                  </div>
-                </div>
-              </details>
-
-              <details class="more">
-                <summary>What I read</summary>
-                <p id="check-read-note" class="hint"></p>
-                <div id="check-read-text" class="read-text"></div>
-              </details>
-
-              <p id="check-error" class="error" role="alert"></p>
-              <div class="actions">
-                <button type="submit" class="primary">Add this task</button>
-              </div>
-            </form>
-
-            <div class="actions">
-              <button type="button" id="check-back" class="secondary">Back</button>
-            </div>
-          </section>
-        </div>
-
-        <!-- WP-111b: the conversation, with attempt before help and the two support pairs (build spec §20–§23) -->
-        <div id="view-talk" class="view" hidden>
-          <button type="button" id="talk-back" class="back">Back</button>
-
-          <section id="talk" class="talk" aria-labelledby="talk-heading">
-            <h2 id="talk-heading" tabindex="-1">Understand and research it</h2>
-            <p id="talk-task" class="hint"></p>
-
-            <!-- WP-114e: the task, with its question, sources and (WP-115) notes, each collapsed (build spec §10, §26; A-010) -->
-            <section id="task-panel" class="task-panel" aria-labelledby="task-panel-title" hidden>
-              <h3 id="task-panel-title"></h3>
-              <p id="task-panel-meta" class="hint"></p>
-              <p id="task-panel-due" class="task-panel-due"></p>
-              <details id="task-panel-stage" class="more">
-                <summary>Change the stage</summary>
-                <label for="task-panel-stage-select">Stage</label>
-                <select id="task-panel-stage-select">
-                  <option value="not-started">Not started</option>
-                  <option value="researching">Researching</option>
-                  <option value="planning">Planning</option>
-                  <option value="drafting">Drafting</option>
-                  <option value="reviewing">Reviewing</option>
-                  <option value="submitted">Handed in</option>
-                  <option value="done">Done</option>
-                </select>
-                <div class="actions">
-                  <button type="button" id="task-panel-stage-save" class="primary">Save the stage</button>
-                </div>
-                <p id="task-panel-stage-status" class="status" role="status" aria-live="polite"></p>
-              </details>
-              <details id="task-panel-question" class="more">
-                <summary>Show the question</summary>
-                <p id="task-panel-question-text" class="read-text"></p>
-              </details>
-              <details id="task-panel-sources" class="more">
-                <summary id="task-panel-sources-label">Your sources for this task</summary>
-                <p id="task-panel-sources-status" class="hint"></p>
-                <ul id="task-panel-sources-list" class="source-cards"></ul>
-                <details id="own-source" class="more">
-                  <summary>Add a source you found yourself</summary>
-                  <form id="own-source-form" novalidate>
-                    <label for="own-source-title">Title</label>
-                    <input type="text" id="own-source-title" maxlength="200" autocomplete="off">
-                    <label for="own-source-author">Author or publisher, if you know it</label>
-                    <input type="text" id="own-source-author" maxlength="120" autocomplete="off">
-                    <label for="own-source-url">Link, if it has one</label>
-                    <input type="url" id="own-source-url" maxlength="500" autocomplete="off" inputmode="url">
-                    <label for="own-source-files">A copy of it, if you have one</label>
-                    <p class="hint" id="own-source-files-hint">Up to 5: a PDF, a Word file or photos of the pages. The tutor reads the copy when the page won't open.</p>
-                    <input type="file" id="own-source-files" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple aria-describedby="own-source-files-hint">
-                    <div class="actions">
-                      <button type="submit" id="own-source-add" class="primary">Add this source</button>
-                    </div>
-                  </form>
-                  <p id="own-source-status" class="status" role="status" aria-live="polite"></p>
-                </details>
-              </details>
-              <!-- WP-115b: his notes, quotes and AI summaries for this task, and earlier research (build spec §29) -->
-              <div id="task-panel-earlier" class="earlier" hidden></div>
-              <details id="task-panel-notes" class="more" hidden>
-                <summary id="task-panel-notes-label">Your notes for this task</summary>
-                <p id="task-panel-notes-status" class="hint" role="status" aria-live="polite"></p>
-                <ul id="task-panel-notes-list" class="source-cards"></ul>
-                <details class="more">
-                  <summary>Write a note</summary>
-                  <div id="task-panel-note-editor"></div>
-                </details>
-              </details>
-              <!-- WP-116: his plan, in his own words, with pinned references and gaps (build spec §9.2) -->
-              <details id="task-panel-plan" class="more" hidden>
-                <summary>Your plan for this task</summary>
-                <p id="task-panel-plan-status" class="status" role="status" aria-live="polite"></p>
-                <div id="task-panel-plan-body"></div>
-              </details>
-            </section>
-
-            <div id="talk-routes" class="route-switch" hidden>
-              <p class="hint">Not quite right? Start somewhere else:</p>
-              <div id="talk-route-buttons" class="actions"></div>
-            </div>
-
-            <ol id="talk-turns" class="turns" aria-label="Your conversation" hidden></ol>
-            <div class="actions" id="talk-new-actions" hidden>
-              <button type="button" id="talk-new" class="secondary">Start a new conversation</button>
-            </div>
-
-            <section id="talk-support" class="support" aria-labelledby="support-heading" hidden>
-              <h3 id="support-heading">Need some help?</h3>
-              <div id="talk-support-buttons" class="actions"></div>
-            </section>
-
-            <form id="talk-form" class="talk-form" novalidate>
-              <label id="talk-prompt-label" for="talk-text">What do you think the question is asking?</label>
-              <p id="talk-prompt-hint" class="hint">Anything counts, however rough. Spelling doesn't matter.</p>
-              <textarea id="talk-text" rows="4" maxlength="4000" aria-describedby="talk-prompt-hint"></textarea>
-              <div class="actions">
-                <button type="submit" id="talk-send" class="primary" disabled>Send</button>
-                <button type="button" id="talk-escape" class="secondary" disabled>I don't know where to start</button>
-              </div>
-            </form>
-
-            <p id="talk-status" class="status" role="status" aria-live="polite"></p>
-            <p id="talk-error" class="error" role="alert"></p>
-          </section>
-        </div>
-
-        <div id="view-upcoming" class="view" hidden>
-          <button type="button" class="back" data-back>Back</button>
-
-          <section id="upcoming" class="upcoming" aria-labelledby="upcoming-heading">
-            <h2 id="upcoming-heading" tabindex="-1">Coming up</h2>
-            <p id="upcoming-source" class="hint" hidden></p>
-            <p id="upcoming-status" class="status" role="status" aria-live="polite"></p>
-            <div class="actions">
-              <button type="button" id="upcoming-undo" class="secondary" hidden>Undo</button>
-            </div>
-            <div id="upcoming-groups"></div>
-          </section>
-        </div>
-
-        <div id="view-learn" class="view" hidden>
-          <button type="button" class="back" data-back>Back</button>
-
-          <section aria-labelledby="learn-heading">
-            <h2 id="learn-heading" tabindex="-1">Learn or revise</h2>
-            <p>This is coming soon. For now, use "Help me with some work" for anything you've been set.</p>
-          </section>
-        </div>
-
-        <div id="view-notebook" class="view" hidden>
-          <button type="button" class="back" data-back>Back</button>
-
-          <section aria-labelledby="notebook-heading">
-            <h2 id="notebook-heading" tabindex="-1">Your notebook</h2>
-            <form id="notebook-search" class="notebook-search" role="search" novalidate>
-              <label for="notebook-q">Search your notebook</label>
-              <p class="hint" id="notebook-q-hint">Words from a title, a note or a source.</p>
-              <input type="search" id="notebook-q" maxlength="100" autocomplete="off" aria-describedby="notebook-q-hint">
-              <label for="notebook-kind">Show</label>
-              <select id="notebook-kind"></select>
-              <label for="notebook-task">Task</label>
-              <select id="notebook-task"></select>
-              <div class="actions">
-                <button type="submit" class="primary">Search</button>
-              </div>
-            </form>
-            <div class="actions">
-              <button type="button" id="notebook-write" class="secondary" hidden>Write a note</button>
-            </div>
-            <div id="notebook-editor" hidden></div>
-            <p id="notebook-status" class="status" role="status" aria-live="polite"></p>
-            <ul id="notebook-list" class="source-cards" aria-label="Your notebook"></ul>
-          </section>
-        </div>
-
-        <div id="view-more" class="view" hidden>
-          <button type="button" class="back" data-back>Back</button>
-
-          <section aria-labelledby="more-heading">
-            <h2 id="more-heading" tabindex="-1">More</h2>
-            <div class="actions">
-              <button type="button" id="more-photos" class="secondary">Your photos and files</button>
-            </div>
-            <!-- WP-131b (A-013): the new chat-first page, beside this one until WP-134 -->
-            <p><a id="try-chat" class="link" href="chat.html">Try the new chat design</a></p>
-            <p class="hint">Settings will be here soon.</p>
-            <div class="actions">
-              <button type="button" id="sign-out" class="secondary">Sign out</button>
-            </div>
-          </section>
-        </div>
-
-        <dialog id="sign-out-dialog" aria-labelledby="sign-out-heading" aria-describedby="sign-out-text">
-          <h2 id="sign-out-heading">Sign out now?</h2>
-          <p id="sign-out-text"></p>
+          </form>
           <div class="actions">
-            <button type="button" id="sign-out-cancel" class="primary">Stay signed in</button>
-            <button type="button" id="sign-out-confirm" class="secondary">Sign out anyway</button>
+            <button type="button" id="notebook-write" class="secondary" hidden>Write a note</button>
           </div>
-        </dialog>
-      </section>
+          <div id="notebook-editor" hidden></div>
+          <p id="notebook-status" class="status" role="status" aria-live="polite"></p>
+          <ul id="notebook-list" class="source-cards" aria-label="Your notebook"></ul>
+        </section>
+        <!-- WP-134a: Photos & files, from the menu's foot (WP-014b's list, A-008) -->
+        <section class="column page" id="files-page" aria-labelledby="captures-heading">
+          <h1 id="captures-heading" tabindex="-1">Your photos and files</h1>
+          <p class="hint" id="capture-hint">Photos and files you've sent, and how they're getting on. They're removed automatically once they're tasks (or after a while). You can also add a task with the "+" button in any chat.</p>
+          <div class="actions">
+            <button type="button" id="capture-camera" class="secondary" aria-describedby="capture-hint">Take a photo</button>
+            <button type="button" id="capture-gallery" class="secondary">Choose a photo</button>
+            <button type="button" id="capture-file" class="secondary">Add a file</button>
+          </div>
+          <input type="file" id="capture-camera-input" accept="image/*" capture="environment" hidden>
+          <input type="file" id="capture-gallery-input" accept="image/*" multiple hidden>
+          <input type="file" id="capture-file-input" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+          <p id="capture-status" class="status" role="status" aria-live="polite"></p>
+          <p id="captures-empty" class="hint">Nothing added yet.</p>
+          <ul id="captures-list" class="captures" aria-labelledby="captures-heading"></ul>
+          <button type="button" id="captures-refresh" class="secondary">Check again</button>
+        </section>
+      </div>
+    </div>
+    <!-- WP-133 (A-013 §5): the task panel beside a chat (monitor: a third column; tablet and phone:
+         over the chat). The same panel moves onto the task page when that is open. -->
+    <aside class="task-side" id="task-side" aria-label="This task" hidden>
+      <div class="task-side-top">
+        <button type="button" class="link-button" id="task-side-close">Back to the chat</button>
+        <button type="button" class="link-button" id="task-side-page">Open the task page</button>
+      </div>
+      <div class="task-side-body" id="task-side-body">
+        <section id="task-panel" class="task-panel" aria-labelledby="task-panel-title" hidden>
+          <h2 id="task-panel-title" tabindex="-1"></h2>
+          <p id="task-panel-meta" class="hint"></p>
+          <p id="task-panel-due" class="task-panel-due"></p>
+          <details id="task-panel-stage" class="more">
+            <summary>Change the stage</summary>
+            <label for="task-panel-stage-select">Stage</label>
+            <select id="task-panel-stage-select">
+              <option value="not-started">Not started</option>
+              <option value="researching">Researching</option>
+              <option value="planning">Planning</option>
+              <option value="drafting">Drafting</option>
+              <option value="reviewing">Reviewing</option>
+              <option value="submitted">Handed in</option>
+              <option value="done">Done</option>
+            </select>
+            <div class="actions">
+              <button type="button" id="task-panel-stage-save" class="primary">Save the stage</button>
+            </div>
+            <p id="task-panel-stage-status" class="status" role="status" aria-live="polite"></p>
+          </details>
+          <details id="task-panel-question" class="more">
+            <summary>Show the question</summary>
+            <p id="task-panel-question-text" class="read-text"></p>
+          </details>
+          <details id="task-panel-sources" class="more">
+            <summary id="task-panel-sources-label">Your sources for this task</summary>
+            <p id="task-panel-sources-status" class="hint"></p>
+            <ul id="task-panel-sources-list" class="source-cards"></ul>
+            <details id="own-source" class="more">
+              <summary>Add a source you found yourself</summary>
+              <form id="own-source-form" novalidate>
+                <label for="own-source-title">Title</label>
+                <input type="text" id="own-source-title" maxlength="200" autocomplete="off">
+                <label for="own-source-author">Author or publisher, if you know it</label>
+                <input type="text" id="own-source-author" maxlength="120" autocomplete="off">
+                <label for="own-source-url">Link, if it has one</label>
+                <input type="url" id="own-source-url" maxlength="500" autocomplete="off" inputmode="url">
+                <label for="own-source-files">A copy of it, if you have one</label>
+                <p class="hint" id="own-source-files-hint">Up to 5: a PDF, a Word file or photos of the pages. The tutor reads the copy when the page won't open.</p>
+                <input type="file" id="own-source-files" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple aria-describedby="own-source-files-hint">
+                <div class="actions">
+                  <button type="submit" id="own-source-add" class="primary">Add this source</button>
+                </div>
+              </form>
+              <p id="own-source-status" class="status" role="status" aria-live="polite"></p>
+            </details>
+          </details>
+          <!-- WP-115b: his notes, quotes and AI summaries for this task, and earlier research (build spec §29) -->
+          <div id="task-panel-earlier" class="earlier" hidden></div>
+          <details id="task-panel-notes" class="more" hidden>
+            <summary id="task-panel-notes-label">Your notes for this task</summary>
+            <p id="task-panel-notes-status" class="hint" role="status" aria-live="polite"></p>
+            <ul id="task-panel-notes-list" class="source-cards"></ul>
+            <details class="more">
+              <summary>Write a note</summary>
+              <div id="task-panel-note-editor"></div>
+            </details>
+          </details>
+          <!-- WP-116: his plan, in his own words, with pinned references and gaps (build spec §9.2) -->
+          <details id="task-panel-plan" class="more" hidden>
+            <summary>Your plan for this task</summary>
+            <p id="task-panel-plan-status" class="status" role="status" aria-live="polite"></p>
+            <div id="task-panel-plan-body"></div>
+          </details>
+        </section>
+      </div>
+    </aside>
+  </div>
 
-      <noscript>
-        <p class="status">This app needs JavaScript. Please turn it on and reload the page.</p>
-      </noscript>
-    </main>
-  </body>
+  <section class="signed-out" id="sign-in-screen" aria-labelledby="sign-in-heading" hidden>
+    <h1 id="sign-in-heading" tabindex="-1">Sign in</h1>
+    <p>Sign in with your GitHub account to carry on.</p>
+
+    <form id="sign-in-form" novalidate>
+      <div class="check">
+        <input type="checkbox" id="shared-computer" name="shared">
+        <label for="shared-computer">This is a shared computer</label>
+      </div>
+      <p class="hint" id="shared-hint">
+        Tick this on a school or library computer. Nothing is saved on the computer,
+        and you're signed out after 4 hours.
+      </p>
+      <button type="submit" class="primary" aria-describedby="shared-hint">
+        Sign in with GitHub
+      </button>
+    </form>
+
+    <p id="sign-in-status" class="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <dialog id="sign-out-dialog" aria-labelledby="sign-out-heading">
+    <h2 id="sign-out-heading">Sign out now?</h2>
+    <p>You'll need to sign in with GitHub again next time.</p>
+    <div class="dialog-actions">
+      <button type="button" class="primary" id="sign-out-cancel">Stay signed in</button>
+      <button type="button" class="secondary" id="sign-out-confirm">Sign out</button>
+    </div>
+  </dialog>
+
+  <noscript><p>This app needs JavaScript. Please turn it on and reload the page.</p></noscript>
+  <script type="module" src="chat-app.js"></script>
+</body>
 </html>

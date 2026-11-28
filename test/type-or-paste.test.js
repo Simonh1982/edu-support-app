@@ -14,7 +14,6 @@ import { addPastedBrief } from '../server/domain/uploads.js';
 import { createTask, readTask } from '../server/domain/tasks.js';
 import { earlierResearch, notebookEntryPath } from '../server/domain/notebook.js';
 import { pasteBody, CHECK_MESSAGES } from '../web/shared/task-check.js';
-import { cleanEdit, createOffline, memoryKeyValue } from '../web/shared/offline.js';
 
 const MODELS = { light: 'demo-light', conversation: 'demo-conversation' };
 const anyLimits = createLimitCache(async () => ({ vision: true, maxBytes: null, mediaTypes: null }));
@@ -113,22 +112,10 @@ test('earlier research uses a task\'s current topics, so research saved before i
   } finally { await store.cleanup(); }
 });
 
-test('the form: text and an optional real date; while the tutor wakes it waits on the device, then is sent as a paste', async () => {
+test('the form: text and an optional real date', async () => {
   assert.deepEqual(pasteBody({ text: '  Invented task.  ', deadline: '' }), { text: 'Invented task.', deadline: null });
   assert.deepEqual(pasteBody({ text: 'Invented task.', deadline: '2026-12-11' }), { text: 'Invented task.', deadline: '2026-12-11' });
   assert.deepEqual(pasteBody({ text: ' ', deadline: '' }), { error: CHECK_MESSAGES.pasteEmpty, field: 'text' });
   assert.deepEqual(pasteBody({ text: 'Invented', deadline: '2026-13-01' }), { error: CHECK_MESSAGES.badDate, field: 'deadline' });
 
-  const edit = { id: 'e0000001', at: 1, type: 'paste', body: { clientId: 'tDemo2001', text: 'Invented task.', deadline: '2026-12-11' } };
-  assert.deepEqual(cleanEdit(edit), edit);
-  assert.equal(cleanEdit({ ...edit, body: { clientId: 'bad id', text: 'x' } }), null);
-  assert.equal(cleanEdit({ ...edit, body: { clientId: 'tDemo2001', text: '' } }), null);
-
-  const offline = createOffline({ openStore: async () => memoryKeyValue() });
-  offline.start({ store: memoryKeyValue(), shared: true });
-  assert.equal((await offline.add({ type: 'paste', body: edit.body })).ok, true);
-  const sent = [];
-  const out = await offline.flush({ pasteBrief: async (body) => { sent.push(body); return { kind: 'ok', status: 201, body: {} }; } });
-  assert.equal(out.sent, 1);
-  assert.deepEqual(sent, [edit.body]);
 });

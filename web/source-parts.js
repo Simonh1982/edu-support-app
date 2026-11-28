@@ -1,7 +1,7 @@
-// Small pieces shared by the source cards (web/conversation.js) and the task panel (web/task-panel.js):
+// Small pieces shared by the source cards (the chat page's replies) and the task panel (web/task-panel.js):
 // a source link, the AI summary card and the "Paste the text instead" box (WP-114e; build spec §28;
 // A-010). All text is set with textContent, never as HTML. Nothing here is stored.
-import { PASTED_SOURCE_MAX_CHARS, SOURCE_MESSAGES } from "./shared/conversation.js";
+import { PASTED_SOURCE_MAX_CHARS, SOURCE_MESSAGES, canSummarise, sourceLabel } from "./shared/conversation.js";
 
 export function make(doc, tag, { className, text, attrs } = {}) {
   const el = doc.createElement(tag);
@@ -61,4 +61,90 @@ export function pasteBox(doc, { key, text = "", open = false, disabled = false, 
   actions.append(send);
   box.append(actions);
   return box;
+}
+
+function button(doc, text, { className = "secondary", label } = {}) {
+  const el = make(doc, "button", { className, text, attrs: { type: "button" } });
+  if (label) el.setAttribute("aria-label", label);
+  return el;
+}
+
+// WP-134a: moved here from the classic conversation screen (web/conversation.js, retired).
+/**
+ * The source cards under a tutor reply (build spec §9.1, §26): the kind of source, a link to the
+ * original, the site, a line on what it covers, then Save and Summarise. Exported for tests.
+ * stateOf(index) → { sourceId?, saving?, summarising?, summary?, asked?, note?, canPaste?, pasteText?, pasteOpen? }.
+ * WP-114e: once the tutor couldn't open a page, "Paste the text instead" appears (onPaste(card, text));
+ * onPasteChange(card, changes) keeps what he has typed across redraws.
+ * WP-114i: with onAttach (a task panel that can attach), "Attach a copy instead" appears beside the
+ * paste box and takes him to that source's attach box in the task panel.
+ */
+export function sourceList(doc, turn, {
+  stateOf = () => ({}), onSave = () => {}, onSummarise = () => {}, onPaste = () => {}, onPasteChange = () => {}, ready = true,
+  onAttach = null,
+} = {}) {
+  const list = Array.isArray(turn?.sources) ? turn.sources : [];
+  if (list.length === 0 || !turn.reply) return null;
+  const headingId = `sources-${turn.id}`;
+  const section = make(doc, "section", { className: "sources", attrs: { "aria-labelledby": headingId } });
+  section.append(make(doc, "h3", { className: "sources-heading", text: SOURCE_MESSAGES.heading, attrs: { id: headingId } }));
+  const cards = make(doc, "ul", { className: "source-cards" });
+  for (const card of list) {
+    const state = stateOf(card.index) ?? {};
+    const key = `${turn.id}-${card.index}`;
+    const item = make(doc, "li", { className: "source-card", attrs: { id: `source-${key}`, tabindex: "-1" } });
+    item.append(make(doc, "p", { className: "source-kind", text: sourceLabel(card.category, card.minutes) }));
+    const title = make(doc, "p", { className: "source-title" });
+    title.append(sourceLink(doc, card.title, card.url));
+    item.append(title);
+    item.append(make(doc, "p", { className: "source-site", text: card.publisher ? `${card.publisher} · ${card.site}` : card.site }));
+    if (card.why) item.append(make(doc, "p", { className: "source-why", text: `${SOURCE_MESSAGES.why} ${card.why}` }));
+    if (card.accessNote) item.append(make(doc, "p", { className: "source-access", text: card.accessNote }));
+    const working = Boolean(state.saving || state.summarising);
+    const buttons = [];
+    if (!state.sourceId) {
+      const save = button(doc, state.saving ? SOURCE_MESSAGES.saving : SOURCE_MESSAGES.save);
+      save.dataset.action = "save";
+      save.disabled = !ready || working;
+      save.addEventListener("click", () => onSave(card));
+      buttons.push(save);
+    }
+    if (!state.summary && !state.asked && canSummarise(card)) {
+      const summarise = button(doc, state.summarising ? SOURCE_MESSAGES.summarising : state.again ? SOURCE_MESSAGES.summariseAgain : SOURCE_MESSAGES.summarise);
+      summarise.dataset.action = "summarise";
+      summarise.disabled = !ready || working;
+      summarise.addEventListener("click", () => onSummarise(card));
+      buttons.push(summarise);
+    }
+    if (buttons.length) {
+      const actions = make(doc, "div", { className: "actions source-actions" });
+      actions.append(...buttons);
+      item.append(actions);
+    }
+    if (state.note) item.append(make(doc, "p", { className: "source-note", text: state.note }));
+    if (state.canPaste && !state.summary && canSummarise(card)) {
+      item.append(pasteBox(doc, {
+        key,
+        text: state.pasteText ?? "",
+        open: state.pasteOpen === true,
+        disabled: !ready || working,
+        onChange: (changes) => onPasteChange(card, changes),
+        onSubmit: (text) => onPaste(card, text),
+      }));
+    }
+    // WP-114j: on any saved card on a task, including after a summary of only its landing page
+    if (onAttach && state.sourceId && canSummarise(card)) {
+      const attach = button(doc, state.canPaste && !state.summary ? SOURCE_MESSAGES.attachInstead : SOURCE_MESSAGES.attachCopy);
+      attach.dataset.action = "attach";
+      attach.disabled = !ready || working;
+      attach.addEventListener("click", () => onAttach(card, state.sourceId));
+      const row = make(doc, "div", { className: "actions source-actions" });
+      row.append(attach);
+      item.append(row);
+    }
+    if (state.summary) item.append(summaryCard(doc, state.summary, key));
+    cards.append(item);
+  }
+  section.append(cards);
+  return section;
 }

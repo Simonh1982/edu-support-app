@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loginUrl } from "../web/app.js";
+import { loginUrl } from "../web/shared/auth.js";
 import { encodePng } from "../scripts/make-icons.js";
 
 const WEB = fileURLToPath(new URL("../web/", import.meta.url));
@@ -53,9 +53,10 @@ test("icon generator produces valid PNGs of the requested size", () => {
 test("sign-in page is accessible and links the manifest", () => {
   const html = readFileSync(join(WEB, "index.html"), "utf8");
   assert.match(html, /<html lang="en-GB">/);
-  assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
+  assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">/);
   assert.match(html, /<link rel="manifest" href="manifest\.webmanifest">/);
-  assert.match(html, /<h1[^>]*>Sign in<\/h1>/);
+  assert.match(html, /<h1 id="sign-in-heading" tabindex="-1">Sign in<\/h1>/);
+  assert.match(html, /<button type="submit" class="primary" aria-describedby="shared-hint">\s*Sign in with GitHub\s*<\/button>/);
   assert.match(html, /<label for="shared-computer">This is a shared computer<\/label>/);
   assert.match(html, /role="status"/);
   assert.doesNotMatch(html, /user-scalable=no|maximum-scale/, "zoom must stay possible");
