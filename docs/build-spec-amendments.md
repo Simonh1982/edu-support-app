@@ -180,6 +180,16 @@ Build spec generated from master specification **v3.7** (31 October 2026). Curre
 
 **8. Unchanged.** The privacy rules, what is sent to AI models, the no-answers rules, the notebook's authorship labels, pinned-not-inserted AI text, the plan's own-words rule, accessibility settings, and the parent page.
 
+### A-014: No thumbs up and down on tutor replies (for now)
+**Decided:** 29 November 2026 (owner, while planning WP-132b). **Status:** draft for the owner's approval. **Changes:** build spec §31 (Feedback on AI replies), §47.1 and Appendix A.6, which came from A-007. **Workplan:** WP-132b (the chat page has none), WP-134 (removed from the classic page).
+
+**Why:** on a phone the thumbs took up a lot of space under every reply, and it is not clear they were useful. The chat-first design (A-013) aims for a clean screen.
+
+**1.** The chat page shows **no thumbs up or down** under tutor replies. When the classic page is retired (WP-134), its thumbs go too.
+**2.** The server keeps its feedback route and the feedback already saved until WP-134, so nothing breaks in between; nothing new is collected from the chat page. WP-134 removes the route, its client call and the eval or summary references, or leaves them unused, whichever is smaller.
+**3.** The parent summary loses nothing it relies on: the tally of support steps, attempts and wellbeing levels is unchanged (§5.2).
+**4. Review point:** if a way to flag a poor reply is wanted later, add it behind the reply's own menu rather than under every reply.
+
 ---
 
 ## Folded into the build spec
@@ -194,4 +204,4 @@ Build spec generated from master specification **v3.7** (31 October 2026). Curre
 | A-006 | School network check is optional | Build spec §47.1, Appendix B; blueprint §13 step 15 |
 | A-007 | Thumbs up and down on AI replies | Build spec §31, §47.1, Appendix A.6 |
 
-New amendments start at **A-012**.
+New amendments start at **A-015**.
